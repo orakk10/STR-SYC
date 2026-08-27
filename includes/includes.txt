@@ -1,0 +1,4 @@
+├── includes/                     # Reusable UI partials & layouts
+│   ├── header.php                # Top navigation & meta tags
+│   ├── sidebar.php               # Role-based sidebar menu
+│   └── footer.php                # Footer scripts & PWA prompts

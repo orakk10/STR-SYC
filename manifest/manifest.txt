@@ -1,0 +1,4 @@
+├── manifest.json                 # Web App Manifest for mobile PWA installation
+├── service-worker.js             # Service Worker for offline caching & network requests
+├── index.php                     # Login & entry point
+└── logout.php                    # Session destroy endpoint

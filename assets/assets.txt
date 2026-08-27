@@ -1,0 +1,9 @@
+├── assets/                       # Static public assets
+│   ├── css/
+│   │   ├── style.css             # Main application stylesheet
+│   │   └── print-sf.css          # Print-optimized CSS for DepEd forms (SF5/SF10)
+│   ├── js/
+│   │   ├── app.js                # Main frontend interactions
+│   │   ├── ecr-grid.js           # Web-based ECR grid logic
+│   │   └── sw-register.js        # Service Worker registration for PWA
+│   └── icons/

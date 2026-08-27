@@ -1,0 +1,5 @@
+├── core/                         # Backend business logic & helper functions
+│   ├── Auth.php                  # Authentication & RBAC security checks
+│   ├── DepEdTransmutation.php    # Raw-to-transmuted grade lookup logic
+│   ├── ECRParser.php             # PHP script to parse uploaded Excel/CSV ECR files
+│   └── GraduateArchive.php       # End-of-year Grade 11 promotion & Grade 12 archiving

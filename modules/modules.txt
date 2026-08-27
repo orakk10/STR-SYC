@@ -1,0 +1,16 @@
+├── modules/                      # Role-specific dashboard views & controllers
+│   ├── admin/
+│   │   ├── dashboard.php         # System overview & analytics
+│   │   ├── manage-users.php      # User registration & role assignments
+│   │   └── archive.php           # End-of-year graduate archive engine
+│   ├── faculty/
+│   │   ├── dashboard.php         # Teacher subject list
+│   │   ├── ecr-view.php          # Web-based Electronic Class Record grid
+│   │   ├── ecr-upload.php        # Excel/CSV batch file parser upload form
+│   │   └── lis-speedview.php     # Side-by-Side LIS Speed-Encoding screen
+│   ├── student/
+│   │   ├── dashboard.php         # Real-time grade tracker & running average
+│   │   └── semester-view.php     # Semester 1 / Semester 2 performance toggle
+│   └── alumni/
+│       ├── dashboard.php         # Historical profile matrix
+│       └── transcript.php        # Print-ready official academic transcript view

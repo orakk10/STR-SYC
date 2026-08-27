@@ -1,0 +1,3 @@
+├── config/                       # Core system configuration
+│   ├── database.php              # MySQL PDO database connection
+│   └── constants.php             # System constants (DepEd grade weights, paths)

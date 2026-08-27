@@ -1,0 +1,572 @@
+/* ==========================================================================
+   ELECTRONIC CLASS RECORD (ECR) - MAIN STYLESHEET
+   Target Devices: Mobile, Tablet, Laptop, Desktop
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. ROOT VARIABLES & BASE RESETS
+   -------------------------------------------------------------------------- */
+:root {
+  --primary-blue: #0b3c5d;
+  --primary-hover: #07273d;
+  --accent-orange: #d96459;
+  --bg-gray: #f4f6f9;
+  --border-color: #cbd5e1;
+  --text-dark: #334155;
+  --text-muted: #64748b;
+  --card-bg: #ffffff;
+  --success-bg: #dcfce7;
+  --success-text: #166534;
+  --danger-bg: #fee2e2;
+  --danger-text: #991b1b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-gray);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: var(--text-dark);
+  margin: 0;
+  padding: 10px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   2. MAIN CONTAINER & HEADER BANNER
+   -------------------------------------------------------------------------- */
+.ecr-container {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  background: var(--card-bg);
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.ecr-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 2px solid var(--primary-blue);
+  padding-bottom: 12px;
+}
+
+.brand-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-text {
+  text-align: center;
+}
+
+.header-text h2 {
+  margin: 0;
+  color: var(--primary-blue);
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.header-text p {
+  margin: 2px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.logo-sm {
+  width: 50px;
+  height: auto;
+}
+
+.logo-md {
+  width: 100px;
+  height: auto;
+}
+
+/* --------------------------------------------------------------------------
+   3. NAVIGATION TABS (TOUCH SCROLLABLE)
+   -------------------------------------------------------------------------- */
+.ecr-nav {
+  display: flex;
+  gap: 4px;
+  margin: 15px 0;
+  border-bottom: 2px solid var(--border-color);
+  overflow-x: auto;
+  white-space: nowrap;
+  padding-bottom: 4px;
+}
+
+.nav-tab {
+  flex-shrink: 0;
+  padding: 10px 20px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #475569;
+  background: #e2e8f0;
+  border-radius: 6px 6px 0 0;
+  transition: all 0.2s ease;
+}
+
+.nav-tab:hover {
+  background: #cbd5e1;
+}
+
+.nav-tab.active {
+  background: var(--primary-blue);
+  color: #ffffff;
+}
+
+.nav-tab.tab-summary.active {
+  background: #2e7d32;
+}
+
+/* --------------------------------------------------------------------------
+   4. INPUT DATA LAYOUT & CARDS
+   -------------------------------------------------------------------------- */
+.input-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.ecr-card {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 15px;
+  background: var(--card-bg);
+}
+
+.card-title {
+  background: var(--primary-blue);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 8px 12px;
+  letter-spacing: 0.5px;
+}
+
+.card-content {
+  padding: 12px;
+}
+
+.field-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.field-group label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  flex-shrink: 0;
+  width: 110px;
+}
+
+.form-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.form-input:focus {
+  border-color: var(--primary-blue);
+  outline: none;
+}
+
+/* --------------------------------------------------------------------------
+   5. ROSTER INPUT GRID
+   -------------------------------------------------------------------------- */
+.roster-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 10px;
+}
+
+.gender-tag {
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 6px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.male-tag {
+  background: #1e40af;
+}
+
+.female-tag {
+  background: #9d174d;
+}
+
+.roster-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.entry-index {
+  font-size: 0.8rem;
+  font-weight: 700;
+  width: 20px;
+  color: var(--text-muted);
+}
+
+.roster-field {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.btn-save {
+  width: 100%;
+  padding: 12px;
+  background: var(--primary-blue);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.btn-save:hover {
+  background: var(--primary-hover);
+}
+
+/* --------------------------------------------------------------------------
+   6. GRADEBOOK GRID & SPREADSHEET MATRIX (TERM & SUMMARY VIEWS)
+   -------------------------------------------------------------------------- */
+.table-responsive-wrapper,
+.table-scroll-container {
+  width: 100%;
+  max-height: calc(100vh - 180px);
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--card-bg);
+}
+
+.ecr-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.8rem;
+}
+
+.ecr-grid th,
+.ecr-grid td {
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  padding: 4px;
+  text-align: center;
+}
+
+.head-ww {
+  background: #ffedd5;
+}
+.head-pt {
+  background: #dcfce7;
+}
+.head-qa {
+  background: #fef9c3;
+}
+.hps-row {
+  background: #f1f5f9;
+  font-weight: bold;
+}
+.group-header {
+  background: #e2e8f0;
+  font-weight: 700;
+  text-align: left !important;
+  padding-left: 10px;
+}
+.empty-row td {
+  padding: 15px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* Sticky Left Student Name Column for Touch & Side Scroll */
+.col-sticky {
+  position: sticky;
+  left: 0;
+  background-color: #ffffff;
+  z-index: 3;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+  min-width: 160px;
+  max-width: 200px;
+  text-align: left !important;
+  padding-left: 8px !important;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+thead .col-sticky {
+  z-index: 4;
+  background-color: #f8fafc;
+}
+
+.hps-row .col-sticky {
+  background-color: #f1f5f9;
+}
+
+.group-header .col-sticky {
+  background-color: #e2e8f0;
+}
+
+/* Touch Input Targets for Touchscreens & Mobile Devices */
+.grid-cell {
+  width: 42px;
+  height: 38px;
+  font-size: 0.85rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  text-align: center;
+  margin: 0 auto;
+}
+
+.grid-cell:focus {
+  border-color: var(--primary-blue);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(11, 60, 93, 0.2);
+}
+
+.calc-val {
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.highlight-main {
+  font-weight: 800;
+  color: var(--primary-blue);
+  font-size: 0.9rem;
+}
+
+/* --------------------------------------------------------------------------
+   7. SUMMARY VIEW COMPONENT STYLES
+   -------------------------------------------------------------------------- */
+.meta-banner {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 10px 15px;
+  margin-bottom: 15px;
+  font-size: 0.82rem;
+}
+
+.meta-item span {
+  font-weight: 700;
+  color: var(--primary-blue);
+}
+
+.summary-grid th {
+  padding: 10px;
+  font-size: 0.85rem;
+}
+
+.head-term {
+  background: #e2e8f0;
+  width: 100px;
+}
+.head-avg {
+  background: #dbeafe;
+  color: #1e40af;
+  width: 110px;
+}
+.head-letter {
+  background: #fef3c7;
+  width: 120px;
+}
+.head-remarks {
+  background: #f3f4f6;
+  width: 120px;
+}
+
+.summary-row td {
+  padding: 8px 4px;
+  font-size: 0.85rem;
+}
+
+.term-val {
+  font-weight: 500;
+  color: #475569;
+}
+
+.letter-val {
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.remarks-val {
+  font-weight: 700;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.remarks-val.passed {
+  color: var(--success-text);
+  background-color: var(--success-bg);
+}
+
+.remarks-val.failed {
+  color: var(--danger-text);
+  background-color: var(--danger-bg);
+}
+
+/* --------------------------------------------------------------------------
+   8. MEDIA QUERIES & RESPONSIVE BREAKPOINTS
+   -------------------------------------------------------------------------- */
+
+/* Tablet Breakpoint (<= 992px) */
+@media screen and (max-width: 992px) {
+  .input-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .roster-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Mobile Breakpoint (<= 768px) */
+@media screen and (max-width: 768px) {
+  .card-content {
+    padding: 10px;
+  }
+
+  .field-group {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin-bottom: 10px;
+  }
+
+  .field-group label {
+    width: 100%;
+    font-size: 0.78rem;
+  }
+
+  .form-input {
+    width: 100%;
+    height: 38px;
+    font-size: 0.85rem;
+  }
+
+  .roster-entry {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .roster-field {
+    height: 38px;
+    font-size: 0.85rem;
+  }
+
+  .btn-save {
+    padding: 14px;
+    font-size: 1rem;
+    position: sticky;
+    bottom: 10px;
+    z-index: 10;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  }
+
+  .meta-banner {
+    grid-template-columns: 1fr 1fr;
+    font-size: 0.75rem;
+    padding: 8px;
+  }
+
+  .summary-grid {
+    font-size: 0.78rem;
+  }
+
+  .summary-grid th,
+  .summary-grid td {
+    padding: 8px 4px;
+    white-space: nowrap;
+  }
+
+  .summary-grid .col-sticky {
+    min-width: 130px;
+    max-width: 140px;
+  }
+
+  .remarks-val {
+    font-size: 0.72rem;
+  }
+}
+
+/* Small Smartphone Breakpoint (<= 480px) */
+@media screen and (max-width: 480px) {
+  .brand-block {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ecr-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .logo-md {
+    display: none;
+  }
+
+  .header-text h2 {
+    font-size: 1.1rem;
+  }
+
+  .header-text p {
+    font-size: 0.75rem;
+  }
+
+  .col-sticky {
+    min-width: 120px;
+    max-width: 130px;
+    font-size: 0.78rem;
+  }
+
+  .grid-cell {
+    width: 36px;
+    height: 34px;
+    font-size: 0.8rem;
+  }
+
+  .ecr-nav {
+    padding-bottom: 6px;
+  }
+
+  .nav-tab {
+    padding: 8px 14px;
+    font-size: 0.8rem;
+  }
+}

@@ -1,0 +1,4 @@
+├── api/                          # Asynchronous backend endpoints (AJAX / PWA Sync)
+│   ├── save-scores.php           # Handles raw score auto-saving from ECR grid
+│   ├── fetch-grades.php          # Returns JSON grade data for student dashboard
+│   └── upload-ecr.php            # Endpoint receiving uploaded `.xlsx` files
