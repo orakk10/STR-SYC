@@ -19,7 +19,7 @@ if (isset($_SESSION['user_id'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>STRAND-SYNC | Academic Management System</title>
-    <link rel="stylesheet" href="css/landing.css">
+    <link rel="stylesheet" href="../assets/css/landing.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 
@@ -27,14 +27,14 @@ if (isset($_SESSION['user_id'])) {
     <header class="navbar">
         <div class="logo-container">
             <div class="logo">
-                <img src="img/logo_strandsync.png" alt="Strand-Sync Logo" class="nav-logo-img">
+                <img src="../assets/img/logo_strandsync.png" alt="Strand-Sync Logo" class="nav-logo-img">
                 STRAND-<span>SYNC</span>
             </div>
         </div>
         <nav>
             <a href="#features">Features</a>
             <a href="#about">About</a>
-            <a href="login.php" class="btn-nav-login">Login Portal</a>
+            <a href="../login.php" class="btn-nav-login">Login Portal</a>
         </nav>
     </header>
 
@@ -43,7 +43,7 @@ if (isset($_SESSION['user_id'])) {
             <h1>Syncing Academic <span>Success</span></h1>
             <p>The unified management system engineered for Senior High School strands, dynamic grade monitoring, and streamlined class advisement operations.</p>
             <div class="hero-btns">
-                <a href="login.php" class="btn-primary">Login to Dashboard</a>
+                <a href="../login.php" class="btn-primary">Login to Dashboard</a>
                 <a href="#features" class="btn-outline">Learn More</a>
             </div>
         </div>
