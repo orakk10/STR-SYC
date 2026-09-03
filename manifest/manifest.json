@@ -1,0 +1,9 @@
+{
+  "name": "Strand-Sync System",
+  "short_name": "StrandSync",
+  "start_url": "/STR-SYC/index.php",
+  "scope": "/STR-SYC/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0d6efd"
+}

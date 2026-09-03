@@ -35,7 +35,7 @@ if (isset($_SESSION['user_id'])) {
         <nav>
             <a href="#features">Features</a>
             <a href="#about">About</a>
-            <a href="../login.php" class="btn-nav-login">Login Portal</a>
+            <a href="../manifest/login.php" class="btn-nav-login">Login Portal</a>
         </nav>
     </header>
 
@@ -44,7 +44,7 @@ if (isset($_SESSION['user_id'])) {
             <h1>Syncing Academic <span>Success</span></h1>
             <p>The unified management system engineered for Senior High School strands, dynamic grade monitoring, and streamlined class advisement operations.</p>
             <div class="hero-btns">
-                <a href="../login.php" class="btn-primary">Login to Dashboard</a>
+                <a href="../manifest/login.php" class="btn-primary">Login to Dashboard</a>
                 <a href="#features" class="btn-outline">Learn More</a>
             </div>
         </div>
