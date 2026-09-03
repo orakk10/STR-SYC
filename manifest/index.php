@@ -18,7 +18,9 @@ if (isset($_SESSION['user_id'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#2563eb">
     <title>STRAND-SYNC | Academic Management System</title>
+    <link rel="manifest" href="../manifest/manifest.json">
     <link rel="stylesheet" href="../assets/css/landing.css">
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -46,6 +48,8 @@ if (isset($_SESSION['user_id'])) {
             <div class="hero-btns">
                 <a href="../manifest/login.php" class="btn-primary">Login to Dashboard</a>
                 <a href="#features" class="btn-outline">Learn More</a>
+                <button id="pwaInstallBtn" class="install-btn hidden" style="background-color: #059669; color: #ffffff; padding: 12px 24px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; margin-top: 10px;">Install STR-SYNC App
+                </button>
             </div>
         </div>
     </section>
@@ -80,14 +84,17 @@ if (isset($_SESSION['user_id'])) {
                 <h2>About STRAND-SYNC</h2>
                 <p>STRAND-SYNC is an advanced academic tracking environment tailored explicitly to simplify Senior High School tracking workflows. By replacing cumbersome manual record tracking with high-integrity database cross-referencing, we bridge communication gaps between students, instructors, and assigned academic advisers.</p>
                 <p>Our goal is to give educational institutions clear oversight into strand performance metrics, help teachers submit grades without technical friction, and keep students aligned with their path to graduation.</p>
-                </div>
             </div>
+        </div>
         </div>
     </section>
 
     <footer>
         <p>&copy; 2026 STRAND-SYNC Infrastructure. All rights reserved. Built for unified academic success.</p>
     </footer>
+    <script src="../assets/js/app.js"></script>
 </body>
+
+
 
 </html>

@@ -1,9 +1,41 @@
 {
-  "name": "Strand-Sync System",
-  "short_name": "StrandSync",
-  "start_url": "/STR-SYC/index.php",
-  "scope": "/STR-SYC/",
+  "id": "/str-syc/manifest/login.php",
+  "short_name": "STR-SYNC",
+  "name": "STRAND-SYNC Academic Management System",
+  "description": "Academic Management System for Senior High School strands.",
+  "icons": [
+    {
+      "src": "/str-syc/assets/img/logo_strandsync.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/str-syc/assets/img/logo_strandsync.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/str-syc/assets/img/Strand_Sync_bg.png",
+      "sizes": "1774x887",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Desktop View"
+    },
+    {
+      "src": "/str-syc/assets/img/logo_strandsync.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Mobile View"
+    }
+  ],
+  "start_url": "/str-syc/manifest/login.php",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#0d6efd"
+  "orientation": "portrait"
 }

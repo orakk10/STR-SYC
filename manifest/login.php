@@ -184,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="login-container">
         <div class="login-box">
             <div class="login-header">
-                <a href="../index.php"><img src="../assets/img/logo_strandsync.jpg" alt="STRAND-SYNC Logo" class="login-logo"></a>
+                <a href="../manifest/index.php"><img src="../assets/img/logo_strandsync.png" alt="STRAND-SYNC Logo" class="login-logo"></a>
                 <h1>STRAND-SYNC</h1>
                 <p>Academic Management System</p>
             </div>

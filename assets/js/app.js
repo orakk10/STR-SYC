@@ -108,3 +108,63 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.textContent = isLoading ? 'Authenticating...' : 'Secure Login';
     }
 });
+
+// Register Service Worker with root scope
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/str-syc/sw.js', { scope: '/str-syc/' })
+      .then((reg) => console.log('Service Worker Registered successfully for scope:', reg.scope))
+      .catch((err) => console.error('Service Worker Registration failed:', err));
+  });
+}
+
+// Custom PWA Installation Logic
+let deferredPrompt = null;
+const installBtn = document.getElementById('pwaInstallBtn');
+
+// Capture the browser's install event
+window.addEventListener('beforeinstallprompt', (e) => {
+  // Prevent browser's automatic mini-infobar
+  e.preventDefault();
+  
+  // Store the event for later activation
+  deferredPrompt = e;
+
+  // Unhide the custom install button on index.php
+  if (installBtn) {
+    installBtn.classList.remove('hidden');
+    installBtn.style.display = 'inline-block'; // Explicit fallback in case CSS .hidden is missing
+  }
+});
+
+// Add click listener directly to the button
+if (installBtn) {
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) {
+      console.warn('Install prompt is not available yet or already used.');
+      return;
+    }
+
+    // Trigger native installation dialog
+    deferredPrompt.prompt();
+
+    // Wait for the user to accept or dismiss
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User installation choice: ${outcome}`);
+
+    // Reset prompt variable and hide button
+    deferredPrompt = null;
+    installBtn.classList.add('hidden');
+    installBtn.style.display = 'none';
+  });
+}
+
+// Hide button once app is installed
+window.addEventListener('appinstalled', () => {
+  if (installBtn) {
+    installBtn.classList.add('hidden');
+    installBtn.style.display = 'none';
+  }
+  deferredPrompt = null;
+  console.log('STR-SYNC PWA installed successfully!');
+});
