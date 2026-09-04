@@ -1,14 +1,20 @@
 <?php
 session_start();
-require_once 'db_config.php';
+require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 header('Content-Type: application/json');
 
-if ($_SESSION['role'] === 'admin' && isset($_FILES['import_file'])) {
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    echo json_encode(['status' => 'error', 'message' => 'Unauthorized']);
+    exit();
+}
+
+if (isset($_FILES['import_file'])) {
     $file = $_FILES['import_file']['tmp_name'];
     $handle = fopen($file, "r");
     fgetcsv($handle); // Skip the header row
 
-    $conn->begin_transaction();
+    // $conn->begin_transaction();
     try {
         while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
             $username = trim($data[0]);
@@ -27,7 +33,7 @@ if ($_SESSION['role'] === 'admin' && isset($_FILES['import_file'])) {
                     section_id = VALUES(section_id)";
             
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param("sssis", $username, $full_name, $role, $section_id, $hashed_pass);
+            // $stmt->bind_param("sssis", $username, $full_name, $role, $section_id, $hashed_pass);
             $stmt->execute();
         }
         $conn->commit();

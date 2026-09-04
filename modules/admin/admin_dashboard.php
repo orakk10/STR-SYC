@@ -1,16 +1,16 @@
 <?php
 session_start();
-require_once 'db_config.php';
+require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 
 // 1. Access Control
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
+    header("Location: ../../manifest/login.php");
     exit();
 }
 
 // --- FETCH RESET REQUESTS WITH ERROR CHECKING ---
-$reset_requests = $conn->query("SELECT id FROM users WHERE reset_requested = 1");
-$reset_count = ($reset_requests) ? $reset_requests->num_rows : 0;
+$reset_count = (int) $conn->query("SELECT COUNT(*) FROM users WHERE reset_requested = 1")->fetchColumn();
 // ------------------------------------------------
 
 // 2. Pagination Logic
@@ -19,14 +19,14 @@ $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 if ($page < 1) $page = 1;
 $start = ($page - 1) * $limit;
 
-$total_results = $conn->query("SELECT COUNT(*) FROM users")->fetch_row()[0];
+$total_results = (int) $conn->query("SELECT COUNT(*) FROM users")->fetchColumn();
 $total_pages = ceil($total_results / $limit);
 
 // 3. Fetch Data for Stat Cards
-$total_students = $conn->query("SELECT COUNT(*) FROM users WHERE role = 'student'")->fetch_row()[0];
-$total_faculty  = $conn->query("SELECT COUNT(*) FROM users WHERE role = 'faculty'")->fetch_row()[0];
-$total_advisers = $conn->query("SELECT COUNT(*) FROM users WHERE role = 'adviser'")->fetch_row()[0];
-$total_sections = $conn->query("SELECT COUNT(*) FROM sections")->fetch_row()[0];
+$total_students = (int) $conn->query("SELECT COUNT(*) FROM users WHERE role = 'student'")->fetchColumn();
+$total_faculty  = (int) $conn->query("SELECT COUNT(*) FROM users WHERE role = 'faculty'")->fetchColumn();
+$total_advisers = (int) $conn->query("SELECT COUNT(*) FROM users WHERE role = 'adviser'")->fetchColumn();
+$total_sections = (int) $conn->query("SELECT COUNT(*) FROM sections")->fetchColumn();
 
 // 4. Fetch Paginated User List
 $users_list = $conn->query("SELECT id, username, full_name, role FROM users ORDER BY id DESC LIMIT $start, $limit");
@@ -38,7 +38,7 @@ $users_list = $conn->query("SELECT id, username, full_name, role FROM users ORDE
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard | STRAND-SYNC</title>
-    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
         body { 
             margin: 0;
@@ -284,7 +284,7 @@ $users_list = $conn->query("SELECT id, username, full_name, role FROM users ORDE
                 <li><a href="admin_master_list.php">Master List</a></li>
                 <li><a href="admin_logs.php">Activity Logs</a></li>
                 <li><a href="admin_archive.php">Graduate Archive</a></li>
-                <li><a href="logout.php" class="logout">Logout</a></li>
+                <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>
 
@@ -362,14 +362,14 @@ $users_list = $conn->query("SELECT id, username, full_name, role FROM users ORDE
                         </tr>
                     </thead>
                     <tbody>
-                        <?php while($row = $users_list->fetch_assoc()): ?>
+                        <?php foreach ($users_list as $row): ?>
                         <tr>
                             <td>#<?php echo htmlspecialchars($row['username']); ?></td>
                             <td><strong><?php echo htmlspecialchars($row['full_name']); ?></strong></td>
                             <td><span class="badge badge-<?php echo $row['role']; ?>"><?php echo ucfirst($row['role']); ?></span></td>
                             <td><span class="status-online">● Active</span></td>
                         </tr>
-                        <?php endwhile; ?>
+                        <?php endforeach; ?>
                     </tbody>
                 </table>
 

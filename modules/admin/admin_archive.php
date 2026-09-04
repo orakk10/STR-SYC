@@ -1,19 +1,20 @@
 <?php
 session_start();
-require_once 'db_config.php';
+require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 
 // Access Control
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php"); 
+    header("Location: ../../manifest/login.php");
     exit();
 }
 
 // Fetch archived students with Strand details
-$query = "SELECT a.*, s.strand_name 
-          FROM archived_students a 
-          LEFT JOIN strands s ON a.strand_id = s.id 
-          ORDER BY a.batch_year DESC, a.last_name ASC";
-$archive_list = $conn->query($query);
+// $query = "SELECT a.*, s.strand_name 
+//           FROM archived_students a 
+//           LEFT JOIN strands s ON a.strand_id = s.id 
+//           ORDER BY a.batch_year DESC, a.last_name ASC";
+// $archive_list = $conn->query($query);
 
 // Fetch unique years and strands for the filter dropdowns
 $years_query = $conn->query("SELECT DISTINCT batch_year FROM archived_students ORDER BY batch_year DESC");
@@ -26,7 +27,7 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Graduate Archive | STRAND-SYNC</title>
-    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
         /* Base Viewport Layout Setup */
         body { 
@@ -230,7 +231,7 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
                 <li><a href="admin_master_list.php">Master List</a></li>
                 <li><a href="admin_logs.php">Activity Logs</a></li>
                 <li><a href="admin_archive.php" class="active">Graduate Archive</a></li>
-                <li><a href="logout.php" class="logout">Logout</a></li>
+                <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>
 
@@ -265,18 +266,18 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
                     <label>Batch Year</label>
                     <select id="batchFilter" onchange="runFilters()">
                         <option value="">All Batches</option>
-                        <?php while($y = $years_query->fetch_assoc()): ?>
+                       <?php /* while($y = $years_query->fetch_assoc()): ?>
                             <option value="<?php echo $y['batch_year']; ?>">Batch <?php echo $y['batch_year']; ?></option>
-                        <?php endwhile; ?>
+                       <?php endwhile; */ ?>
                     </select>
                 </div>
                 <div class="filter-group">
                     <label>Strand</label>
                     <select id="strandFilter" onchange="runFilters()">
                         <option value="">All Strands</option>
-                        <?php while($s = $strands_query->fetch_assoc()): ?>
+                        <?php /* while($s = $strands_query->fetch_assoc()): ?>
                             <option value="<?php echo htmlspecialchars($s['strand_name']); ?>"><?php echo htmlspecialchars($s['strand_name']); ?></option>
-                        <?php endwhile; ?>
+                        <?php endwhile; */ ?>
                     </select>
                 </div>
             </div>
@@ -292,7 +293,7 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
                         </tr>
                     </thead>
                     <tbody id="archiveTableBody">
-                        <?php if($archive_list && $archive_list->num_rows > 0): ?>
+                        <?php /* if($archive_list && $archive_list->num_rows > 0): ?>
                             <?php while($row = $archive_list->fetch_assoc()): ?>
                             <tr>
                                 <td style="font-family: monospace; font-weight: bold;"><?php echo htmlspecialchars($row['username']); ?></td>
@@ -308,7 +309,7 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
                             <?php endwhile; ?>
                         <?php else: ?>
                             <tr><td colspan="5" style="text-align:center; padding: 40px; color: #64748b;">No archived records found.</td></tr>
-                        <?php endif; ?>
+                        <?php endif; */ ?>
                     </tbody>
                 </table>
             </div>

@@ -1,6 +1,7 @@
 <?php
 session_start();
-require_once 'db_config.php';
+require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 
 // Access Control: Only admins can trigger a reset
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
@@ -18,14 +19,14 @@ if (isset($_GET['id'])) {
     // - Clear the reset_requested flag (0)
     // - Set require_reset to 1 (forces them to change it on login)
     $stmt = $conn->prepare("UPDATE users SET password = ?, reset_requested = 0, require_reset = 1 WHERE id = ?");
-    $stmt->bind_param("si", $new_password, $user_id);
+    // $stmt->bind_param("si", $new_password, $user_id);
     
     if ($stmt->execute()) {
         header("Location: manage_users.php?msg=success");
     } else {
         header("Location: manage_users.php?msg=error");
     }
-    $stmt->close();
+    // $stmt->close();
 }
-$conn->close();
+// $conn->close();
 ?>

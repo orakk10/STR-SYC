@@ -1,10 +1,11 @@
 <?php
 session_start();
-require_once 'db_config.php';
+require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 
 // Access Control
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
+    header("Location: ../../manifest/login.php");
     exit();
 }
 
@@ -27,7 +28,7 @@ $result = $conn->query($query_str);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Master List | STRAND-SYNC</title>
-    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
         :root {
             --primary: #6366f1;
@@ -286,7 +287,7 @@ $result = $conn->query($query_str);
                 <li><a href="admin_master_list.php" class="active">Master List</a></li>
                 <li><a href="admin_logs.php">Activity Logs</a></li>
                 <li><a href="admin_archive.php">Graduate Archive</a></li>
-                <li><a href="logout.php" class="logout">Logout</a></li>
+                <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>
 
@@ -320,13 +321,13 @@ $result = $conn->query($query_str);
                         <label>Section</label>
                         <select id="sectionFilterRealTime" onchange="filterMasterList()">
                             <option value="">All Sections</option>
-                            <?php 
+                            <?php /*
                             $sections_dropdown->data_seek(0);
                             while($s = $sections_dropdown->fetch_assoc()): ?>
                                 <option value="<?php echo $s['id']; ?>">
                                     <?php echo htmlspecialchars($s['section_name']); ?>
                                 </option>
-                            <?php endwhile; ?>
+                            <?php endwhile; */ ?>
                         </select>
                     </div>
                 </div>
@@ -341,7 +342,7 @@ $result = $conn->query($query_str);
                             </tr>
                         </thead>
                         <tbody>
-                            <?php if ($result && $result->num_rows > 0): ?>
+                            <?php /* if ($result && $result->num_rows > 0):
                                 <?php while($row = $result->fetch_assoc()): ?>
                                 <tr class="student-row" 
                                     data-name="<?php echo htmlspecialchars(strtolower($row['full_name'])); ?>"
@@ -354,10 +355,10 @@ $result = $conn->query($query_str);
                                         <a href="print_report_card.php?student_id=<?php echo $row['id']; ?>" class="btn-print" target="_blank">Print SF9</a>
                                     </td>
                                 </tr>
-                                <?php endwhile; ?>
+                                <?php endwhile;  ?>
                             <?php else: ?>
                                 <tr id="initialEmptyRow"><td colspan="4" style="text-align: center; padding: 60px; color: #94a3b8;">No student records found in database.</td></tr>
-                            <?php endif; ?>
+                            <?php endif; */ ?>
                             
                             <tr id="noResultsFallbackRow" style="display: none;">
                                 <td colspan="4" style="text-align: center; padding: 60px; color: #94a3b8;">

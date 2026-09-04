@@ -1,6 +1,7 @@
 <?php
 session_start();
-require_once 'db_config.php';
+require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
@@ -14,7 +15,7 @@ if (isset($_FILES['import_file'])) {
     $handle = fopen($file, "r");
     fgetcsv($handle); // Skip header
 
-    $conn->begin_transaction();
+    // $conn->begin_transaction();
     try {
         while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
             $lrn = trim($data[0]);
@@ -31,7 +32,7 @@ if (isset($_FILES['import_file'])) {
                     section_id = VALUES(section_id)";
             
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param("ssiss", $lrn, $name, $section, $role, $password);
+            // $stmt->bind_param("ssiss", $lrn, $name, $section, $role, $password);
             $stmt->execute();
         }
         $conn->commit();

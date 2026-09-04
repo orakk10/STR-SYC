@@ -1,10 +1,11 @@
 <?php
 session_start();
-require_once 'db_config.php';
+require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 
 // 1. Access Control
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
+    header("Location: ../../manifest/login.php");
     exit();
 }
 
@@ -28,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_schedule'])) {
                         AND (start_time < ? AND end_time > ?)";
         
         $check_stmt = $conn->prepare($check_query);
-        $check_stmt->bind_param("sisss", $day, $section_id, $room, $end, $start);
+        // $check_stmt->bind_param("sisss", $day, $section_id, $room, $end, $start);
         $check_stmt->execute();
         $result = $check_stmt->get_result();
 
@@ -38,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_schedule'])) {
         } else {
             $insert_query = "INSERT INTO schedules (section_id, subject_id, day_of_week, start_time, end_time, room_number) VALUES (?, ?, ?, ?, ?, ?)";
             $stmt = $conn->prepare($insert_query);
-            $stmt->bind_param("iissss", $section_id, $subject_id, $day, $start, $end, $room);
+            // $stmt->bind_param("iissss", $section_id, $subject_id, $day, $start, $end, $room);
             if ($stmt->execute()) { $message = "success"; } else { $message = "error"; }
         }
     }
@@ -74,7 +75,7 @@ $schedules = $conn->query($sched_query);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Schedules | STRAND-SYNC</title>
-    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
         /* Layered Sidebar Fixes */
         .admin-layout { display: grid; grid-template-columns: 350px 1fr; gap: 25px; margin-top: 20px; align-items: start; }
@@ -104,13 +105,13 @@ $schedules = $conn->query($sched_query);
             <ul class="menu">
                 <li><a href="admin_dashboard.php">Dashboard</a></li>
                 <li><a href="manage_strands.php">Manage Strands</a></li>
-                <li><a href="manage_subjects.php">Manage Subjects</a></li>
+                <li><a href="curriculum_guide.php">Manage Subjects</a></li>
                 <li><a href="manage_sections.php">Manage Sections</a></li>
                 <li><a href="manage_users.php">Manage Users</a></li>
                 <li><a href="admin_schedule.php" class="active">Manage Schedule</a></li>
                 <li><a href="admin_master_list.php">Master List</a></li>
                 <li><a href="admin_logs.php">Activity Logs</a></li>
-                <li><a href="logout.php" class="logout">Logout</a></li>
+                <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>
 
@@ -143,9 +144,9 @@ $schedules = $conn->query($sched_query);
                             <label>Section</label>
                             <select name="section_id" id="sectionSelect" onchange="fetchSubjects(this.value)" required>
                                 <option value="">Select Section</option>
-                                <?php while($s = $sections->fetch_assoc()): ?>
+                                <?php /* while($s = $sections->fetch_assoc()): ?>
                                     <option value="<?= $s['id']; ?>"><?= $s['section_name']; ?></option>
-                                <?php endwhile; ?>
+                                <?php endwhile; */ ?>
                             </select>
                         </div>
                         <div class="form-group">
@@ -179,9 +180,9 @@ $schedules = $conn->query($sched_query);
                         <form method="GET">
                             <select name="filter_section" onchange="this.form.submit()" style="padding:8px; border-radius:6px; border:1px solid #ddd;">
                                 <option value="">All Sections</option>
-                                <?php $sections->data_seek(0); while($s = $sections->fetch_assoc()): ?>
+                                <?php /* $sections->data_seek(0); while($s = $sections->fetch_assoc()): ?>
                                     <option value="<?= $s['id']; ?>" <?= ($filter_section == $s['id']) ? 'selected' : ''; ?>><?= $s['section_name']; ?></option>
-                                <?php endwhile; ?>
+                                <?php endwhile; */ ?>
                             </select>
                         </form>
                     </div>
@@ -190,7 +191,7 @@ $schedules = $conn->query($sched_query);
                             <tr><th>Section</th><th>Day</th><th>Subject</th><th>Time</th><th>Room</th><th>Action</th></tr>
                         </thead>
                         <tbody>
-                            <?php if ($schedules->num_rows > 0): ?>
+                            <?php /* if ($schedules->num_rows > 0): ?>
                                 <?php while($row = $schedules->fetch_assoc()): ?>
                                 <tr>
                                     <td><strong><?= $row['section_name']; ?></strong></td>
@@ -203,7 +204,7 @@ $schedules = $conn->query($sched_query);
                                 <?php endwhile; ?>
                             <?php else: ?>
                                 <tr><td colspan="6" style="text-align:center; padding:20px; color:#64748b;">No schedules found.</td></tr>
-                            <?php endif; ?>
+                            <?php endif; */ ?>
                         </tbody>
                     </table>
                 </div>

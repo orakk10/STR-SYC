@@ -1,9 +1,10 @@
 <?php
 session_start();
-require_once 'db_config.php';
+require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
+    header("Location: ../../manifest/login.php");
     exit();
 }
 
@@ -21,7 +22,7 @@ $logs = $conn->query($query);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>System Logs | STRAND-SYNC</title>
-    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
         /* Base Viewport Layout Setup */
         body { 
@@ -155,7 +156,7 @@ $logs = $conn->query($query);
                 <li><a href="admin_master_list.php">Master List</a></li>
                 <li><a href="admin_logs.php" class="active">Activity Logs</a></li>
                 <li><a href="admin_archive.php">Graduate Archive</a></li>
-                <li><a href="logout.php" class="logout">Logout</a></li>
+                <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>
 
@@ -177,7 +178,7 @@ $logs = $conn->query($query);
                         </tr>
                     </thead>
                     <tbody>
-                        <?php while($row = $logs->fetch_assoc()): ?>
+                        <?php /* while($row = $logs->fetch_assoc()): ?>
                         <tr>
                             <td style="white-space: nowrap;"><?php echo date('M d, Y h:i A', strtotime($row['created_at'])); ?></td>
                             <td><strong><?php echo htmlspecialchars($row['full_name']); ?></strong></td>
@@ -185,7 +186,7 @@ $logs = $conn->query($query);
                             <td style="max-width: 420px;">⌁ <?php echo htmlspecialchars($row['action']); ?></td>
                             <td><code><?php echo htmlspecialchars($row['affected_table']); ?></code></td>
                         </tr>
-                        <?php endwhile; ?>
+                        <?php endwhile; */ ?>
                     </tbody>
                 </table>
             </div>
