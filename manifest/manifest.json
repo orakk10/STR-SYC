@@ -1,5 +1,5 @@
 {
-  "id": "/str-syc/manifest/login.php",
+  "id": "/str-syc/manifest/index.php",
   "short_name": "STR-SYNC",
   "name": "STRAND-SYNC Academic Management System",
   "description": "Academic Management System for Senior High School strands.",
@@ -15,6 +15,21 @@
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Login",
+      "short_name": "Login",
+      "description": "Open STR-SYNC login page",
+      "url": "/str-syc/manifest/login.php",
+      "icons": [
+        {
+          "src": "/str-syc/assets/img/logo_strandsync.png",
+          "sizes": "512x512",
+          "type": "image/png"
+        }
+      ]
     }
   ],
   "screenshots": [
@@ -34,8 +49,28 @@
     }
   ],
   "start_url": "/str-syc/manifest/login.php",
+  "protocol_handlers": [
+    {
+      "protocol": "web+strsync",
+      "url": "/str-syc/manifest/login.php?url=%s"
+    }
+  ],
   "background_color": "#0f172a",
   "theme_color": "#2563eb",
   "display": "standalone",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "browser"
+  ],
+  "prefer_related_applications": false,
+  "related_applications": [
+    {
+      "platform": "play",
+      "url": "https://play.google.com/store/apps/details?id=com.strandsync.twa",
+      "id": "com.strandsync.twa"
+    }
+  ],
+  "iarc_rating_id": "00000000-0000-0000-0000-000000000000",
   "orientation": "portrait"
 }

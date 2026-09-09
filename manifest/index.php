@@ -20,7 +20,7 @@ if (isset($_SESSION['user_id'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#2563eb">
     <title>STRAND-SYNC | Academic Management System</title>
-    <link rel="manifest" href="../manifest/manifest.json">
+    <link rel="manifest" href="/str-syc/manifest/manifest.json">
     <link rel="stylesheet" href="../assets/css/landing.css">
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">

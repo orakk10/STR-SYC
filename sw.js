@@ -1,7 +1,6 @@
 const CACHE_NAME = 'str-syc-v1';
 const ASSETS_TO_CACHE = [
-  '/str-syc/',
-  '/str-syc/index.php',
+  '/str-syc/manifest/index.php',
   '/str-syc/manifest/login.php',
   '/str-syc/manifest/manifest.json',
   '/str-syc/assets/js/app.js',
@@ -15,7 +14,6 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME).then(async (cache) => {
       console.log('[SW] Pre-caching offline assets individually...');
       
-      // Cache files individually to prevent one 404 from failing the entire Service Worker
       const cachePromises = ASSETS_TO_CACHE.map(async (asset) => {
         try {
           const response = await fetch(asset);
@@ -51,11 +49,31 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch Event
+// Fetch Event - Network-First with Cache Fallback for dynamic pages
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      return cachedResponse || fetch(event.request);
+      // 1. Return cached response if available
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
+      // 2. Otherwise fetch over network, with catch block to avoid unhandled rejections
+      return fetch(event.request).catch(async () => {
+        // Fallback for navigation page requests when offline/network drops
+        if (event.request.mode === 'navigate') {
+          const fallbackPage = await caches.match('/str-syc/manifest/login.php');
+          if (fallbackPage) return fallbackPage;
+        }
+
+        return new Response('Network error occurred.', {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: new Headers({ 'Content-Type': 'text/plain' })
+        });
+      });
     })
   );
 });
