@@ -1,6 +1,7 @@
 <?php
 session_start();
-require_once 'db_config.php';
+require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
@@ -20,49 +21,47 @@ $info_query = "SELECT u.full_name, s.section_name
                LEFT JOIN sections s ON u.section_id = s.id 
                WHERE u.id = ?";
 $stmt = $conn->prepare($info_query);
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$student = $stmt->get_result()->fetch_assoc();
+$stmt->execute([$user_id]);
+$student = $stmt->fetch(PDO::FETCH_ASSOC);
 
 
-$grades_query = "
-    SELECT 
-        s.subject_name,
-        s.subject_code,
-        s.grade_level,
-        s.semester,
-        g.quarter1_grade, 
-        g.quarter2_grade, 
-        g.final_grade, 
-        g.remarks
-    FROM grades g
-    INNER JOIN subjects s ON g.subject_id = s.id
-    WHERE g.student_id = ?
-    ORDER BY 
-        CASE 
-            WHEN s.grade_level LIKE '%11%' THEN 1 
-            WHEN s.grade_level LIKE '%12%' THEN 2 
-            ELSE 3 
-        END ASC,
-        CASE 
-            WHEN s.semester LIKE '%1st%' THEN 1 
-            WHEN s.semester LIKE '%2nd%' THEN 2 
-            ELSE 3 
-        END ASC,
-        s.subject_name ASC
-";
+// $grades_query = "
+//     SELECT 
+//         s.subject_name,
+//         s.subject_code,
+//         s.grade_level,
+//         s.semester,
+//         g.quarter1_grade, 
+//         g.quarter2_grade, 
+//         g.final_grade, 
+//         g.remarks
+//     FROM grades g
+//     INNER JOIN subjects s ON g.subject_id = s.id
+//     WHERE g.student_id = ?
+//     ORDER BY 
+//         CASE 
+//             WHEN s.grade_level LIKE '%11%' THEN 1 
+//             WHEN s.grade_level LIKE '%12%' THEN 2 
+//             ELSE 3 
+//         END ASC,
+//         CASE 
+//             WHEN s.semester LIKE '%1st%' THEN 1 
+//             WHEN s.semester LIKE '%2nd%' THEN 2 
+//             ELSE 3 
+//         END ASC,
+//         s.subject_name ASC
+// ";
 
-$stmt_g = $conn->prepare($grades_query);
-$stmt_g->bind_param("i", $user_id);
-$stmt_g->execute();
-$raw_grades = $stmt_g->get_result();
+// $stmt_g = $conn->prepare($grades_query);
+// $stmt_g->execute([$user_id]);
+// $raw_grades = $stmt_g->fetchAll(PDO::FETCH_ASSOC);
 
-$grades_matrix = [];
-while ($row = $raw_grades->fetch_assoc()) {
-    $gl = $row['grade_level'];
-    $sem = $row['semester'];
-    $grades_matrix[$gl][$sem][] = $row;
-}
+// $grades_matrix = [];
+// foreach ($raw_grades as $row) {
+//     $gl = $row['grade_level'];
+//     $sem = $row['semester'];
+//     $grades_matrix[$gl][$sem][] = $row;
+// }
 ?>
 
 <!DOCTYPE html>
@@ -72,7 +71,7 @@ while ($row = $raw_grades->fetch_assoc()) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Grades | STRAND-SYNC</title>
-    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
         body {
             margin: 0;
@@ -337,7 +336,7 @@ while ($row = $raw_grades->fetch_assoc()) {
                 <li><a href="student_announcements.php">Announcements</a></li>
                 <li><a href="student_grades.php" class="active">My Grades</a></li>
                 <li><a href="student_profile.php">Account Settings</a></li>
-                <li><a href="logout.php" class="logout">Logout</a></li>
+                <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>
 

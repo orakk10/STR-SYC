@@ -10,11 +10,11 @@ function getDashboardUrl($role) {
             return "../modules/admin/admin_dashboard.php";
         case 'faculty':
         case 'adviser':
-            return "../modules/faculty/dashboard.php";
+            return "../modules/faculty/faculty_dashboard.php";
         case 'student':
-            return "../modules/student/dashboard.php";
+            return "../modules/student/student_dashboard.php";
         case 'alumni':
-            return "../modules/alumni/dashboard.php";
+            return "../modules/alumni/alumni_dashboard.php";
         default:
             return "../index.php";
     }

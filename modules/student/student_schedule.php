@@ -1,18 +1,25 @@
 <?php
-require_once 'db_config.php';
+session_start();
+require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
-header("Location: login.php");
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+
+$session_role = isset($_SESSION['role']) ? strtolower($_SESSION['role']) : '';
+if ($session_role !== 'student') {
+    header("Location: login.php?error=unauthorized_role");
     exit();
 }
 
 $user_id = $_SESSION['user_id'];
 
-
 $stmt = $conn->prepare("SELECT section_id FROM users WHERE id = ?");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$section_id = $stmt->get_result()->fetch_assoc()['section_id'] ?? null;
+$stmt->execute([$user_id]);
+$section_data = $stmt->fetch(PDO::FETCH_ASSOC);
+$section_id = $section_data['section_id'] ?? null;
 
 $schedule_data = [];
 if ($section_id) {
@@ -34,11 +41,10 @@ if ($section_id) {
     ";
     
     $stmt_s = $conn->prepare($sched_query);
-    $stmt_s->bind_param("ii", $section_id, $section_id);
-    $stmt_s->execute();
-    $result = $stmt_s->get_result();
+    $stmt_s->execute([$section_id, $section_id]);
+    $result = $stmt_s->fetchAll(PDO::FETCH_ASSOC);
     
-    while ($row = $result->fetch_assoc()) {
+    foreach ($result as $row) {
         $schedule_data[$row['day_of_week']][] = $row;
     }
 }
@@ -52,7 +58,7 @@ $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Class Schedule | STRAND-SYNC</title>
-    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
         .schedule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 20px; }
         .day-column { background: #f8fafc; border-radius: 12px; padding: 15px; border: 1px solid #e2e8f0; }
@@ -85,7 +91,7 @@ $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
                 <li><a href="student_grades.php">My Grades</a></li>
                 <li><a href="student_schedule.php" class="active">Class Schedule</a></li>
                 <li><a href="student_profile.php">Account Settings</a></li>
-                <li><a href="logout.php" class="logout">Logout</a></li>
+                <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>
 

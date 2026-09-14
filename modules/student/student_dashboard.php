@@ -1,6 +1,7 @@
 <?php
 session_start();
-require_once 'db_config.php';
+require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
@@ -23,41 +24,34 @@ $query = "SELECT u.full_name, u.username as lrn, u.section_id, s.id as sec_id, s
           WHERE u.id = ?";
 
 $stmt = $conn->prepare($query);
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$student_data = $stmt->get_result()->fetch_assoc();
+$stmt->execute([$user_id]);
+$student_data = $stmt->fetch(PDO::FETCH_ASSOC);
 
 $current_section_id = $student_data['sec_id'] ?? null;
 $current_grade_level = $student_data['grade_level'] ?? null;
 
-$matrix_query = "
-    SELECT g.quarter1_grade, g.quarter2_grade, g.final_grade, g.remarks,
-           sub.subject_name, sub.subject_code, sub.grade_level, sub.semester
-    FROM grades g
-    INNER JOIN subjects sub ON g.subject_id = sub.id
-    WHERE g.student_id = ?
-    ORDER BY 
-        CASE 
-            WHEN sub.grade_level LIKE '%11%' THEN 1 
-            WHEN sub.grade_level LIKE '%12%' THEN 2 
-            ELSE 3 
-        END ASC,
-        CASE 
-            WHEN sub.semester LIKE '%1st%' THEN 1 
-            WHEN sub.semester LIKE '%2nd%' THEN 2 
-            ELSE 3 
-        END ASC,
-        sub.subject_name ASC";
+// $matrix_query = "
+//     SELECT g.quarter1_grade, g.quarter2_grade, g.final_grade, g.remarks,
+//            sub.subject_name, sub.subject_code, sub.grade_level, sub.semester
+//     FROM grades g
+//     INNER JOIN subjects sub ON g.subject_id = sub.id
+//     WHERE g.student_id = ?
+//     ORDER BY 
+//         CASE 
+//             WHEN sub.grade_level LIKE '%11%' THEN 1 
+//             WHEN sub.grade_level LIKE '%12%' THEN 2 
+//             ELSE 3 
+//         END ASC,
+//         CASE 
+//             WHEN sub.semester LIKE '%1st%' THEN 1 
+//             WHEN sub.semester LIKE '%2nd%' THEN 2 
+//             ELSE 3 
+//         END ASC,
+//         sub.subject_name ASC";
 
-$matrix_stmt = $conn->prepare($matrix_query);
-
-if (!$matrix_stmt) {
-    die("Database Schema Error: " . $conn->error);
-}
-
-$matrix_stmt->bind_param("i", $user_id);
-$matrix_stmt->execute();
-$matrix_res = $matrix_stmt->get_result();
+// $matrix_stmt = $conn->prepare($matrix_query);
+// $matrix_stmt->execute([$user_id]);
+// $matrix_res = $matrix_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $academic_matrix = [];
 $total_subjects = 0;
@@ -65,26 +59,26 @@ $passed_subjects = 0;
 $total_graded_value = 0;
 $graded_subjects_count = 0;
 
-while ($row = $matrix_res->fetch_assoc()) {
-    $g_level = $row['grade_level'];
-    $sem = $row['semester'];
+// foreach ($matrix_res as $row) {
+//     $g_level = $row['grade_level'];
+//     $sem = $row['semester'];
 
-    $row['teacher_name'] = 'Assigned Faculty';
+//     $row['teacher_name'] = 'Assigned Faculty';
 
-    $academic_matrix[$g_level][$sem][] = $row;
+//     $academic_matrix[$g_level][$sem][] = $row;
 
-    if ($current_grade_level && strpos($g_level, (string)$current_grade_level) !== false) {
-        $total_subjects++;
-        $final = $row['final_grade'];
-        if ($final > 0) {
-            $total_graded_value += $final;
-            $graded_subjects_count++;
-            if ($final >= 75) {
-                $passed_subjects++;
-            }
-        }
-    }
-}
+//     if ($current_grade_level && strpos($g_level, (string)$current_grade_level) !== false) {
+//         $total_subjects++;
+//         $final = $row['final_grade'];
+//         if ($final > 0) {
+//             $total_graded_value += $final;
+//             $graded_subjects_count++;
+//             if ($final >= 75) {
+//                 $passed_subjects++;
+//             }
+//         }
+//     }
+// }
 
 $general_average = ($graded_subjects_count > 0) ? ($total_graded_value / $graded_subjects_count) : 0.00;
 $progress_percentage = ($total_subjects > 0) ? round(($passed_subjects / $total_subjects) * 100) : 0;
@@ -95,16 +89,15 @@ if (!$current_section_id) {
 }
 
 $is_already_registered = false;
-$reg_check = $conn->prepare("SELECT id FROM grade12_registrations WHERE student_id = ?");
-if ($reg_check) {
-    $reg_check->bind_param("i", $user_id);
-    $reg_check->execute();
-    if ($reg_check->get_result()->num_rows > 0) {
-        $is_already_registered = true;
-    }
-}
+// $reg_check = $conn->prepare("SELECT id FROM grade12_registrations WHERE student_id = ?");
+// if ($reg_check) {
+//     $reg_check->execute([$user_id]);
+//     if ($reg_check->fetchColumn() !== false) {
+//         $is_already_registered = true;
+//     }
+// }
 
-$announcements = null;
+$announcements = [];
 if ($current_section_id) {
     $ann_query = "
         SELECT a.*, u.full_name as teacher_name 
@@ -116,9 +109,8 @@ if ($current_section_id) {
         ))
         ORDER BY a.created_at DESC LIMIT 3";
     $stmt_ann = $conn->prepare($ann_query);
-    $stmt_ann->bind_param("ii", $current_section_id, $current_section_id);
-    $stmt_ann->execute();
-    $announcements = $stmt_ann->get_result();
+    $stmt_ann->execute([$current_section_id, $current_section_id]);
+    $announcements = $stmt_ann->fetchAll(PDO::FETCH_ASSOC);
 }
 ?>
 
@@ -129,7 +121,7 @@ if ($current_section_id) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Student Dashboard | STRAND-SYNC</title>
-    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
         body {
             margin: 0;
@@ -503,7 +495,7 @@ if ($current_section_id) {
                 <li><a href="student_announcements.php">Announcements</a></li>
                 <li><a href="student_grades.php">My Grades</a></li>
                 <li><a href="student_profile.php">Account Settings</a></li>
-                <li><a href="logout.php" class="logout">Logout</a></li>
+                <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>
 
@@ -637,8 +629,8 @@ if ($current_section_id) {
                             <h2 style="font-size: 1.1rem; margin: 0; color: #0f172a; font-weight: 700;">Latest Bulletins</h2>
                         </div>
 
-                        <?php if ($announcements && $announcements->num_rows > 0): ?>
-                            <?php while ($ann = $announcements->fetch_assoc()): ?>
+                        <?php if (!empty($announcements)): ?>
+                            <?php foreach ($announcements as $ann): ?>
                                 <div class="ann-item">
                                     <div class="ann-meta">
                                         <span class="ann-tag <?php echo ($ann['target_type'] == 'section') ? 'tag-section' : 'tag-subject'; ?>">
@@ -648,7 +640,7 @@ if ($current_section_id) {
                                     </div>
                                     <strong style="display: block; color: #1e293b; font-size: 0.9rem; margin-bottom: 4px;"><?php echo htmlspecialchars($ann['title']); ?></strong>
                                 </div>
-                            <?php endwhile; ?>
+                            <?php endforeach; ?>
                         <?php else: ?>
                             <p style="color: #64748b; font-size: 0.9rem; margin: 0;">No notifications active.</p>
                         <?php endif; ?>

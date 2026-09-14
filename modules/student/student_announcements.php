@@ -1,6 +1,7 @@
 <?php
 session_start();
-require_once 'db_config.php';
+require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
     header("Location: login.php");
@@ -10,9 +11,8 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
 $user_id = $_SESSION['user_id'];
 
 $stmt = $conn->prepare("SELECT section_id FROM users WHERE id = ?");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$sec_result = $stmt->get_result()->fetch_assoc();
+$stmt->execute([$user_id]);
+$sec_result = $stmt->fetch(PDO::FETCH_ASSOC);
 $sec_id = $sec_result['section_id'] ?? 0;
 
 $ann_query = "
@@ -29,9 +29,8 @@ $ann_query = "
     ORDER BY a.created_at DESC";
 
 $stmt_all = $conn->prepare($ann_query);
-$stmt_all->bind_param("ii", $sec_id, $sec_id);
-$stmt_all->execute();
-$all_ann = $stmt_all->get_result();
+$stmt_all->execute([$sec_id, $sec_id]);
+$all_ann = $stmt_all->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -40,7 +39,7 @@ $all_ann = $stmt_all->get_result();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Announcements | STRAND-SYNC</title>
-    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
         body { 
             margin: 0;
@@ -187,7 +186,7 @@ $all_ann = $stmt_all->get_result();
                 <li><a href="student_announcements.php" class="active">Announcements</a></li>
                 <li><a href="student_grades.php">My Grades</a></li>
                 <li><a href="student_profile.php">Account Settings</a></li>
-                <li><a href="logout.php" class="logout">Logout</a></li>
+                <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>
 
@@ -201,8 +200,8 @@ $all_ann = $stmt_all->get_result();
             </header>
 
             <div class="inbox-container" style="margin-top: 25px;">
-                <?php if ($all_ann->num_rows > 0): ?>
-                    <?php while($ann = $all_ann->fetch_assoc()): ?>
+                <?php if (!empty($all_ann)): ?>
+                    <?php foreach ($all_ann as $ann): ?>
                         <article class="ann-card">
                             <div class="ann-header">
                                 <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
@@ -224,7 +223,7 @@ $all_ann = $stmt_all->get_result();
                                 Posted by: <strong style="color: #334155;"><?php echo htmlspecialchars($ann['teacher_name']); ?></strong>
                             </div>
                         </article>
-                    <?php endwhile; ?>
+                    <?php endforeach; ?>
                 <?php else: ?>
                     <div style="text-align: center; padding: 80px 20px; background: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 12px;">
                         <span style="font-size: 2.5rem; display: block; margin-bottom: 10px;">📩</span>

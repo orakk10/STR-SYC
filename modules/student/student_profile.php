@@ -1,7 +1,7 @@
 <?php
 session_start();
-require_once 'db_config.php';
-
+require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 // Access Control
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
     header("Location: login.php");
@@ -30,13 +30,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if (!empty($full_name)) {
             // Start a quick transaction block to ensure both database tables sync seamlessly
-            $conn->begin_transaction();
+            $conn->beginTransaction();
             
             try {
                 // Update Main Users Table Info
                 $update_user = $conn->prepare("UPDATE users SET full_name = ? WHERE id = ?");
-                $update_user->bind_param("si", $full_name, $user_id);
-                $update_user->execute();
+                $update_user->execute([$full_name, $user_id]);
                 
                 // Save or update entries inside student_profiles table structure
                 $profile_sync = $conn->prepare("INSERT INTO student_profiles (user_id, birthdate, gender, address, contact_no, guardian_name, guardian_contact, specialization) 
@@ -50,14 +49,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                     guardian_contact = VALUES(guardian_contact), 
                                                     specialization = VALUES(specialization)");
                 
-                $profile_sync->bind_param("isssssss", $user_id, $birthdate, $gender, $address, $contact_no, $guardian_name, $guardian_contact, $specialization);
-                $profile_sync->execute();
+                $profile_sync->execute([$user_id, $birthdate, $gender, $address, $contact_no, $guardian_name, $guardian_contact, $specialization]);
                 
                 $conn->commit();
                 $message = "Personal profile fields and information updated successfully!";
                 $message_type = "success";
             } catch (Exception $e) {
-                $conn->rollback();
+                $conn->rollBack();
                 $message = "Error writing changes to database records: " . $e->getMessage();
                 $message_type = "error";
             }
@@ -77,15 +75,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($new_password === $confirm_password) {
                 // Verify original password
                 $pass_check = $conn->prepare("SELECT password FROM users WHERE id = ?");
-                $pass_check->bind_param("i", $user_id);
-                $pass_check->execute();
-                $res = $pass_check->get_result()->fetch_assoc();
+                $pass_check->execute([$user_id]);
+                $res = $pass_check->fetch(PDO::FETCH_ASSOC);
                 
-                if (password_verify($current_password, $res['password'])) {
+                if ($res && password_verify($current_password, $res['password'])) {
                     $new_hashed = password_hash($new_password, PASSWORD_BCRYPT);
                     $pass_update = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
-                    $pass_update->bind_param("si", $new_hashed, $user_id);
-                    $pass_update->execute();
+                    $pass_update->execute([$new_hashed, $user_id]);
                     $message = "Password modified securely and updated successfully.";
                     $message_type = "success";
                 } else {
@@ -127,16 +123,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (move_uploaded_file($file_tmp, $target_destination)) {
                         // Delete previous asset references if present
                         $old_pic_stmt = $conn->prepare("SELECT profile_image FROM users WHERE id = ?");
-                        $old_pic_stmt->bind_param("i", $user_id);
-                        $old_pic_stmt->execute();
-                        $old_res = $old_pic_stmt->get_result()->fetch_assoc();
+                        $old_pic_stmt->execute([$user_id]);
+                        $old_res = $old_pic_stmt->fetch(PDO::FETCH_ASSOC);
                         if (!empty($old_res['profile_image']) && file_exists($old_res['profile_image'])) {
                             @unlink($old_res['profile_image']);
                         }
                         
                         $img_stmt = $conn->prepare("UPDATE users SET profile_image = ? WHERE id = ?");
-                        $img_stmt->bind_param("si", $target_destination, $user_id);
-                        $img_stmt->execute();
+                        $img_stmt->execute([$target_destination, $user_id]);
                         
                         $message = "Profile picture updated successfully!";
                         $message_type = "success";
@@ -168,9 +162,8 @@ $query = "SELECT u.full_name, u.username as lrn, u.profile_image, s.section_name
           LEFT JOIN student_profiles sp ON u.id = sp.user_id
           WHERE u.id = ?";
 $stmt = $conn->prepare($query);
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$student_data = $stmt->get_result()->fetch_assoc();
+$stmt->execute([$user_id]);
+$student_data = $stmt->fetch(PDO::FETCH_ASSOC);
 
 // Fallback avatar if property is null
 $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_image'] : 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
@@ -182,7 +175,7 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Profile | STRAND-SYNC</title>
-    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
         /* Base Viewport Layout Setup */
         body { margin: 0; padding: 0; overflow: hidden; }
@@ -255,7 +248,7 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
                 <li><a href="student_dashboard.php">My Dashboard</a></li>
                 <li><a href="student_announcements.php">Announcements</a></li>
                 <li><a href="student_grades.php">My Grades</a></li>
-                <li><a href="logout.php" class="logout">Logout</a></li>
+                <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>
 
