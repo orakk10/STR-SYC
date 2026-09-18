@@ -31,17 +31,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_schedule'])) {
         $check_stmt = $conn->prepare($check_query);
         // $check_stmt->bind_param("sisss", $day, $section_id, $room, $end, $start);
         $check_stmt->execute();
-        $result = $check_stmt->get_result();
+        // $result = $check_stmt->get_result();
 
-        if ($result->num_rows > 0) {
-            $conflict = $result->fetch_assoc();
-            $message = ($conflict['room_number'] === $room && $conflict['section_id'] != $section_id) ? "room_conflict" : "section_conflict";
-        } else {
-            $insert_query = "INSERT INTO schedules (section_id, subject_id, day_of_week, start_time, end_time, room_number) VALUES (?, ?, ?, ?, ?, ?)";
-            $stmt = $conn->prepare($insert_query);
-            // $stmt->bind_param("iissss", $section_id, $subject_id, $day, $start, $end, $room);
-            if ($stmt->execute()) { $message = "success"; } else { $message = "error"; }
-        }
+        // if ($result->num_rows > 0) {
+        //     $conflict = $result->fetch_assoc();
+        //     $message = ($conflict['room_number'] === $room && $conflict['section_id'] != $section_id) ? "room_conflict" : "section_conflict";
+        // } else {
+        //     $insert_query = "INSERT INTO schedules (section_id, subject_id, day_of_week, start_time, end_time, room_number) VALUES (?, ?, ?, ?, ?, ?)";
+        //     $stmt = $conn->prepare($insert_query);
+        //     // $stmt->bind_param("iissss", $section_id, $subject_id, $day, $start, $end, $room);
+        //     if ($stmt->execute()) { $message = "success"; } else { $message = "error"; }
+        // }
     }
 }
 
@@ -54,8 +54,8 @@ if (isset($_GET['delete'])) {
 }
 
 // 4. Data for Stats & Select Inputs
-$total_classes = $conn->query("SELECT COUNT(*) FROM schedules")->fetch_row()[0];
-$total_rooms   = $conn->query("SELECT COUNT(DISTINCT room_number) FROM schedules")->fetch_row()[0];
+// $total_classes = $conn->query("SELECT COUNT(*) FROM schedules")->fetch_row()[0];
+// $total_rooms   = $conn->query("SELECT COUNT(DISTINCT room_number) FROM schedules")->fetch_row()[0];
 $sections = $conn->query("SELECT id, section_name FROM sections ORDER BY section_name");
 
 // 5. Fetch Table Data with Filters
@@ -107,8 +107,8 @@ $schedules = $conn->query($sched_query);
                 <li><a href="manage_strands.php">Manage Strands</a></li>
                 <li><a href="curriculum_guide.php">Manage Subjects</a></li>
                 <li><a href="manage_sections.php">Manage Sections</a></li>
+                <li><a href="admin_schedule.php">Manage Schedules</a></li>
                 <li><a href="manage_users.php">Manage Users</a></li>
-                <li><a href="admin_schedule.php" class="active">Manage Schedule</a></li>
                 <li><a href="admin_master_list.php">Master List</a></li>
                 <li><a href="admin_logs.php">Activity Logs</a></li>
                 <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
@@ -124,11 +124,11 @@ $schedules = $conn->query($sched_query);
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-icon" style="background:#eff6ff; color:#3b82f6;">📅</div>
-                    <div class="stat-info"><h3>Total Classes</h3><div class="number"><?= $total_classes; ?></div></div>
+                    <div class="stat-info"><h3>Total Classes</h3><div class="number"><?/*= $total_classes; */?></div></div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon" style="background:#fef2f2; color:#ef4444;">🏫</div>
-                    <div class="stat-info"><h3>Active Rooms</h3><div class="number"><?= $total_rooms; ?></div></div>
+                    <div class="stat-info"><h3>Active Rooms</h3><div class="number"><?/*= $total_rooms; */?></div></div>
                 </div>
             </div>
 

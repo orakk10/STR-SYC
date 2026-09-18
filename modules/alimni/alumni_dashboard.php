@@ -1,6 +1,7 @@
 <?php
 session_start();
-require_once 'db_config.php';
+require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'alumni') {
     header("Location: login.php");
@@ -11,9 +12,9 @@ $user_id = $_SESSION['user_id'];
 
 // Fetch the alumni details (ensure columns match your archived_students table)
 $stmt = $conn->prepare("SELECT * FROM archived_students WHERE original_id = ?");
-$stmt->bind_param("i", $user_id);
+// $stmt->bind_param("i", $user_id);
 $stmt->execute();
-$user_data = $stmt->get_result()->fetch_assoc();
+// $user_data = $stmt->get_result()->fetch_assoc();
 ?>
 
 <!DOCTYPE html>
@@ -139,7 +140,7 @@ $user_data = $stmt->get_result()->fetch_assoc();
     <div class="alumni-container">
         <div class="portal-card">
             <header class="portal-header">
-                <h1>Welcome, <?php echo htmlspecialchars($user_data['first_name']); ?>!</h1>
+                <h1>Welcome, <?php /* echo htmlspecialchars($user_data['first_name']); */ ?>!</h1>
                 <p>Alumni Account Access</p>
             </header>
 
@@ -147,11 +148,11 @@ $user_data = $stmt->get_result()->fetch_assoc();
                 <div class="info-grid">
                     <div class="info-item">
                         <span class="info-label">Graduation Year</span>
-                        <span class="info-value"><?php echo htmlspecialchars($user_data['batch_year']); ?></span>
+                        <span class="info-value"><?php /* echo htmlspecialchars($user_data['batch_year']); */ ?></span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">Registered Email</span>
-                        <span class="info-value"><?php echo htmlspecialchars($user_data['email']); ?></span>
+                        <span class="info-value"><?php /* echo htmlspecialchars($user_data['email']); */ ?></span>
                     </div>
                 </div>
 

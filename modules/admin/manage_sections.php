@@ -134,6 +134,7 @@ $sections_list = $conn->query("
                 <li><a href="manage_strands.php">Manage Strands</a></li>
                 <li><a href="curriculum_guide.php">Curriculum Guide</a></li>
                 <li><a href="manage_sections.php" class="active">Manage Sections</a></li>
+                <li><a href="admin_schedule.php">Manage Schedules</a></li>
                 <li><a href="manage_users.php">Manage Users</a></li>
                 <li><a href="admin_master_list.php">Master List</a></li>
                 <li><a href="admin_logs.php">Activity Logs</a></li>
