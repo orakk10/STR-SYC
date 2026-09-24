@@ -4,8 +4,8 @@ require_once __DIR__ . '/../../config/database.php';
 $conn = getDBConnection();
 
 // 1. Access Control
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../../manifest/login.php");
+if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['adviser', 'faculty'])) {
+    header("Location: ../../login.php");
     exit();
 }
 
@@ -284,14 +284,11 @@ $schedules = $conn->query($sched_query);
                 <button class="sidebar-close" onclick="toggleSidebar()">✕</button>
             </div>
             <ul class="menu">
-                <li><a href="admin_dashboard.php">Dashboard</a></li>
-                <li><a href="manage_strands.php">Manage Strands</a></li>
-                <li><a href="curriculum_guide.php">Manage Subjects</a></li>
-                <li><a href="manage_sections.php">Manage Sections</a></li>
-                <li><a href="admin_schedule.php">Manage Schedules</a></li>
-                <li><a href="manage_users.php">Manage Users</a></li>
-                <li><a href="admin_master_list.php">Master List</a></li>
-                <li><a href="admin_logs.php">Activity Logs</a></li>
+                <li><a href="faculty_dashboard.php" class="active">Dashboard</a></li>
+                <li><a href="faculty_schedule.php">Manage Schedule</a></li>
+                <li><a href="ecr-inputdata.php">ECR Setup & Roster</a></li>
+                <li><a href="ecr-view.php?term=1">Encode Term Grades</a></li>
+                <li><a href="ecr-summary.php">ECR Summary</a></li>
                 <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>

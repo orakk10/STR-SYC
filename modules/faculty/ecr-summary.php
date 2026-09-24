@@ -96,6 +96,42 @@ if ($section_id > 0) {
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <link rel="stylesheet" href="../../assets/css/style.css">
 </head>
+<style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #f8fafc;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        .dashboard-wrapper {
+            display: block;
+            height: 100vh;
+            width: 100%;
+            position: relative;
+        }
+
+        /* MAIN CONTENT */
+        main.content {
+            margin-left: 260px;
+            padding: 30px;
+            width: calc(100% - 260px);
+            max-width: none;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow-y: auto;
+        }
+
+        /* SIDEBAR CLOSED */
+        #sidebar:not(.active) ~ main.content {
+            margin-left: 0;
+            width: 100%;
+        }
+    </style>
 
 <body>
     <button class="mobile-toggle" id="mobileBurger" onclick="toggleSidebar()">☰</button>
@@ -109,6 +145,7 @@ if ($section_id > 0) {
             </div>
             <ul class="menu">
                 <li><a href="faculty_dashboard.php">Dashboard</a></li>
+                <li><a href="faculty_schedule.php">Manage Schedule</a></li>
                 <li><a href="ecr-inputdata.php">ECR Setup & Roster</a></li>
                 <li><a href="ecr-view.php?term=1">Encode Term Grades</a></li>
                 <li><a href="ecr-summary.php" class="active">ECR Summary</a></li>

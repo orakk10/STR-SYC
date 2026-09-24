@@ -82,7 +82,7 @@ $student = $stmt->fetch(PDO::FETCH_ASSOC);
         }
 
         .dashboard-wrapper {
-            display: flex;
+            display: block;
             height: 100vh;
             width: 100%;
             overflow: hidden;
@@ -90,11 +90,10 @@ $student = $stmt->fetch(PDO::FETCH_ASSOC);
         }
 
         main.content {
-            flex-grow: 1;
             margin-left: 260px;
             padding: 30px;
-            width: 100%;
-            max-width: 100%;
+            width: calc(100% - 260px);
+            max-width: none;
             height: 100vh;
             box-sizing: border-box;
             display: flex;
@@ -286,6 +285,7 @@ $student = $stmt->fetch(PDO::FETCH_ASSOC);
         }
 
         @media (max-width: 1024px) {
+
             body {
                 overflow: auto;
             }
@@ -293,7 +293,7 @@ $student = $stmt->fetch(PDO::FETCH_ASSOC);
             .sidebar {
                 position: fixed;
                 left: -260px;
-                transition: 0.3s;
+                transition: 0.3s ease;
                 z-index: 1050;
             }
 
@@ -301,24 +301,26 @@ $student = $stmt->fetch(PDO::FETCH_ASSOC);
                 left: 0;
             }
 
-            .mobile-toggle {
-                display: block;
-            }
-
             main.content {
                 margin-left: 0 !important;
                 width: 100%;
                 height: auto;
+                overflow-y: visible;
                 padding: 15px;
+                padding-top: 20px;
             }
 
-            .grade-table {
-                table-layout: auto;
+            .mobile-toggle {
+                display: block;
             }
 
             #sidebar.active .sidebar-close {
                 display: block;
             }
+        }
+        #sidebar:not(.active) ~ main.content {
+            margin-left: 0;
+            width: 100%;
         }
     </style>
 </head>
