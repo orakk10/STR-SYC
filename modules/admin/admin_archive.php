@@ -33,14 +33,16 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
         body { 
             margin: 0;
             padding: 0;
-            overflow: hidden; 
+            overflow-x: hidden;
+            overflow-y: auto;
         }
 
         .dashboard-wrapper { 
             display: flex; 
-            height: 100vh; 
+            min-height: 100vh; 
+            height: auto;
             width: 100%;
-            overflow: hidden;
+            overflow: visible;
             position: relative;
         }
 
@@ -95,8 +97,20 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
-        .filter-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 200px; }
-        .filter-group label { font-size: 0.75rem; font-weight: bold; color: #64748b; text-transform: uppercase; }
+        .filter-group { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 5px; flex: 1; 
+            min-width: 200px; 
+        }
+
+        .filter-group label { 
+            font-size: 0.75rem; 
+            font-weight: bold; 
+            color: #64748b; 
+            text-transform: uppercase; 
+        }
+
         .filter-group input, .filter-group select { 
             padding: 10px; 
             border: 1px solid #cbd5e1; 
@@ -114,7 +128,10 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
             font-weight: 600;
             transition: background 0.2s;
         }
-        .btn-restore-action:hover { background: #4f46e5; }
+
+        .btn-restore-action:hover { 
+            background: #4f46e5; 
+        }
 
         .archive-banner {
             background: #1e293b;
@@ -137,7 +154,10 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
             font-weight: 700;
             transition: transform 0.1s;
         }
-        .btn-run-archive:hover { background: #dc2626; transform: scale(1.02); }
+        .btn-run-archive:hover { 
+            background: #dc2626; 
+            transform: scale(1.02); 
+        }
 
         /* --- BURGER TOGGLE UTILITIES --- */
         .mobile-toggle {
@@ -164,11 +184,41 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
             line-height: 1;
         }
 
+        .sidebar {
+            height: 100vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            box-sizing: border-box;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.25);
+            border-radius: 10px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+
+
         /* Viewport Breakpoints Override Rules */
         @media (max-width: 1024px) {
             body { overflow: auto; }
             
-            .sidebar { position: fixed; left: -260px; transition: 0.3s; z-index: 1050; }
+            .sidebar { 
+                position: fixed; 
+                left: -260px; 
+                transition: 0.3s; 
+                z-index: 1050; 
+            }
             .sidebar.active { left: 0; }
             
             .mobile-toggle { 
@@ -203,8 +253,15 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
                 display: block;
             }
 
-            .filter-bar { flex-direction: column; align-items: stretch; }
-            .archive-banner { flex-direction: column; text-align: center; gap: 20px; }
+            .filter-bar { 
+                flex-direction: column; 
+                align-items: stretch; 
+            }
+            .archive-banner { 
+                flex-direction: column; 
+                text-align: center; 
+                gap: 20px; 
+            }
         }
 
         #sidebar:not(.active) ~ main.content { 
@@ -227,6 +284,7 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
                 <li><a href="manage_strands.php">Manage Strands</a></li>
                 <li><a href="curriculum_guide.php">Curriculum Guide</a></li>
                 <li><a href="manage_sections.php">Manage Sections</a></li>
+                <li><a href="admins_schedule.php">Manage Schedule</a></li>
                 <li><a href="manage_users.php">Manage Users</a></li>
                 <li><a href="admin_master_list.php">Master List</a></li>
                 <li><a href="admin_logs.php">Activity Logs</a></li>

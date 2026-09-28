@@ -98,6 +98,30 @@ $users_list = $conn->query("SELECT id, username, full_name, role FROM users ORDE
             line-height: 1;
         }
 
+        .sidebar {
+            height: 100vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            box-sizing: border-box;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.25);
+            border-radius: 10px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+
         .notification-banner {
             background: #fffbeb;
             border: 1px solid #fef3c7;
@@ -112,36 +136,113 @@ $users_list = $conn->query("SELECT id, username, full_name, role FROM users ORDE
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             flex-shrink: 0;
         }
-        @keyframes slideDown { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        @keyframes slideDown { 
+            from { 
+                transform: translateY(-10px); 
+                opacity: 0; 
+            } 
+            to { 
+                transform: translateY(0); 
+                opacity: 1; 
+            } 
+        }
         
-        .notif-content h4 { margin: 0; color: #92400e; font-size: 1rem; }
-        .notif-content p { margin: 3px 0 0; color: #b45309; font-size: 0.85rem; }
+        .notif-content h4 { 
+            margin: 0; 
+            color: #92400e; 
+            font-size: 1rem; 
+        }
+        .notif-content p { 
+            margin: 3px 0 0; 
+            color: #b45309; 
+            font-size: 0.85rem; 
+        }
         
         .btn-reset-now { 
-            background: #f59e0b; color: white; border: none; padding: 8px 16px; 
-            border-radius: 6px; font-weight: 600; cursor: pointer; text-decoration: none; font-size: 0.85rem;
+            background: #f59e0b; 
+            color: white; 
+            border: none; 
+            padding: 8px 16px; 
+            border-radius: 6px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            text-decoration: none; 
+            font-size: 0.85rem;
             transition: background 0.2s;
         }
-        .btn-reset-now:hover { background: #d97706; }
+        .btn-reset-now:hover { 
+            background: #d97706; 
+        }
 
         /* Admin Tools Bar */
         .admin-actions-bar {
-            background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px;
-            display: flex; justify-content: space-between; align-items: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;
+            background: white; 
+            padding: 20px; 
+            border-radius: 12px; 
+            margin-bottom: 20px;
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+            border: 1px solid #e5e7eb;
             flex-shrink: 0;
         }
-        .action-info h3 { margin: 0; color: #1e293b; font-size: 1.1rem; }
-        .action-info p { margin: 4px 0 0; color: #64748b; font-size: 0.85rem; }
-        .btn-group { display: flex; gap: 12px; }
+        .action-info h3 { 
+            margin: 0; 
+            color: #1e293b; 
+            font-size: 1.1rem; 
+        }
+        .action-info p { 
+            margin: 4px 0 0; 
+            color: #64748b; 
+            font-size: 0.85rem; 
+        }
+        .btn-group { 
+            display: flex; 
+            gap: 12px; 
+        }
         
-        .btn-tool { padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s; border: none; }
-        .btn-export { background: #10b981; color: white; }
-        .btn-import { background: #f59e0b; color: white; }
+        .btn-tool { 
+            padding: 10px 18px; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            font-size: 0.9rem; 
+            cursor: pointer; 
+            text-decoration: none; 
+            display: inline-flex; 
+            align-items: center; 
+            gap: 8px; 
+            transition: all 0.2s; 
+            border: none; 
+        }
+        .btn-export { 
+            background: #10b981; 
+            color: white; 
+        }
+        .btn-import { 
+            background: #f59e0b; 
+            color: white; 
+        }
         
-        .pagination { margin-top: 20px; display: flex; justify-content: space-between; align-items: center; }
-        .btn-page { padding: 6px 12px; border: 1px solid #ddd; text-decoration: none; color: #333; border-radius: 4px; }
-        .btn-page.active { background: #2563eb; color: white; border-color: #2563eb; }
+        .pagination { 
+            margin-top: 20px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        .btn-page { 
+            padding: 6px 12px; 
+            border: 1px solid #ddd; 
+            text-decoration: none; 
+            color: #333; 
+            border-radius: 4px; 
+        }
+        .btn-page.active { 
+            background: #2563eb; 
+            color: white; 
+            border-color: #2563eb; 
+        }
 
         /* ============================================================================
            LAYERED TABLE STRETCH EXTENSIONS
