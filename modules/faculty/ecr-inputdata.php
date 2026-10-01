@@ -8,12 +8,12 @@ require_once __DIR__ . '/../../config/database.php';
 $pdo = getDBConnection();
 
 // 2. Access Control: Ensure only Faculty or Advisers can enter
-if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'adviser'])) {
-    header("Location: ../../login.php");
+if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'adviser', 'admin'])) {
+    header("Location: ../../manifest/login.php");
     exit();
 }
 
-$user_id = $_SESSION['user_id'];
+$user_id   = $_SESSION['user_id'];
 $user_role = $_SESSION['role'];
 
 // 3. Fetch Teacher Info & Assigned Section Details from DB
@@ -25,7 +25,7 @@ $teacher_query = $pdo->prepare("
     WHERE u.id = :user_id
 ");
 $teacher_query->execute(['user_id' => $user_id]);
-$teacher_data = $teacher_query->fetch();
+$teacher_data = $teacher_query->fetch(PDO::FETCH_ASSOC);
 
 $section_id = $teacher_data['section_id'] ?? 0;
 
@@ -39,14 +39,26 @@ $female_students = [];
 
 if ($section_id > 0) {
     // Fetch Male Roster
-    $m_stmt = $pdo->prepare("SELECT id, full_name FROM users WHERE section_id = :section_id AND role = 'student' AND gender = 'Male' ORDER BY full_name ASC");
+    $m_stmt = $pdo->prepare("
+        SELECT u.id, u.username AS lrn, u.full_name 
+        FROM users u
+        LEFT JOIN student_profiles sp ON u.id = sp.user_id
+        WHERE u.section_id = :section_id AND u.role = 'student' AND (sp.gender = 'Male' OR sp.gender IS NULL)
+        ORDER BY u.full_name ASC
+    ");
     $m_stmt->execute(['section_id' => $section_id]);
-    $male_students = $m_stmt->fetchAll();
+    $male_students = $m_stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Fetch Female Roster
-    $f_stmt = $pdo->prepare("SELECT id, full_name FROM users WHERE section_id = :section_id AND role = 'student' AND gender = 'Female' ORDER BY full_name ASC");
+    $f_stmt = $pdo->prepare("
+        SELECT u.id, u.username AS lrn, u.full_name 
+        FROM users u
+        LEFT JOIN student_profiles sp ON u.id = sp.user_id
+        WHERE u.section_id = :section_id AND u.role = 'student' AND sp.gender = 'Female'
+        ORDER BY u.full_name ASC
+    ");
     $f_stmt->execute(['section_id' => $section_id]);
-    $female_students = $f_stmt->fetchAll();
+    $female_students = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 ?>
 
@@ -60,39 +72,179 @@ if ($section_id > 0) {
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <link rel="stylesheet" href="../../assets/css/style.css">
     <style>
+        /* Base Page Setup */
         body {
             margin: 0;
             padding: 0;
-            overflow: hidden;
             background-color: #f8fafc;
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
         }
 
         .dashboard-wrapper {
-            display: block;
-            height: 100vh;
+            display: flex;
+            min-height: 100vh;
             width: 100%;
             position: relative;
         }
 
-        /* MAIN CONTENT */
         main.content {
             margin-left: 260px;
             padding: 30px;
             width: calc(100% - 260px);
-            max-width: none;
-            height: 100vh;
             box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
             transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            overflow-y: auto;
         }
 
-        /* SIDEBAR CLOSED */
         #sidebar:not(.active) ~ main.content {
             margin-left: 0;
             width: 100%;
+        }
+
+        /* ECR Card & Header Custom Styling */
+        .ecr-card {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+        }
+
+        /* Fixed High Contrast Card Headers */
+        .card-title {
+            background-color: #0f3854;
+            color: #ffffff !important;
+            font-weight: 700;
+            font-size: 0.85rem;
+            letter-spacing: 0.05em;
+            padding: 12px 16px;
+            text-transform: uppercase;
+        }
+
+        .card-content {
+            padding: 20px;
+        }
+
+        .field-group {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            gap: 15px;
+        }
+
+        .field-group label {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #475569;
+            white-space: nowrap;
+        }
+
+        .form-input {
+            width: 65%;
+            padding: 8px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background-color: #f8fafc;
+            font-size: 0.85rem;
+        }
+
+        /* Responsive Grid Layout */
+        .input-layout {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+        }
+
+        /* Roster Display Styles */
+        .gender-block {
+            margin-bottom: 20px;
+        }
+
+        .gender-tag {
+            font-weight: bold;
+            font-size: 0.8rem;
+            padding: 6px 12px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            display: inline-block;
+        }
+
+        .male-tag { background: #dbeafe; color: #1e40af; }
+        .female-tag { background: #fce7f3; color: #9d174d; }
+
+        .roster-entry {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .entry-index {
+            font-weight: bold;
+            font-size: 0.85rem;
+            width: 25px;
+            color: #64748b;
+        }
+
+        .roster-field {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background-color: #f8fafc;
+            font-size: 0.85rem;
+        }
+
+        .btn-proceed {
+            background-color: #2563eb;
+            color: #ffffff;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-block;
+            transition: background 0.2s ease;
+        }
+
+        .btn-proceed:hover {
+            background-color: #1d4ed8;
+        }
+
+        /* Mobile View Rules */
+        @media (max-width: 992px) {
+            main.content {
+                margin-left: 0 !important;
+                width: 100% !important;
+                padding: 15px;
+                padding-top: 60px;
+            }
+
+            .input-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .field-group {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+            }
+
+            .form-input {
+                width: 100%;
+            }
+
+            .ecr-header {
+                flex-direction: column;
+                gap: 10px;
+                text-align: center;
+            }
+
+            .btn-proceed {
+                width: 100%;
+                text-align: center;
+                box-sizing: border-box;
+            }
         }
     </style>
 </head>
@@ -111,8 +263,7 @@ if ($section_id > 0) {
                 <li><a href="faculty_dashboard.php">Dashboard</a></li>
                 <li><a href="faculty_schedule.php">Manage Schedule</a></li>
                 <li><a href="ecr-inputdata.php" class="active">ECR Setup & Roster</a></li>
-                <li><a href="ecr-view.php?term=1">Encode Term Grades</a></li>
-                <li><a href="ecr-summary.php">ECR Summary</a></li>
+                <li><a href="ecr-view.php">E-Class Record Hub</a></li>
                 <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>
@@ -121,27 +272,16 @@ if ($section_id > 0) {
         <main class="content">
             <div class="ecr-container">
                 <!-- Header Banner -->
-                <header class="ecr-header">
-                    <img src="../../assets/icons/kagawaran-logo.png" alt="Kagawaran Logo" class="logo-sm">
-                    <div class="header-text">
-                        <h2>Input Data Sheet for Electronic-Class Record (ECR)</h2>
-                        <p>Strengthened Senior High School System - SY 2026-2027</p>
+                <header class="ecr-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <img src="../../assets/icons/kagawaran-logo.png" alt="Kagawaran Logo" style="max-height: 50px;">
+                    <div class="header-text" style="text-align: center;">
+                        <h2 style="margin: 0; color: #0f172a; font-size: 1.25rem;">Input Data Sheet for Electronic-Class Record (ECR)</h2>
+                        <p style="margin: 4px 0 0 0; color: #64748b; font-size: 0.85rem;">Strengthened Senior High School System - SY 2026-2027</p>
                     </div>
-                    <img src="../../assets/icons/deped-logo.png" alt="DepEd Logo" class="logo-md">
+                    <img src="../../assets/icons/deped-logo.png" alt="DepEd Logo" style="max-height: 50px;">
                 </header>
 
-                <!-- Navigation Tabs -->
-                <nav class="ecr-nav">
-                    <a href="ecr-inputdata.php" class="nav-tab active">INPUT DATA</a>
-                    <a href="ecr-view.php?term=1" class="nav-tab">TERM 1</a>
-                    <a href="ecr-view.php?term=2" class="nav-tab">TERM 2</a>
-                    <a href="ecr-view.php?term=3" class="nav-tab">TERM 3</a>
-                    <a href="ecr-summary.php" class="nav-tab tab-summary">SUMMARY</a>
-                </nav>
-
-                <form action="../../api/save-ecr-input.php" method="POST" class="input-layout">
-                    <input type="hidden" name="section_id" value="<?= htmlspecialchars($section_id) ?>">
-
+                <div class="input-layout">
                     <!-- Left Column: School & Class Configuration -->
                     <div class="config-column">
                         <div class="ecr-card">
@@ -149,19 +289,15 @@ if ($section_id > 0) {
                             <div class="card-content">
                                 <div class="field-group">
                                     <label>REGION:</label>
-                                    <input type="text" name="region" value="Region III" class="form-input" required>
+                                    <input type="text" name="region" value="Region III" class="form-input" readonly>
                                 </div>
                                 <div class="field-group">
                                     <label>DIVISION:</label>
-                                    <input type="text" name="division" value="Tarlac" class="form-input" required>
+                                    <input type="text" name="division" value="Tarlac" class="form-input" readonly>
                                 </div>
                                 <div class="field-group">
                                     <label>SCHOOL ID:</label>
-                                    <input type="text" name="school_id" value="301000" class="form-input" required>
-                                </div>
-                                <div class="field-group">
-                                    <label>SCHOOL NAME:</label>
-                                    <input type="text" name="school_name" placeholder="School Name" class="form-input" required>
+                                    <input type="text" name="school_id" value="301000" class="form-input" readonly>
                                 </div>
                                 <div class="field-group">
                                     <label>SCHOOL YEAR:</label>
@@ -171,41 +307,19 @@ if ($section_id > 0) {
                         </div>
 
                         <div class="ecr-card">
-                            <div class="card-title">CLASS & SUBJECT INFO</div>
+                            <div class="card-title">CLASS INFO</div>
                             <div class="card-content">
                                 <div class="field-group">
                                     <label>TEACHER:</label>
-                                    <input type="text" name="teacher_name" value="<?= htmlspecialchars($teacher_data['full_name'] ?? '') ?>" class="form-input" required>
+                                    <input type="text" name="teacher_name" value="<?= htmlspecialchars($teacher_data['full_name'] ?? 'Unassigned') ?>" class="form-input" readonly>
                                 </div>
                                 <div class="field-group">
                                     <label>TRACK:</label>
-                                    <select name="track" class="form-input" required>
-                                        <option value="ACADEMIC" <?= !$is_tech_track ? 'selected' : '' ?>>ACADEMIC</option>
-                                        <option value="TECHNICAL" <?= $is_tech_track ? 'selected' : '' ?>>TECHNICAL PROFESSIONAL / TVL</option>
-                                    </select>
-                                </div>
-                                <div class="field-group">
-                                    <label>GRADE LEVEL:</label>
-                                    <select name="grade_level" class="form-input">
-                                        <option value="11" <?= ($teacher_data['grade_level'] ?? '') == '11' ? 'selected' : '' ?>>Grade 11</option>
-                                        <option value="12" <?= ($teacher_data['grade_level'] ?? '') == '12' ? 'selected' : '' ?>>Grade 12</option>
-                                    </select>
+                                    <input type="text" value="<?= $is_tech_track ? 'TECHNICAL PROFESSIONAL / TVL' : 'ACADEMIC' ?>" class="form-input" readonly>
                                 </div>
                                 <div class="field-group">
                                     <label>SECTION:</label>
-                                    <input type="text" name="section" value="<?= htmlspecialchars($teacher_data['section_name'] ?? '') ?>" class="form-input" required>
-                                </div>
-                                <div class="field-group">
-                                    <label>SUBJECT TYPE:</label>
-                                    <select name="subject_type" class="form-input">
-                                        <option value="Core">Core Subject</option>
-                                        <option value="Applied">Applied Subject</option>
-                                        <option value="Specialized">Specialized Subject</option>
-                                    </select>
-                                </div>
-                                <div class="field-group">
-                                    <label>SUBJECT:</label>
-                                    <input type="text" name="subject_name" placeholder="Subject Title" class="form-input" required>
+                                    <input type="text" name="section" value="<?= htmlspecialchars($teacher_data['section_name'] ?? 'Unassigned') ?>" class="form-input" readonly>
                                 </div>
                             </div>
                         </div>
@@ -214,47 +328,51 @@ if ($section_id > 0) {
                     <!-- Right Column: Dynamic Student Roster -->
                     <div class="roster-column">
                         <div class="ecr-card">
-                            <div class="card-title">LEARNERS' ROSTER</div>
-                            <div class="roster-tables">
+                            <div class="card-title">ENROLLED LEARNERS' ROSTER</div>
+                            <div class="card-content">
+                                
                                 <!-- Male Section -->
                                 <div class="gender-block">
-                                    <div class="gender-tag male-tag">MALE</div>
+                                    <div class="gender-tag male-tag">MALE (<?= count($male_students) ?> Enrolled)</div>
                                     <div class="roster-list">
-                                        <?php for ($i = 1; $i <= 25; $i++): ?>
-                                            <?php $student = $male_students[$i-1] ?? null; ?>
-                                            <div class="roster-entry">
-                                                <span class="entry-index"><?= $i ?></span>
-                                                <input type="hidden" name="male_student_ids[]" value="<?= $student['id'] ?? '' ?>">
-                                                <input type="text" name="male_students[]" 
-                                                       value="<?= htmlspecialchars($student['full_name'] ?? '') ?>" 
-                                                       placeholder="Last Name, First Name M.I." class="roster-field">
-                                            </div>
-                                        <?php endfor; ?>
+                                        <?php if (!empty($male_students)): ?>
+                                            <?php foreach ($male_students as $idx => $student): ?>
+                                                <div class="roster-entry">
+                                                    <span class="entry-index"><?= $idx + 1 ?></span>
+                                                    <input type="text" value="<?= htmlspecialchars($student['full_name']) ?> (LRN: <?= htmlspecialchars($student['lrn']) ?>)" class="roster-field" readonly>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0 0 15px 0;">No male learners enrolled in this section.</p>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
 
                                 <!-- Female Section -->
                                 <div class="gender-block">
-                                    <div class="gender-tag female-tag">FEMALE</div>
+                                    <div class="gender-tag female-tag">FEMALE (<?= count($female_students) ?> Enrolled)</div>
                                     <div class="roster-list">
-                                        <?php for ($i = 1; $i <= 25; $i++): ?>
-                                            <?php $student = $female_students[$i-1] ?? null; ?>
-                                            <div class="roster-entry">
-                                                <span class="entry-index"><?= $i ?></span>
-                                                <input type="hidden" name="female_student_ids[]" value="<?= $student['id'] ?? '' ?>">
-                                                <input type="text" name="female_students[]" 
-                                                       value="<?= htmlspecialchars($student['full_name'] ?? '') ?>" 
-                                                       placeholder="Last Name, First Name M.I." class="roster-field">
-                                            </div>
-                                        <?php endfor; ?>
+                                        <?php if (!empty($female_students)): ?>
+                                            <?php foreach ($female_students as $idx => $student): ?>
+                                                <div class="roster-entry">
+                                                    <span class="entry-index"><?= $idx + 1 ?></span>
+                                                    <input type="text" value="<?= htmlspecialchars($student['full_name']) ?> (LRN: <?= htmlspecialchars($student['lrn']) ?>)" class="roster-field" readonly>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">No female learners enrolled in this section.</p>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
+
                             </div>
                         </div>
 
-                        <button type="submit" class="btn-save">Save Roster & Setup</button>
+                        <div style="margin-top: 20px; text-align: right;">
+                            <a href="ecr-view.php" class="btn-proceed">Proceed to Class Hub & Grade Encoding →</a>
+                        </div>
                     </div>
-                </form>
+                </div>
             </div>
         </main>
     </div>

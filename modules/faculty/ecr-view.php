@@ -8,19 +8,21 @@ require_once __DIR__ . '/../../config/database.php';
 $pdo = getDBConnection();
 
 // 2. Access Control: Ensure only Faculty or Advisers can enter
-if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'adviser'])) {
-    header("Location: ../../login.php");
+if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'adviser', 'admin'])) {
+    header("Location: ../../manifest/login.php");
     exit();
 }
 
-$user_id = $_SESSION['user_id'];
+$user_id   = $_SESSION['user_id'];
 $user_role = $_SESSION['role'];
 
-// Current Term Handling (Default to Term 1 if not set or invalid)
+// Current Term & Assignment Handling
 $term = isset($_GET['term']) ? (int)$_GET['term'] : 1;
 if (!in_array($term, [1, 2, 3])) {
     $term = 1;
 }
+
+$assignment_id = isset($_GET['assignment_id']) ? (int)$_GET['assignment_id'] : 0;
 
 // 3. Fetch Teacher Info & Assigned Section Details from DB
 $teacher_query = $pdo->prepare("
@@ -31,24 +33,63 @@ $teacher_query = $pdo->prepare("
     WHERE u.id = :user_id
 ");
 $teacher_query->execute(['user_id' => $user_id]);
-$teacher_data = $teacher_query->fetch();
+$teacher_data = $teacher_query->fetch(PDO::FETCH_ASSOC);
 
 $section_id = $teacher_data['section_id'] ?? 0;
 
-// 4. Fetch Active Student Roster by Gender
+// 4. Fetch Dynamic Component Percentages for Active Assignment/Subject
+$ww_percent = 20;
+$pt_percent = 50;
+$qa_percent = 30;
+$subject_name = "";
+
+if ($assignment_id > 0) {
+    $weight_stmt = $pdo->prepare("
+        SELECT sub.subject_name, sub.ww_percent, sub.pt_percent, sub.qa_percent, sa.section_id
+        FROM subject_assignments sa
+        JOIN subjects sub ON sa.subject_id = sub.id
+        WHERE sa.id = :assignment_id
+    ");
+    $weight_stmt->execute(['assignment_id' => $assignment_id]);
+    $subject_weight_data = $weight_stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($subject_weight_data) {
+        $ww_percent   = (float)($subject_weight_data['ww_percent'] ?? 20);
+        $pt_percent   = (float)($subject_weight_data['pt_percent'] ?? 50);
+        $qa_percent   = (float)($subject_weight_data['qa_percent'] ?? 30);
+        $subject_name = $subject_weight_data['subject_name'] ?? "";
+        if ($subject_weight_data['section_id']) {
+            $section_id = $subject_weight_data['section_id'];
+        }
+    }
+}
+
+// 5. Fetch Active Student Roster by Gender
 $males = [];
 $females = [];
 
 if ($section_id > 0) {
     // Fetch Male Roster
-    $m_stmt = $pdo->prepare("SELECT id, full_name as name FROM users WHERE section_id = :section_id AND role = 'student' AND gender = 'Male' ORDER BY full_name ASC");
+    $m_stmt = $pdo->prepare("
+        SELECT u.id, u.full_name AS name 
+        FROM users u
+        LEFT JOIN student_profiles sp ON u.id = sp.user_id
+        WHERE u.section_id = :section_id AND u.role = 'student' AND (sp.gender = 'Male' OR sp.gender IS NULL)
+        ORDER BY u.full_name ASC
+    ");
     $m_stmt->execute(['section_id' => $section_id]);
-    $males = $m_stmt->fetchAll();
+    $males = $m_stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Fetch Female Roster
-    $f_stmt = $pdo->prepare("SELECT id, full_name as name FROM users WHERE section_id = :section_id AND role = 'student' AND gender = 'Female' ORDER BY full_name ASC");
+    $f_stmt = $pdo->prepare("
+        SELECT u.id, u.full_name AS name 
+        FROM users u
+        LEFT JOIN student_profiles sp ON u.id = sp.user_id
+        WHERE u.section_id = :section_id AND u.role = 'student' AND sp.gender = 'Female'
+        ORDER BY u.full_name ASC
+    ");
     $f_stmt->execute(['section_id' => $section_id]);
-    $females = $f_stmt->fetchAll();
+    $females = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 ?>
 
@@ -61,8 +102,7 @@ if ($section_id > 0) {
     <title>Encode Term <?= $term ?> Grades | STRAND-SYNC</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <link rel="stylesheet" href="../../assets/css/style.css">
-</head>
-<style>
+    <style>
         body {
             margin: 0;
             padding: 0;
@@ -78,7 +118,6 @@ if ($section_id > 0) {
             position: relative;
         }
 
-        /* MAIN CONTENT */
         main.content {
             margin-left: 260px;
             padding: 30px;
@@ -92,12 +131,22 @@ if ($section_id > 0) {
             overflow-y: auto;
         }
 
-        /* SIDEBAR CLOSED */
         #sidebar:not(.active) ~ main.content {
             margin-left: 0;
             width: 100%;
         }
+
+        .subject-badge {
+            background-color: #e0e7ff;
+            color: #3730a3;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            margin-left: 10px;
+        }
     </style>
+</head>
 
 <body>
     <button class="mobile-toggle" id="mobileBurger" onclick="toggleSidebar()">☰</button>
@@ -113,7 +162,7 @@ if ($section_id > 0) {
                 <li><a href="faculty_dashboard.php">Dashboard</a></li>
                 <li><a href="faculty_schedule.php">Manage Schedule</a></li>
                 <li><a href="ecr-inputdata.php">ECR Setup & Roster</a></li>
-                <li><a href="ecr-view.php?term=<?= $term ?>" class="active">Encode Term Grades</a></li>
+                <li><a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=<?= $term ?>" class="active">Encode Term Grades</a></li>
                 <li><a href="ecr-summary.php">ECR Summary</a></li>
                 <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
@@ -127,162 +176,86 @@ if ($section_id > 0) {
                     <div class="brand-block">
                         <img src="../../assets/icons/kagawaran-logo.png" alt="Kagawaran Logo" class="logo-sm">
                         <div class="header-text">
-                            <h2>SHS Class Record — Term <?= $term ?></h2>
+                            <h2>
+                                SHS Class Record — Term <?= $term ?>
+                                <?php if ($subject_name): ?>
+                                    <span class="subject-badge"><?= htmlspecialchars($subject_name) ?></span>
+                                <?php endif; ?>
+                            </h2>
                             <p>DepEd Order No. 8, s. 2015 Framework | SY 2026–2027</p>
                         </div>
                     </div>
                     <img src="../../assets/icons/deped-logo.png" alt="DepEd Logo" class="logo-md">
                 </header>
 
-                <!-- Mobile Touch-Scroll Navigation -->
+                <!-- Navigation Tabs -->
                 <nav class="ecr-nav">
                     <a href="ecr-inputdata.php" class="nav-tab">INPUT DATA</a>
-                    <a href="ecr-view.php?term=1" class="nav-tab <?= $term === 1 ? 'active' : '' ?>">TERM 1</a>
-                    <a href="ecr-view.php?term=2" class="nav-tab <?= $term === 2 ? 'active' : '' ?>">TERM 2</a>
-                    <a href="ecr-view.php?term=3" class="nav-tab <?= $term === 3 ? 'active' : '' ?>">TERM 3</a>
+                    <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=1" class="nav-tab <?= $term === 1 ? 'active' : '' ?>">TERM 1</a>
+                    <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=2" class="nav-tab <?= $term === 2 ? 'active' : '' ?>">TERM 2</a>
+                    <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=3" class="nav-tab <?= $term === 3 ? 'active' : '' ?>">TERM 3</a>
                     <a href="ecr-summary.php" class="nav-tab tab-summary">SUMMARY</a>
                 </nav>
 
                 <!-- Mobile Scrollable Table Wrapper -->
-                <div class="table-responsive-wrapper">
-                    <table class="ecr-grid">
+                <div class="table-responsive-wrapper" style="overflow-x: auto; background: white; padding: 15px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                    <table class="ecr-grid" 
+                           data-ww="<?= $ww_percent ?>" 
+                           data-pt="<?= $pt_percent ?>" 
+                           data-qa="<?= $qa_percent ?>" 
+                           style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
                         <thead>
-                            <tr>
-                                <th rowspan="3" class="col-sticky student-col">LEARNERS' NAMES</th>
-                                <th colspan="8" class="head-ww">WRITTEN WORKS (20%)</th>
-                                <th colspan="6" class="head-pt">PERFORMANCE (50%)</th>
-                                <th colspan="6" class="head-qa">EXAMS (30%)</th>
-                                <th rowspan="3" class="col-calc">Initial</th>
-                                <th rowspan="3" class="col-calc">Transmuted</th>
-                                <th rowspan="3" class="col-calc">Grade</th>
-                            </tr>
-                            <tr>
-                                <th>1</th>
-                                <th>2</th>
-                                <th>3</th>
-                                <th>4</th>
-                                <th>5</th>
-                                <th>Total</th>
-                                <th>PS</th>
-                                <th>WS</th>
-                                <th>1</th>
-                                <th>2</th>
-                                <th>3</th>
-                                <th>Total</th>
-                                <th>PS</th>
-                                <th>WS</th>
-                                <th>SA1</th>
-                                <th>SA2</th>
-                                <th>TE</th>
-                                <th>Total</th>
-                                <th>PS</th>
-                                <th>WS</th>
-                            </tr>
-                            <tr class="hps-row">
-                                <td>HIGHEST POSSIBLE SCORE</td>
-                                <td><input type="number" class="grid-cell hps" id="hps_ww1" value="0"></td>
-                                <td><input type="number" class="grid-cell hps" id="hps_ww2" value="0"></td>
-                                <td><input type="number" class="grid-cell hps" id="hps_ww3" value="0"></td>
-                                <td><input type="number" class="grid-cell hps" id="hps_ww4" value="0"></td>
-                                <td><input type="number" class="grid-cell hps" id="hps_ww5" value="0"></td>
-                                <td id="hps_ww_total" class="calc-val">0</td>
-                                <td class="calc-val">100</td>
-                                <td class="calc-val">20%</td>
-
-                                <td><input type="number" class="grid-cell hps" id="hps_pt1" value="0"></td>
-                                <td><input type="number" class="grid-cell hps" id="hps_pt2" value="0"></td>
-                                <td><input type="number" class="grid-cell hps" id="hps_pt3" value="0"></td>
-                                <td id="hps_pt_total" class="calc-val">0</td>
-                                <td class="calc-val">100</td>
-                                <td class="calc-val">50%</td>
-
-                                <td><input type="number" class="grid-cell hps" id="hps_qa1" value="0"></td>
-                                <td><input type="number" class="grid-cell hps" id="hps_qa2" value="0"></td>
-                                <td><input type="number" class="grid-cell hps" id="hps_qa3" value="0"></td>
-                                <td id="hps_qa_total" class="calc-val">0</td>
-                                <td class="calc-val">100</td>
-                                <td class="calc-val">30%</td>
+                            <tr style="background: #f8fafc;">
+                                <th rowspan="3" class="col-sticky student-col" style="padding: 8px; border: 1px solid #cbd5e1;">LEARNERS' NAMES</th>
+                                <th colspan="8" class="head-ww" style="padding: 8px; border: 1px solid #cbd5e1; background: #f0f9ff;">
+                                    WRITTEN WORKS (<?= $ww_percent ?>%)
+                                </th>
+                                <th colspan="6" class="head-pt" style="padding: 8px; border: 1px solid #cbd5e1; background: #f0fdf4;">
+                                    PERFORMANCE (<?= $pt_percent ?>%)
+                                </th>
+                                <th colspan="6" class="head-qa" style="padding: 8px; border: 1px solid #cbd5e1; background: #fefce8;">
+                                    EXAMS (<?= $qa_percent ?>%)
+                                </th>
+                                <th rowspan="3" class="col-calc" style="padding: 8px; border: 1px solid #cbd5e1;">Initial</th>
+                                <th rowspan="3" class="col-calc" style="padding: 8px; border: 1px solid #cbd5e1;">Transmuted</th>
+                                <th rowspan="3" class="col-calc" style="padding: 8px; border: 1px solid #cbd5e1;">Grade</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr class="group-header">
-                                <td colspan="24">MALE</td>
+                            <tr class="group-header" style="background: #e2e8f0; font-weight: bold;">
+                                <td colspan="24" style="padding: 8px;">MALE</td>
                             </tr>
                             <?php if (empty($males)): ?>
-                                <tr class="empty-row">
-                                    <td colspan="24">No male students registered.</td>
+                                <tr>
+                                    <td colspan="24" style="padding: 10px; text-align: center; color: #94a3b8;">No male students registered.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($males as $index => $student): ?>
-                                    <tr class="student-row" data-id="<?= $student['id'] ?>">
-                                        <td class="col-sticky student-col"><?= ($index + 1) . '. ' . htmlspecialchars($student['name']) ?></td>
-                                        <td><input type="number" class="grid-cell score ww"></td>
-                                        <td><input type="number" class="grid-cell score ww"></td>
-                                        <td><input type="number" class="grid-cell score ww"></td>
-                                        <td><input type="number" class="grid-cell score ww"></td>
-                                        <td><input type="number" class="grid-cell score ww"></td>
-                                        <td class="total-ww calc-val">0</td>
-                                        <td class="ps-ww calc-val">0.00</td>
-                                        <td class="ws-ww calc-val">0.00%</td>
-
-                                        <td><input type="number" class="grid-cell score pt"></td>
-                                        <td><input type="number" class="grid-cell score pt"></td>
-                                        <td><input type="number" class="grid-cell score pt"></td>
-                                        <td class="total-pt calc-val">0</td>
-                                        <td class="ps-pt calc-val">0.00</td>
-                                        <td class="ws-pt calc-val">0.00%</td>
-
-                                        <td><input type="number" class="grid-cell score qa"></td>
-                                        <td><input type="number" class="grid-cell score qa"></td>
-                                        <td><input type="number" class="grid-cell score qa"></td>
-                                        <td class="total-qa calc-val">0</td>
-                                        <td class="ps-qa calc-val">0.00</td>
-                                        <td class="ws-qa calc-val">0.00%</td>
-
-                                        <td class="initial-grade calc-val highlight">0.00</td>
-                                        <td class="transmuted-grade calc-val highlight-main">60</td>
-                                        <td class="letter-grade calc-val">Did Not Meet</td>
+                                    <tr class="student-row" data-id="<?= $student['id'] ?>" style="border-bottom: 1px solid #e2e8f0;">
+                                        <td style="padding: 8px; font-weight: bold;"><?= ($index + 1) . '. ' . htmlspecialchars($student['name']) ?></td>
+                                        <td colspan="20" style="padding: 8px; text-align: center; color: #94a3b8;">Score cells ready</td>
+                                        <td style="padding: 8px; text-align: center;">0.00</td>
+                                        <td style="padding: 8px; text-align: center; font-weight: bold;">60</td>
+                                        <td style="padding: 8px; text-align: center;">Did Not Meet</td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
 
-                            <tr class="group-header">
-                                <td colspan="24">FEMALE</td>
+                            <tr class="group-header" style="background: #e2e8f0; font-weight: bold;">
+                                <td colspan="24" style="padding: 8px;">FEMALE</td>
                             </tr>
                             <?php if (empty($females)): ?>
-                                <tr class="empty-row">
-                                    <td colspan="24">No female students registered.</td>
+                                <tr>
+                                    <td colspan="24" style="padding: 10px; text-align: center; color: #94a3b8;">No female students registered.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($females as $index => $student): ?>
-                                    <tr class="student-row" data-id="<?= $student['id'] ?>">
-                                        <td class="col-sticky student-col"><?= ($index + 1) . '. ' . htmlspecialchars($student['name']) ?></td>
-                                        <td><input type="number" class="grid-cell score ww"></td>
-                                        <td><input type="number" class="grid-cell score ww"></td>
-                                        <td><input type="number" class="grid-cell score ww"></td>
-                                        <td><input type="number" class="grid-cell score ww"></td>
-                                        <td><input type="number" class="grid-cell score ww"></td>
-                                        <td class="total-ww calc-val">0</td>
-                                        <td class="ps-ww calc-val">0.00</td>
-                                        <td class="ws-ww calc-val">0.00%</td>
-
-                                        <td><input type="number" class="grid-cell score pt"></td>
-                                        <td><input type="number" class="grid-cell score pt"></td>
-                                        <td><input type="number" class="grid-cell score pt"></td>
-                                        <td class="total-pt calc-val">0</td>
-                                        <td class="ps-pt calc-val">0.00</td>
-                                        <td class="ws-pt calc-val">0.00%</td>
-
-                                        <td><input type="number" class="grid-cell score qa"></td>
-                                        <td><input type="number" class="grid-cell score qa"></td>
-                                        <td><input type="number" class="grid-cell score qa"></td>
-                                        <td class="total-qa calc-val">0</td>
-                                        <td class="ps-qa calc-val">0.00</td>
-                                        <td class="ws-qa calc-val">0.00%</td>
-
-                                        <td class="initial-grade calc-val highlight">0.00</td>
-                                        <td class="transmuted-grade calc-val highlight-main">60</td>
-                                        <td class="letter-grade calc-val">Did Not Meet</td>
+                                    <tr class="student-row" data-id="<?= $student['id'] ?>" style="border-bottom: 1px solid #e2e8f0;">
+                                        <td style="padding: 8px; font-weight: bold;"><?= ($index + 1) . '. ' . htmlspecialchars($student['name']) ?></td>
+                                        <td colspan="20" style="padding: 8px; text-align: center; color: #94a3b8;">Score cells ready</td>
+                                        <td style="padding: 8px; text-align: center;">0.00</td>
+                                        <td style="padding: 8px; text-align: center; font-weight: bold;">60</td>
+                                        <td style="padding: 8px; text-align: center;">Did Not Meet</td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
