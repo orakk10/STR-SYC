@@ -14,7 +14,7 @@ fputcsv($output, ['LRN_Username', 'Full_Name', 'Role', 'Section_ID']);
 $query = "SELECT username, full_name, role, section_id FROM users WHERE role != 'admin'";
 $result = $conn->query($query);
 
-// while ($row = $result->fetch_assoc()) {
-//     fputcsv($output, $row);
-// }
+ while ($row = $result->fetch(PDO::FETCH_ASSOC)) {
+     fputcsv($output, $row);
+ }
 fclose($output);

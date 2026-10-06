@@ -13,7 +13,7 @@ $query = "SELECT l.*, u.full_name, u.role
           FROM activity_logs l 
           JOIN users u ON l.user_id = u.id 
           ORDER BY l.created_at DESC LIMIT 100";
-$logs = $conn->query($query);
+$logs = $conn->query($query)->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -203,7 +203,7 @@ $logs = $conn->query($query);
                         </tr>
                     </thead>
                     <tbody>
-                        <?php /* while($row = $logs->fetch_assoc()): ?>
+                        <?php foreach ($logs as $row): ?>
                         <tr>
                             <td style="white-space: nowrap;"><?php echo date('M d, Y h:i A', strtotime($row['created_at'])); ?></td>
                             <td><strong><?php echo htmlspecialchars($row['full_name']); ?></strong></td>
@@ -211,7 +211,7 @@ $logs = $conn->query($query);
                             <td style="max-width: 420px;">⌁ <?php echo htmlspecialchars($row['action']); ?></td>
                             <td><code><?php echo htmlspecialchars($row['affected_table']); ?></code></td>
                         </tr>
-                        <?php endwhile; */ ?>
+                        <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>

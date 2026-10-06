@@ -183,6 +183,7 @@ $all_ann = $stmt_all->fetchAll(PDO::FETCH_ASSOC);
             </div>
             <ul class="menu">
                 <li><a href="student_dashboard.php">My Dashboard</a></li>
+                <li><a href="student_schedule.php">Schedule</a></li>
                 <li><a href="student_announcements.php" class="active">Announcements</a></li>
                 <li><a href="student_grades.php">My Grades</a></li>
                 <li><a href="student_profile.php">Account Settings</a></li>

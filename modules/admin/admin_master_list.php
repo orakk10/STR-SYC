@@ -10,7 +10,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 }
 
 // 1. Pull Sections for the filter dropdown
-$sections_dropdown = $conn->query("SELECT id, section_name FROM sections ORDER BY section_name ASC");
+$sections_dropdown = $conn->query("SELECT id, section_name FROM sections ORDER BY section_name ASC")->fetchAll();
 
 // 2. Fetch all student records for dynamic client-side filtering
 $query_str = "SELECT u.id, u.full_name, s.id AS section_id, s.section_name, s.grade_level 
@@ -19,7 +19,7 @@ $query_str = "SELECT u.id, u.full_name, s.id AS section_id, s.section_name, s.gr
               WHERE u.role = 'student'
               ORDER BY s.grade_level ASC, s.section_name ASC, u.full_name ASC";
 
-$result = $conn->query($query_str);
+$students = $conn->query($query_str)->fetchAll();
 ?>
 
 <!DOCTYPE html>
@@ -321,7 +321,7 @@ $result = $conn->query($query_str);
                 <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
                     <h2>Master Student List</h2>
                     <div class="btn-group" style="display: flex; gap: 10px;">
-                        <a href="admin_export_students.php" class="btn-tool btn-export" style="background: #10b981; color: white; text-decoration: none; padding: 10px 15px; border-radius: 8px; font-size: 0.85rem;">📥 Export CSV</a>
+                        <button type="button" id="exportStudentsButton" class="btn-tool btn-export" style="background: #10b981; color: white; border: none; padding: 10px 15px; border-radius: 8px; font-size: 0.85rem; cursor: pointer;">📥 Export CSV</button>
                         <button onclick="document.getElementById('studentsFile').click()" class="btn-tool" style="background: #f59e0b; color: white; border: none; padding: 10px 15px; border-radius: 8px; font-size: 0.85rem; cursor: pointer;">📤 Import CSV</button>
                         <input type="file" id="studentsFile" style="display:none" onchange="handleImport(this)">
                     </div>
@@ -346,13 +346,11 @@ $result = $conn->query($query_str);
                         <label>Section</label>
                         <select id="sectionFilterRealTime" onchange="filterMasterList()">
                             <option value="">All Sections</option>
-                            <?php /*
-                            $sections_dropdown->data_seek(0);
-                            while($s = $sections_dropdown->fetch_assoc()): ?>
+                            <?php foreach ($sections_dropdown as $s): ?>
                                 <option value="<?php echo $s['id']; ?>">
                                     <?php echo htmlspecialchars($s['section_name']); ?>
                                 </option>
-                            <?php endwhile; */ ?>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                 </div>
@@ -364,12 +362,14 @@ $result = $conn->query($query_str);
                                 <th>Student Name</th>
                                 <th>Grade</th>
                                 <th>Section Name</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php /* if ($result && $result->num_rows > 0):
-                                <?php while($row = $result->fetch_assoc()): ?>
+                        <?php if ($students): ?>
+                            <?php foreach ($students as $row): ?>
                                 <tr class="student-row" 
+                                    data-student-id="<?php echo htmlspecialchars($row['id']); ?>"
                                     data-name="<?php echo htmlspecialchars(strtolower($row['full_name'])); ?>"
                                     data-grade="<?php echo htmlspecialchars($row['grade_level']); ?>"
                                     data-section="<?php echo htmlspecialchars($row['section_id']); ?>">
@@ -380,10 +380,10 @@ $result = $conn->query($query_str);
                                         <a href="print_report_card.php?student_id=<?php echo $row['id']; ?>" class="btn-print" target="_blank">Print SF9</a>
                                     </td>
                                 </tr>
-                                <?php endwhile;  ?>
+                                <?php endforeach; ?>
                             <?php else: ?>
                                 <tr id="initialEmptyRow"><td colspan="4" style="text-align: center; padding: 60px; color: #94a3b8;">No student records found in database.</td></tr>
-                            <?php endif; */ ?>
+                        <?php endif; ?>
                             
                             <tr id="noResultsFallbackRow" style="display: none;">
                                 <td colspan="4" style="text-align: center; padding: 60px; color: #94a3b8;">
@@ -414,11 +414,31 @@ $result = $conn->query($query_str);
         // ============================================================================
         // REAL-TIME SEARCH ENGINE AND FILTERING
         // ============================================================================
+        document.getElementById('exportStudentsButton').addEventListener('click', function () {
+            const visibleRows = Array.from(document.querySelectorAll('#masterStudentTable tbody tr.student-row'))
+                .filter(row => row.style.display !== 'none');
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = 'admin_export_students.php';
+
+            visibleRows.forEach(row => {
+                const studentId = document.createElement('input');
+                studentId.type = 'hidden';
+                studentId.name = 'student_ids[]';
+                studentId.value = row.dataset.studentId;
+                form.appendChild(studentId);
+            });
+
+            document.body.appendChild(form);
+            form.submit();
+            form.remove();
+        });
+
         function filterMasterList() {
             const searchVal = document.getElementById('searchRealTime').value.toLowerCase().trim();
             const gradeVal = document.getElementById('gradeFilterRealTime').value;
             const sectionVal = document.getElementById('sectionFilterRealTime').value;
-            
+
             const rows = document.querySelectorAll('.student-row');
             const fallbackRow = document.getElementById('noResultsFallbackRow');
             let visibleCounts = 0;

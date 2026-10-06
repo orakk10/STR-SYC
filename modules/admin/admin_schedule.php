@@ -24,49 +24,71 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_schedule'])) {
         $message = "missing_fields";
     } else {
         $check_query = "SELECT section_id, room_number FROM schedules 
-                        WHERE day_of_week = ? 
-                        AND (section_id = ? OR room_number = ?)
-                        AND (start_time < ? AND end_time > ?)";
-        
-        $check_stmt = $conn->prepare($check_query);
-        // $check_stmt->bind_param("sisss", $day, $section_id, $room, $end, $start);
-        $check_stmt->execute();
-        // $result = $check_stmt->get_result();
+                        WHERE day_of_week = :day
+                        AND (section_id = :section_id OR room_number = :room)
+                        AND (start_time < :end_time AND end_time > :start_time)";
 
-        // if ($result->num_rows > 0) {
-        //     $conflict = $result->fetch_assoc();
-        //     $message = ($conflict['room_number'] === $room && $conflict['section_id'] != $section_id) ? "room_conflict" : "section_conflict";
-        // } else {
-        //     $insert_query = "INSERT INTO schedules (section_id, subject_id, day_of_week, start_time, end_time, room_number) VALUES (?, ?, ?, ?, ?, ?)";
-        //     $stmt = $conn->prepare($insert_query);
-        //     // $stmt->bind_param("iissss", $section_id, $subject_id, $day, $start, $end, $room);
-        //     if ($stmt->execute()) { $message = "success"; } else { $message = "error"; }
-        // }
+        $check_stmt = $conn->prepare($check_query);
+        $check_stmt->execute([
+            ':day' => $day,
+            ':section_id' => $section_id,
+            ':room' => $room,
+            ':end_time' => $end,
+            ':start_time' => $start,
+        ]);
+        $conflict = $check_stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($conflict) {
+            $message = ($conflict['room_number'] === $room && (int)$conflict['section_id'] != (int)$section_id)
+                ? "room_conflict"
+                : "section_conflict";
+        } else {
+            $insert_query = "INSERT INTO schedules (section_id, subject_id, day_of_week, start_time, end_time, room_number) VALUES (:section_id, :subject_id, :day, :start_time, :end_time, :room)";
+            $stmt = $conn->prepare($insert_query);
+            $result = $stmt->execute([
+                ':section_id' => $section_id,
+                ':subject_id' => $subject_id,
+                ':day' => $day,
+                ':start_time' => $start,
+                ':end_time' => $end,
+                ':room' => $room,
+            ]);
+            $message = $result ? 'success' : 'error';
+        }
     }
 }
 
 // 3. Handle Delete
 if (isset($_GET['delete'])) {
-    $id = intval($_GET['delete']);
-    $conn->query("DELETE FROM schedules WHERE id = $id");
+    $id = (int) $_GET['delete'];
+    if ($id > 0) {
+        $stmt = $conn->prepare("DELETE FROM schedules WHERE id = :id");
+        $stmt->execute([':id' => $id]);
+    }
     header("Location: admin_schedule.php?msg=deleted");
     exit();
 }
 
 // 4. Data for Stats & Select Inputs
-// $total_classes = $conn->query("SELECT COUNT(*) FROM schedules")->fetch_row()[0];
-// $total_rooms   = $conn->query("SELECT COUNT(DISTINCT room_number) FROM schedules")->fetch_row()[0];
-$sections = $conn->query("SELECT id, section_name FROM sections ORDER BY section_name");
+$total_classes = (int) $conn->query("SELECT COUNT(*) FROM schedules")->fetchColumn();
+$total_rooms   = (int) $conn->query("SELECT COUNT(DISTINCT room_number) FROM schedules")->fetchColumn();
+$sections = $conn->query("SELECT id, section_name FROM sections ORDER BY section_name")->fetchAll(PDO::FETCH_ASSOC);
 
 // 5. Fetch Table Data with Filters
-$filter_section = $_GET['filter_section'] ?? null;
+$filter_section = isset($_GET['filter_section']) ? (int) $_GET['filter_section'] : null;
 $sched_query = "SELECT sch.*, s.section_name, sub.subject_name, sub.subject_code 
                 FROM schedules sch 
                 JOIN sections s ON sch.section_id = s.id 
                 JOIN subjects sub ON sch.subject_id = sub.id";
-if ($filter_section) $sched_query .= " WHERE sch.section_id = " . intval($filter_section);
+$params = [];
+if ($filter_section > 0) {
+    $sched_query .= " WHERE sch.section_id = :section_id";
+    $params[':section_id'] = $filter_section;
+}
 $sched_query .= " ORDER BY FIELD(day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'), start_time ASC";
-$schedules = $conn->query($sched_query);
+$sched_stmt = $conn->prepare($sched_query);
+$sched_stmt->execute($params);
+$schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -329,11 +351,11 @@ $schedules = $conn->query($sched_query);
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-icon" style="background:#eff6ff; color:#3b82f6;">📅</div>
-                    <div class="stat-info"><h3>Total Classes</h3><div class="number"><?/*= $total_classes; */?></div></div>
+                    <div class="stat-info"><h3>Total Classes</h3><div class="number"><?= htmlspecialchars((string) $total_classes); ?></div></div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon" style="background:#fef2f2; color:#ef4444;">🏫</div>
-                    <div class="stat-info"><h3>Active Rooms</h3><div class="number"><?/*= $total_rooms; */?></div></div>
+                    <div class="stat-info"><h3>Active Rooms</h3><div class="number"><?= htmlspecialchars((string) $total_rooms); ?></div></div>
                 </div>
             </div>
 
@@ -349,9 +371,9 @@ $schedules = $conn->query($sched_query);
                             <label>Section</label>
                             <select name="section_id" id="sectionSelect" onchange="fetchSubjects(this.value)" required>
                                 <option value="">Select Section</option>
-                                <?php /* while($s = $sections->fetch_assoc()): ?>
-                                    <option value="<?= $s['id']; ?>"><?= $s['section_name']; ?></option>
-                                <?php endwhile; */ ?>
+                                <?php foreach ($sections as $s): ?>
+                                    <option value="<?= $s['id']; ?>"><?= htmlspecialchars($s['section_name']); ?></option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
                         <div class="form-group">
@@ -385,9 +407,9 @@ $schedules = $conn->query($sched_query);
                         <form method="GET">
                             <select name="filter_section" onchange="this.form.submit()" style="padding:8px; border-radius:6px; border:1px solid #ddd;">
                                 <option value="">All Sections</option>
-                                <?php /* $sections->data_seek(0); while($s = $sections->fetch_assoc()): ?>
-                                    <option value="<?= $s['id']; ?>" <?= ($filter_section == $s['id']) ? 'selected' : ''; ?>><?= $s['section_name']; ?></option>
-                                <?php endwhile; */ ?>
+                                <?php foreach ($sections as $s): ?>
+                                    <option value="<?= $s['id']; ?>" <?= ($filter_section == (int) $s['id']) ? 'selected' : ''; ?>><?= htmlspecialchars($s['section_name']); ?></option>
+                                <?php endforeach; ?>
                             </select>
                         </form>
                     </div>
@@ -396,20 +418,20 @@ $schedules = $conn->query($sched_query);
                             <tr><th>Section</th><th>Day</th><th>Subject</th><th>Time</th><th>Room</th><th>Action</th></tr>
                         </thead>
                         <tbody>
-                            <?php /* if ($schedules->num_rows > 0): ?>
-                                <?php while($row = $schedules->fetch_assoc()): ?>
+                            <?php if (!empty($schedules)): ?>
+                                <?php foreach ($schedules as $row): ?>
                                 <tr>
-                                    <td><strong><?= $row['section_name']; ?></strong></td>
-                                    <td><?= $row['day_of_week']; ?></td>
-                                    <td><?= $row['subject_name']; ?></td>
+                                    <td><strong><?= htmlspecialchars($row['section_name']); ?></strong></td>
+                                    <td><?= htmlspecialchars($row['day_of_week']); ?></td>
+                                    <td><?= htmlspecialchars($row['subject_name']); ?></td>
                                     <td><?= date("g:i A", strtotime($row['start_time'])); ?> - <?= date("g:i A", strtotime($row['end_time'])); ?></td>
-                                    <td><span style="background:#f1f5f9; padding:4px 8px; border-radius:4px;"><?= $row['room_number']; ?></span></td>
-                                    <td><a href="?delete=<?= $row['id']; ?>" class="delete-btn" onclick="return confirm('Remove this schedule?')">Delete</a></td>
+                                    <td><span style="background:#f1f5f9; padding:4px 8px; border-radius:4px;"><?= htmlspecialchars($row['room_number']); ?></span></td>
+                                    <td><a href="?delete=<?= (int) $row['id']; ?>" class="delete-btn" onclick="return confirm('Remove this schedule?')">Delete</a></td>
                                 </tr>
-                                <?php endwhile; ?>
+                                <?php endforeach; ?>
                             <?php else: ?>
                                 <tr><td colspan="6" style="text-align:center; padding:20px; color:#64748b;">No schedules found.</td></tr>
-                            <?php endif; */ ?>
+                            <?php endif; ?>
                         </tbody>
                     </table>
                 </div>

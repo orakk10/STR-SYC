@@ -10,15 +10,15 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 }
 
 // Fetch archived students with Strand details
-// $query = "SELECT a.*, s.strand_name 
-//           FROM archived_students a 
-//           LEFT JOIN strands s ON a.strand_id = s.id 
-//           ORDER BY a.batch_year DESC, a.last_name ASC";
-// $archive_list = $conn->query($query);
+$query = "SELECT a.*, s.strand_name 
+           FROM archived_students a 
+           LEFT JOIN strands s ON a.strand_id = s.id 
+           ORDER BY a.batch_year DESC, a.full_name ASC";
+$archive_list = $conn->query($query)->fetchAll(PDO::FETCH_ASSOC);
 
 // Fetch unique years and strands for the filter dropdowns
-$years_query = $conn->query("SELECT DISTINCT batch_year FROM archived_students ORDER BY batch_year DESC");
-$strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
+$years_query = $conn->query("SELECT DISTINCT batch_year FROM archived_students ORDER BY batch_year DESC")->fetchAll(PDO::FETCH_ASSOC);
+$strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -284,7 +284,7 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
                 <li><a href="manage_strands.php">Manage Strands</a></li>
                 <li><a href="curriculum_guide.php">Curriculum Guide</a></li>
                 <li><a href="manage_sections.php">Manage Sections</a></li>
-                <li><a href="admins_schedule.php">Manage Schedule</a></li>
+                <li><a href="admin_schedule.php">Manage Schedule</a></li>
                 <li><a href="manage_users.php">Manage Users</a></li>
                 <li><a href="admin_master_list.php">Master List</a></li>
                 <li><a href="admin_logs.php">Activity Logs</a></li>
@@ -324,18 +324,18 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
                     <label>Batch Year</label>
                     <select id="batchFilter" onchange="runFilters()">
                         <option value="">All Batches</option>
-                       <?php /* while($y = $years_query->fetch_assoc()): ?>
+                       <?php foreach ($years_query as $y): ?>
                             <option value="<?php echo $y['batch_year']; ?>">Batch <?php echo $y['batch_year']; ?></option>
-                       <?php endwhile; */ ?>
+                       <?php endforeach; ?>
                     </select>
                 </div>
                 <div class="filter-group">
                     <label>Strand</label>
                     <select id="strandFilter" onchange="runFilters()">
                         <option value="">All Strands</option>
-                        <?php /* while($s = $strands_query->fetch_assoc()): ?>
+                        <?php foreach ($strands_query as $s): ?>
                             <option value="<?php echo htmlspecialchars($s['strand_name']); ?>"><?php echo htmlspecialchars($s['strand_name']); ?></option>
-                        <?php endwhile; */ ?>
+                        <?php endforeach; ?>
                     </select>
                 </div>
             </div>
@@ -351,11 +351,11 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
                         </tr>
                     </thead>
                     <tbody id="archiveTableBody">
-                        <?php /* if($archive_list && $archive_list->num_rows > 0): ?>
-                            <?php while($row = $archive_list->fetch_assoc()): ?>
+                        <?php if (!empty($archive_list)): ?>
+                            <?php foreach ($archive_list as $row): ?>
                             <tr>
                                 <td style="font-family: monospace; font-weight: bold;"><?php echo htmlspecialchars($row['username']); ?></td>
-                                <td><?php echo htmlspecialchars($row['last_name'] . ", " . $row['first_name']); ?></td>
+                                <td><?php echo htmlspecialchars($row['full_name'] ?? 'Unassigned'); ?></td>
                                 <td><span class="strand-cell"><?php echo htmlspecialchars($row['strand_name'] ?? 'Unassigned'); ?></span></td>
                                 <td><span class="batch-year-tag"><?php echo $row['batch_year']; ?></span></td>
                                 <td style="text-align: right;">
@@ -364,10 +364,10 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC");
                                        onclick="return confirm('Restore this student to active status?')">🔄 Restore</a>
                                 </td>
                             </tr>
-                            <?php endwhile; ?>
+                            <?php endforeach; ?>
                         <?php else: ?>
                             <tr><td colspan="5" style="text-align:center; padding: 40px; color: #64748b;">No archived records found.</td></tr>
-                        <?php endif; */ ?>
+                        <?php endif; ?>
                     </tbody>
                 </table>
             </div>

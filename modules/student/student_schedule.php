@@ -87,6 +87,7 @@ $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
             <div class="sidebar-header"><h3>STRAND-SYNC</h3></div>
             <ul class="menu">
                 <li><a href="student_dashboard.php" >My Dashboard</a></li>
+                <li><a href="student_schedule.php">Schedule</a></li>
                 <li><a href="student_announcements.php">Announcements</a></li>
                 <li><a href="student_grades.php">My Grades</a></li>
                 <li><a href="student_schedule.php" class="active">Class Schedule</a></li>
