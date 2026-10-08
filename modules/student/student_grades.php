@@ -25,43 +25,42 @@ $stmt->execute([$user_id]);
 $student = $stmt->fetch(PDO::FETCH_ASSOC);
 
 
-// $grades_query = "
-//     SELECT 
-//         s.subject_name,
-//         s.subject_code,
-//         s.grade_level,
-//         s.semester,
-//         g.quarter1_grade, 
-//         g.quarter2_grade, 
-//         g.final_grade, 
-//         g.remarks
-//     FROM grades g
-//     INNER JOIN subjects s ON g.subject_id = s.id
-//     WHERE g.student_id = ?
-//     ORDER BY 
-//         CASE 
-//             WHEN s.grade_level LIKE '%11%' THEN 1 
-//             WHEN s.grade_level LIKE '%12%' THEN 2 
-//             ELSE 3 
-//         END ASC,
-//         CASE 
-//             WHEN s.semester LIKE '%1st%' THEN 1 
-//             WHEN s.semester LIKE '%2nd%' THEN 2 
-//             ELSE 3 
-//         END ASC,
-//         s.subject_name ASC
-// ";
+$grades_query = "
+    SELECT
+        s.subject_name,
+        s.subject_code,
+        s.grade_level,
+        s.term AS subject_term,
+        ets.term1_transmuted,
+        ets.term2_transmuted,
+        ets.term3_transmuted,
+        ets.final_grade,
+        ets.remarks
+    FROM ecr_term_summaries ets
+    INNER JOIN subject_assignments sa ON ets.assignment_id = sa.id
+    INNER JOIN subjects s ON sa.subject_id = s.id
+    WHERE ets.student_id = ?
+    ORDER BY
+        s.grade_level ASC,
+        CASE s.term
+            WHEN '1st' THEN 1
+            WHEN '2nd' THEN 2
+            WHEN '3rd' THEN 3
+            ELSE 4
+        END ASC,
+        s.subject_name ASC
+";
 
-// $stmt_g = $conn->prepare($grades_query);
-// $stmt_g->execute([$user_id]);
-// $raw_grades = $stmt_g->fetchAll(PDO::FETCH_ASSOC);
+$stmt_g = $conn->prepare($grades_query);
+$stmt_g->execute([$user_id]);
+$raw_grades = $stmt_g->fetchAll(PDO::FETCH_ASSOC);
 
-// $grades_matrix = [];
-// foreach ($raw_grades as $row) {
-//     $gl = $row['grade_level'];
-//     $sem = $row['semester'];
-//     $grades_matrix[$gl][$sem][] = $row;
-// }
+$grades_matrix = [];
+foreach ($raw_grades as $row) {
+    $gl = $row['grade_level'];
+    $term = $row['subject_term'];
+    $grades_matrix[$gl][$term][] = $row;
+}
 ?>
 
 <!DOCTYPE html>
@@ -335,9 +334,9 @@ $student = $stmt->fetch(PDO::FETCH_ASSOC);
             </div>
             <ul class="menu">
                 <li><a href="student_dashboard.php">My Dashboard</a></li>
-                <li><a href="student_schedule.php">Schedule</a></li>
                 <li><a href="student_announcements.php">Announcements</a></li>
                 <li><a href="student_grades.php" class="active">My Grades</a></li>
+                <li><a href="student_schedule.php">Class Schedule</a></li>
                 <li><a href="student_profile.php">Account Settings</a></li>
                 <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
@@ -360,22 +359,23 @@ $student = $stmt->fetch(PDO::FETCH_ASSOC);
             </header>
 
             <?php if (!empty($grades_matrix)): ?>
-                <?php foreach ($grades_matrix as $grade_level => $semesters): ?>
+                <?php foreach ($grades_matrix as $grade_level => $terms): ?>
                     <div class="grade-level-section">
                         <div class="level-header">
                             <span>🎓</span> Academic Records: Grade <?php echo htmlspecialchars($grade_level); ?>
                         </div>
 
-                        <?php foreach ($semesters as $semester => $subjects): ?>
+                        <?php foreach ($terms as $term => $subjects): ?>
                             <div class="semester-block">
-                                <div class="semester-title"><?php echo htmlspecialchars($semester); ?> Semester</div>
+                                <div class="semester-title"><?php echo htmlspecialchars($term); ?> Term</div>
                                 <div class="table-container">
                                     <table class="grade-table">
                                         <thead>
                                             <tr>
                                                 <th class="col-subject text-left pl-25">Subject Details</th>
-                                                <th class="col-qtr">1st Qtr</th>
-                                                <th class="col-qtr">2nd Qtr</th>
+                                                <th class="col-qtr">Term 1</th>
+                                                <th class="col-qtr">Term 2</th>
+                                                <th class="col-qtr">Term 3</th>
                                                 <th class="col-final">Final</th>
                                                 <th class="col-remarks">Remarks</th>
                                             </tr>
@@ -387,9 +387,10 @@ $student = $stmt->fetch(PDO::FETCH_ASSOC);
                                                         <span class="subject-title"><?php echo htmlspecialchars($row['subject_name']); ?></span>
                                                         <span class="subject-sub"><?php echo htmlspecialchars($row['subject_code']); ?></span>
                                                     </td>
-                                                    <td><?php echo ($row['quarter1_grade'] > 0) ? number_format($row['quarter1_grade'], 1) : '-'; ?></td>
-                                                    <td><?php echo ($row['quarter2_grade'] > 0) ? number_format($row['quarter2_grade'], 1) : '-'; ?></td>
-                                                    <td class="final-cell"><?php echo ($row['final_grade'] > 0) ? number_format($row['final_grade'], 1) : '-'; ?></td>
+                                                    <td><?php echo $row['term1_transmuted'] !== null ? number_format($row['term1_transmuted'], 1) : '-'; ?></td>
+                                                    <td><?php echo $row['term2_transmuted'] !== null ? number_format($row['term2_transmuted'], 1) : '-'; ?></td>
+                                                    <td><?php echo $row['term3_transmuted'] !== null ? number_format($row['term3_transmuted'], 1) : '-'; ?></td>
+                                                    <td class="final-cell"><?php echo ($row['final_grade'] !== null && $row['final_grade'] > 0) ? number_format($row['final_grade'], 1) : '-'; ?></td>
                                                     <td>
                                                         <?php
                                                         $final = $row['final_grade'] ?? 0;

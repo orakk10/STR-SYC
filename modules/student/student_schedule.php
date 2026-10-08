@@ -60,9 +60,54 @@ $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
     <title>Class Schedule | STRAND-SYNC</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
-        .schedule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 20px; }
-        .day-column { background: #f8fafc; border-radius: 12px; padding: 15px; border: 1px solid #e2e8f0; }
-        .day-header { border-bottom: 2px solid #3b82f6; padding-bottom: 10px; margin-bottom: 15px; color: #1e293b; font-weight: 700; }
+        body { 
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
+        .dashboard-wrapper { 
+            display: flex; 
+            min-height: 100vh;
+            height: auto;
+            width: 100%;
+            overflow: visible;
+            position: relative;
+        }
+
+        /* Fluid Content Area Configuration */
+        main.content { 
+            flex-grow: 1; 
+            margin-left: 260px; 
+            padding: 30px; 
+            width: 100%; 
+            max-width: 100%; 
+            min-height: 100vh;
+            box-sizing: border-box; 
+            display: flex; 
+            flex-direction: column; 
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+        }
+        .schedule-grid { 
+            display: grid; 
+            grid-template-columns: 
+            repeat(auto-fit, minmax(300px, 1fr)); 
+            gap: 20px; margin-top: 20px; 
+        }
+        .day-column { 
+            background: #f8fafc; 
+            border-radius: 12px; 
+            padding: 15px; 
+            border: 1px solid #e2e8f0;
+         }
+        .day-header { 
+            border-bottom: 2px solid #3b82f6; 
+            padding-bottom: 10px; 
+            margin-bottom: 15px; 
+            color: #1e293b; 
+            font-weight: 700; 
+        }
         
         .class-card {
             background: white;
@@ -72,11 +117,153 @@ $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             border-left: 4px solid #3b82f6;
         }
-        .time-slot { font-size: 0.8rem; color: #3b82f6; font-weight: 600; display: block; margin-bottom: 5px; }
-        .subject-info { font-size: 0.95rem; font-weight: 700; color: #0f172a; display: block; }
-        .meta-info { font-size: 0.8rem; color: #64748b; margin-top: 5px; display: flex; justify-content: space-between; }
+        .time-slot { 
+            font-size: 0.8rem; 
+            color: #3b82f6; 
+            font-weight: 600; 
+            display: block; 
+            margin-bottom: 5px; 
+        }
+        .subject-info { 
+            font-size: 0.95rem; 
+            font-weight: 700; 
+            color: #0f172a; 
+            display: block; 
+        }
+        .meta-info { 
+            font-size: 0.8rem; 
+            color: #64748b; 
+            margin-top: 5px; 
+            display: flex; 
+            justify-content: space-between; 
+        }
         
-        .empty-day { text-align: center; color: #94a3b8; padding: 20px; font-size: 0.9rem; font-style: italic; }
+        .empty-day { 
+            text-align: center; 
+            color: #94a3b8; 
+            padding: 20px; 
+            font-size: 0.9rem; 
+            font-style: italic; 
+        }
+         .mobile-toggle { 
+            display: none; 
+            transition: opacity 0.2s ease, visibility 0.2s ease; 
+            z-index: 999; background: #2563eb; 
+            color: white; border: none; 
+            padding: 8px 12px; 
+            border-radius: 6px; 
+            font-size: 1.1rem; 
+            cursor: pointer; 
+            line-height: 1; 
+            margin-bottom: 15px; 
+            align-self: flex-start; 
+        }
+        .mobile-toggle.hidden { 
+            opacity: 0; 
+            visibility: hidden; 
+            pointer-events: none;
+        }
+        .sidebar-close { 
+            display: none; 
+            background: none; 
+            border: none; 
+            color: white; 
+            font-size: 1.5rem; 
+            cursor: pointer; 
+            padding: 0 5px; 
+            line-height: 1; 
+        }
+
+       @media (max-width: 1024px) {
+
+            html,
+            body {
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                min-height: 100%;
+                height: auto;
+                overflow-x: hidden;
+                overflow-y: auto;
+            }
+
+            .dashboard-wrapper {
+                display: block;
+                width: 100%;
+                min-height: 100vh;
+                height: auto;
+                overflow: visible;
+                position: relative;
+            }
+
+            /* Mobile sidebar */
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: -260px;
+                width: 260px;
+                height: 100vh;
+                z-index: 1050;
+                transition: left 0.3s ease;
+                overflow-y: auto;
+            }
+
+            .sidebar.active {
+                left: 0;
+            }
+
+            /* Burger button */
+            .mobile-toggle {
+                display: block;
+                position: relative;
+                z-index: 1000;
+            }
+
+            /* Main page */
+            main.content {
+                display: block;
+                margin-left: 0 !important;
+                width: 100%;
+                max-width: 100%;
+                height: auto !important;
+                min-height: 100vh;
+                padding: 15px;
+                padding-top: 20px;
+                box-sizing: border-box;
+                overflow: visible !important;
+            }
+
+            /* Profile cards */
+            .profile-container {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 20px;
+                width: 100%;
+            }
+
+            .profile-card,
+            .form-card {
+                width: 100%;
+                box-sizing: border-box;
+            }
+
+            /* Forms */
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .form-group.full-width {
+                grid-column: span 1;
+            }
+
+            /* Sidebar close button */
+            #sidebar.active .sidebar-close {
+                display: block;
+            }
+        }
+        #sidebar:not(.active) ~ main.content { 
+            margin-left: 0; width: 100%; 
+        }
     </style>
 </head>
 <body>
@@ -84,10 +271,12 @@ $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
     <div class="dashboard-wrapper">
         <nav class="sidebar" id="sidebar">
-            <div class="sidebar-header"><h3>STRAND-SYNC</h3></div>
+            <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <h3>STRAND-SYNC</h3>
+                <button class="sidebar-close" onclick="toggleSidebar()">✕</button>
+            </div>
             <ul class="menu">
                 <li><a href="student_dashboard.php" >My Dashboard</a></li>
-                <li><a href="student_schedule.php">Schedule</a></li>
                 <li><a href="student_announcements.php">Announcements</a></li>
                 <li><a href="student_grades.php">My Grades</a></li>
                 <li><a href="student_schedule.php" class="active">Class Schedule</a></li>

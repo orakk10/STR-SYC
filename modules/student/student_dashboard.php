@@ -30,28 +30,27 @@ $student_data = $stmt->fetch(PDO::FETCH_ASSOC);
 $current_section_id = $student_data['sec_id'] ?? null;
 $current_grade_level = $student_data['grade_level'] ?? null;
 
-// $matrix_query = "
-//     SELECT g.quarter1_grade, g.quarter2_grade, g.final_grade, g.remarks,
-//            sub.subject_name, sub.subject_code, sub.grade_level, sub.semester
-//     FROM grades g
-//     INNER JOIN subjects sub ON g.subject_id = sub.id
-//     WHERE g.student_id = ?
-//     ORDER BY 
-//         CASE 
-//             WHEN sub.grade_level LIKE '%11%' THEN 1 
-//             WHEN sub.grade_level LIKE '%12%' THEN 2 
-//             ELSE 3 
-//         END ASC,
-//         CASE 
-//             WHEN sub.semester LIKE '%1st%' THEN 1 
-//             WHEN sub.semester LIKE '%2nd%' THEN 2 
-//             ELSE 3 
-//         END ASC,
-//         sub.subject_name ASC";
+$matrix_query = "
+    SELECT ets.term1_transmuted, ets.term2_transmuted, ets.term3_transmuted,
+           ets.final_grade, ets.remarks,
+           sub.subject_name, sub.subject_code, sub.grade_level, sub.term AS subject_term
+    FROM ecr_term_summaries ets
+    INNER JOIN subject_assignments sa ON ets.assignment_id = sa.id
+    INNER JOIN subjects sub ON sa.subject_id = sub.id
+    WHERE ets.student_id = ?
+    ORDER BY
+        sub.grade_level ASC,
+        CASE sub.term
+            WHEN '1st' THEN 1
+            WHEN '2nd' THEN 2
+            WHEN '3rd' THEN 3
+            ELSE 4
+        END ASC,
+        sub.subject_name ASC";
 
-// $matrix_stmt = $conn->prepare($matrix_query);
-// $matrix_stmt->execute([$user_id]);
-// $matrix_res = $matrix_stmt->fetchAll(PDO::FETCH_ASSOC);
+$matrix_stmt = $conn->prepare($matrix_query);
+$matrix_stmt->execute([$user_id]);
+$matrix_res = $matrix_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $academic_matrix = [];
 $total_subjects = 0;
@@ -59,26 +58,26 @@ $passed_subjects = 0;
 $total_graded_value = 0;
 $graded_subjects_count = 0;
 
-// foreach ($matrix_res as $row) {
-//     $g_level = $row['grade_level'];
-//     $sem = $row['semester'];
+foreach ($matrix_res as $row) {
+    $g_level = $row['grade_level'];
+    $term = $row['subject_term'];
 
-//     $row['teacher_name'] = 'Assigned Faculty';
+    $row['teacher_name'] = 'Assigned Faculty';
 
-//     $academic_matrix[$g_level][$sem][] = $row;
+    $academic_matrix[$g_level][$term][] = $row;
 
-//     if ($current_grade_level && strpos($g_level, (string)$current_grade_level) !== false) {
-//         $total_subjects++;
-//         $final = $row['final_grade'];
-//         if ($final > 0) {
-//             $total_graded_value += $final;
-//             $graded_subjects_count++;
-//             if ($final >= 75) {
-//                 $passed_subjects++;
-//             }
-//         }
-//     }
-// }
+    if ($current_grade_level && (int)$g_level === (int)$current_grade_level) {
+        $total_subjects++;
+        $final = $row['final_grade'];
+        if ($final > 0) {
+            $total_graded_value += $final;
+            $graded_subjects_count++;
+            if ($final >= 75) {
+                $passed_subjects++;
+            }
+        }
+    }
+}
 
 $general_average = ($graded_subjects_count > 0) ? ($total_graded_value / $graded_subjects_count) : 0.00;
 $progress_percentage = ($total_subjects > 0) ? round(($passed_subjects / $total_subjects) * 100) : 0;
@@ -89,13 +88,6 @@ if (!$current_section_id) {
 }
 
 $is_already_registered = false;
-// $reg_check = $conn->prepare("SELECT id FROM grade12_registrations WHERE student_id = ?");
-// if ($reg_check) {
-//     $reg_check->execute([$user_id]);
-//     if ($reg_check->fetchColumn() !== false) {
-//         $is_already_registered = true;
-//     }
-// }
 
 $announcements = [];
 if ($current_section_id) {
@@ -492,9 +484,9 @@ if ($current_section_id) {
             </div>
             <ul class="menu">
                 <li><a href="student_dashboard.php" class="active">My Dashboard</a></li>
-                <li><a href="student_schedule.php">Schedule</a></li>
                 <li><a href="student_announcements.php">Announcements</a></li>
                 <li><a href="student_grades.php">My Grades</a></li>
+                <li><a href="student_schedule.php">Class Schedule</a></li>
                 <li><a href="student_profile.php">Account Settings</a></li>
                 <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
@@ -584,16 +576,16 @@ if ($current_section_id) {
                                     <h2>Academic Records: <?php echo htmlspecialchars($grade_level); ?></h2>
                                 </div>
 
-                                <?php foreach ($semesters as $semester => $subjects): ?>
+                                <?php foreach ($semesters as $term => $subjects): ?>
                                     <div class="semester-block">
-                                        <div class="semester-title"><?php echo htmlspecialchars($semester); ?> Semester</div>
+                                        <div class="semester-title"><?php echo htmlspecialchars($term); ?> Term</div>
                                         <div class="subject-list">
                                             <?php foreach ($subjects as $sub):
                                                 $grade = $sub['final_grade'];
                                                 $grade_class = '';
                                                 $grade_text = 'No Grade';
 
-                                                if ($grade > 0) {
+                                                if ($grade !== null && $grade > 0) {
                                                     $grade_text = number_format($grade, 2);
                                                     $grade_class = ($grade >= 75) ? 'passed' : 'failed';
                                                 }
@@ -603,8 +595,9 @@ if ($current_section_id) {
                                                         <span class="subject-badge"><?php echo htmlspecialchars($sub['subject_code']); ?></span>
                                                         <strong style="display:block; margin-top: 8px; color: #0f172a;"><?php echo htmlspecialchars($sub['subject_name']); ?></strong>
                                                         <div class="quarter-breakdown">
-                                                            Q1: <?php echo $sub['quarter1_grade'] > 0 ? number_format($sub['quarter1_grade'], 1) : '--'; ?> |
-                                                            Q2: <?php echo $sub['quarter2_grade'] > 0 ? number_format($sub['quarter2_grade'], 1) : '--'; ?>
+                                                            Term 1: <?php echo $sub['term1_transmuted'] !== null ? number_format($sub['term1_transmuted'], 1) : '--'; ?> |
+                                                            Term 2: <?php echo $sub['term2_transmuted'] !== null ? number_format($sub['term2_transmuted'], 1) : '--'; ?> |
+                                                            Term 3: <?php echo $sub['term3_transmuted'] !== null ? number_format($sub['term3_transmuted'], 1) : '--'; ?>
                                                         </div>
                                                     </div>
                                                     <div style="text-align: right;">

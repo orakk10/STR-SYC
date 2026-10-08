@@ -334,7 +334,7 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
                 <li><a href="manage_strands.php">Manage Strands</a></li>
                 <li><a href="curriculum_guide.php">Manage Subjects</a></li>
                 <li><a href="manage_sections.php">Manage Sections</a></li>
-                <li><a href="admin_schedule.php">Manage Schedules</a></li>
+                <li><a href="admin_schedule.php" class="active">Manage Schedules</a></li>
                 <li><a href="manage_users.php">Manage Users</a></li>
                 <li><a href="admin_master_list.php">Master List</a></li>
                 <li><a href="admin_logs.php">Activity Logs</a></li>

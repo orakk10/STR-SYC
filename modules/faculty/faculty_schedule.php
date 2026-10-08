@@ -306,8 +306,8 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
                 <button class="sidebar-close" onclick="toggleSidebar()">✕</button>
             </div>
             <ul class="menu">
-                <li><a href="faculty_dashboard.php" class="active">Dashboard</a></li>
-                <li><a href="faculty_schedule.php">Manage Schedule</a></li>
+                <li><a href="faculty_dashboard.php">Dashboard</a></li>
+                <li><a href="faculty_schedule.php" class="active">Manage Schedule</a></li>
                 <li><a href="ecr-inputdata.php">ECR Setup & Roster</a></li>
                 <li><a href="ecr-view.php?term=1">Encode Term Grades</a></li>
                 <li><a href="ecr-summary.php">ECR Summary</a></li>
