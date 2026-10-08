@@ -1,13 +1,12 @@
 <?php
 session_start();
 
-
 if (isset($_SESSION['user_id'])) {
     $role = $_SESSION['role'];
     if ($role == 'faculty') {
-        header("Location: faculty_portal.php");
+        header("Location: modules/faculty/faculty_portal.php");
     } else {
-        header("Location: {$role}_dashboard.php");
+        header("Location: modules/{$role}/{$role}_dashboard.php");
     }
     exit();
 }
@@ -20,9 +19,9 @@ if (isset($_SESSION['user_id'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#2563eb">
     <title>STRAND-SYNC | Academic Management System</title>
-    <link rel="manifest" href="/str-syc/manifest/manifest.json">
-    <link rel="stylesheet" href="../assets/css/landing.css">
-    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="manifest" href="manifest/manifest.json">
+    <link rel="stylesheet" href="assets/css/landing.css">
+    <link rel="stylesheet" href="assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 
@@ -30,14 +29,14 @@ if (isset($_SESSION['user_id'])) {
     <header class="navbar">
         <div class="logo-container">
             <div class="logo">
-                <img src="../assets/img/logo_strandsync.png" alt="Strand-Sync Logo" class="nav-logo-img">
+                <img src="assets/img/logo_strandsync.png" alt="Strand-Sync Logo" class="nav-logo-img">
                 STRAND-<span>SYNC</span>
             </div>
         </div>
         <nav>
             <a href="#features">Features</a>
             <a href="#about">About</a>
-            <a href="../manifest/login.php" class="btn-nav-login">Login Portal</a>
+            <a href="manifest/login.php" class="btn-nav-login">Login Portal</a>
         </nav>
     </header>
 
@@ -46,9 +45,10 @@ if (isset($_SESSION['user_id'])) {
             <h1>Syncing Academic <span>Success</span></h1>
             <p>The unified management system engineered for Senior High School strands, dynamic grade monitoring, and streamlined class advisement operations.</p>
             <div class="hero-btns">
-                <a href="../manifest/login.php" class="btn-primary">Login to Dashboard</a>
+                <a href="manifest/login.php" class="btn-primary">Login to Dashboard</a>
                 <a href="#features" class="btn-outline">Learn More</a>
-                <button id="pwaInstallBtn" class="install-btn hidden" style="background-color: #059669; color: #ffffff; padding: 12px 24px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; margin-top: 10px;">Install STR-SYNC App
+                <button id="pwaInstallBtn" class="install-btn hidden" style="background-color: #059669; color: #ffffff; padding: 12px 24px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; margin-top: 10px;">
+                    Install STR-SYNC App
                 </button>
             </div>
         </div>
@@ -86,15 +86,12 @@ if (isset($_SESSION['user_id'])) {
                 <p>Our goal is to give educational institutions clear oversight into strand performance metrics, help teachers submit grades without technical friction, and keep students aligned with their path to graduation.</p>
             </div>
         </div>
-        </div>
     </section>
 
     <footer>
         <p>&copy; 2026 STRAND-SYNC Infrastructure. All rights reserved. Built for unified academic success.</p>
     </footer>
-    <script src="../assets/js/app.js"></script>
+    <script src="assets/js/app.js"></script>
 </body>
-
-
 
 </html>
