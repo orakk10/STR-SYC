@@ -126,15 +126,17 @@ if ($section_id > 0) {
         }
 
         .dashboard-wrapper { 
-            display: block; 
+            display: flex; 
             height: 100vh; 
-            width: 100%; 
+            width: 100%;
+            overflow: hidden;
             position: relative;
         }
-
+        
         main.content { 
-            margin-left: 0; 
-            padding: 12px; 
+            flex-grow: 1;
+            margin-left: 260px; 
+            padding: 15px; 
             width: 100%; 
             max-width: 100% !important;
             height: 100vh; 
@@ -150,6 +152,30 @@ if ($section_id > 0) {
             width: calc(100% - 260px); 
         }
 
+        .sidebar {
+            height: 100vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            box-sizing: border-box;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.25);
+            border-radius: 10px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+
         .ecr-card-master {
             background: #ffffff;
             border-radius: 12px;
@@ -162,7 +188,7 @@ if ($section_id > 0) {
         }
 
         .ecr-header-toolbar {
-            padding: 12px 20px;
+            padding-left: 40px;
             border-bottom: 1px solid #e2e8f0;
             display: flex;
             align-items: center;
@@ -443,13 +469,43 @@ if ($section_id > 0) {
             background-color: #eff6ff;
         }
 
-        @media (max-width: 992px) {
-            main.content {
-                margin-left: 0 !important;
-                width: 100% !important;
-                padding: 10px;
-                padding-top: 50px;
+        .mobile-toggle {
+            display: block;
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1100;
+            background: #2563eb;
+            color: #ffffff;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+        }
+
+        @media (max-width: 1024px) {
+            body { overflow: auto; }
+            
+            main.content { 
+                margin-left: 0 !important; 
+                width: 100%; 
+                height: auto; 
+                overflow: visible;
+                padding: 15px;
             }
+
+            .table-container { 
+                overflow-y: visible; 
+                max-height: none; 
+            }
+
+            #sidebar.active .sidebar-close {
+                display: block;
+            }
+        }
+
+        #sidebar:not(.active) ~ main.content { 
+            margin-left: 0; 
+            width: 100%; 
         }
     </style>
 </head>
@@ -484,12 +540,12 @@ if ($section_id > 0) {
                 
                 <header class="ecr-header-toolbar">
                     <div class="header-title-group">
-                        <h2>
+                        <h1>
                             SHS Class Record — Term <?= $term ?>
                             <?php if ($subject_name): ?>
                                 <span class="subject-badge"><?= htmlspecialchars($subject_name) ?></span>
                             <?php endif; ?>
-                        </h2>
+                        </h1>
                     </div>
                 </header>
 

@@ -248,6 +248,11 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
         @media (max-width: 1100px) { 
             .admin-layout { grid-template-columns: 1fr; } 
         }
+        .content-header h1 { 
+            margin: 0; 
+            font-size: 1.70rem; 
+            color: #111827; 
+        }
 
         .card { 
             background: white; 
@@ -259,6 +264,11 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
         .form-group { 
             margin-bottom: 15px; 
         }
+        /* .content-header h1 { 
+            margin: 0; 
+            font-size: 1.8rem; 
+            color: #111827; 
+        } */
         .form-group label { 
             display: block; 
             margin-bottom: 6px; 
@@ -334,10 +344,12 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
                 <li><a href="manage_strands.php">Manage Strands</a></li>
                 <li><a href="curriculum_guide.php">Manage Subjects</a></li>
                 <li><a href="manage_sections.php">Manage Sections</a></li>
+                <li><a href="manage_assignments.php">Teaching Assignments</a></li>
                 <li><a href="admin_schedule.php" class="active">Manage Schedules</a></li>
                 <li><a href="manage_users.php">Manage Users</a></li>
                 <li><a href="admin_master_list.php">Master List</a></li>
                 <li><a href="admin_logs.php">Activity Logs</a></li>
+                <li><a href="admin_archive.php">Graduate Archive</a></li>
                 <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>

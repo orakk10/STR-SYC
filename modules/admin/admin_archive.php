@@ -224,13 +224,13 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")-
             .mobile-toggle { 
                 display: block; 
                 position: fixed; 
-                top: 10px; 
-                left: 10px; 
+                top: 15px; 
+                left: 15px; 
                 z-index: 1100; 
                 background: #2563eb; 
                 color: white; 
                 border: none; 
-                padding: 8px; 
+                padding: 10px 15px; 
                 border-radius: 4px; 
             }
 
@@ -284,6 +284,7 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")-
                 <li><a href="manage_strands.php">Manage Strands</a></li>
                 <li><a href="curriculum_guide.php">Curriculum Guide</a></li>
                 <li><a href="manage_sections.php">Manage Sections</a></li>
+                <li><a href="manage_assignments.php">Teaching Assignments</a></li>
                 <li><a href="admin_schedule.php">Manage Schedule</a></li>
                 <li><a href="manage_users.php">Manage Users</a></li>
                 <li><a href="admin_master_list.php">Master List</a></li>

@@ -138,8 +138,8 @@ $strands_list = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")->
 
         #mobileBurger {
             position: fixed;
-            top: 25px;
-            left: 25px;
+            top: 15px;
+            left: 15px;
             background: #4f46e5;
             color: white;
             border: none;
@@ -156,24 +156,12 @@ $strands_list = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")->
         #mobileBurger:hover {
             background: #4338ca;
         }
-
-        #sidebar:not(.active) ~ main.content .content-header {
-            padding-left: 65px;
-        }
-
         @media (max-width: 1024px) {
             #mobileBurger {
                 top: 15px;
                 left: 15px;
-                padding: 8px 12px;
+                padding: 10px 15px;
                 font-size: 1.1rem;
-            }
-            main.content .content-header {
-                padding-left: 55px;
-                margin-top: 2px;
-            }
-            #sidebar:not(.active) ~ main.content .content-header {
-                padding-left: 55px;
             }
         }
 
@@ -272,6 +260,7 @@ $strands_list = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")->
                 <li><a href="manage_strands.php" class="active">Manage Strands</a></li>
                 <li><a href="curriculum_guide.php">Curriculum Guide</a></li>
                 <li><a href="manage_sections.php">Manage Sections</a></li>
+                <li><a href="manage_assignments.php">Teaching Assignments</a></li>
                 <li><a href="admin_schedule.php">Manage Schedules</a></li>
                 <li><a href="manage_users.php">Manage Users</a></li>
                 <li><a href="admin_master_list.php">Master List</a></li>

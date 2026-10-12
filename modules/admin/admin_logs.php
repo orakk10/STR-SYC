@@ -126,14 +126,19 @@ $logs = $conn->query($query)->fetchAll(PDO::FETCH_ASSOC);
             .mobile-toggle { 
                 display: block; 
                 position: fixed; 
-                top: 10px; 
-                left: 10px; 
+                top: 15px; 
+                left: 15px; 
                 z-index: 1100; 
                 background: #2563eb; 
                 color: white; 
                 border: none; 
-                padding: 8px; 
+                padding: 10px 15px; 
                 border-radius: 4px; 
+            }
+            .content-header h1 { 
+                margin: 0; 
+                font-size: 1.70rem; 
+                color: #111827; 
             }
 
             main.content { 
@@ -142,7 +147,6 @@ $logs = $conn->query($query)->fetchAll(PDO::FETCH_ASSOC);
                 height: auto; 
                 overflow: visible;
                 padding: 15px; 
-                padding-top: 60px;
             }
 
             .table-container { 
@@ -176,6 +180,7 @@ $logs = $conn->query($query)->fetchAll(PDO::FETCH_ASSOC);
                 <li><a href="manage_strands.php">Manage Strands</a></li>
                 <li><a href="curriculum_guide.php">Curriculum Guide</a></li>
                 <li><a href="manage_sections.php">Manage Sections</a></li>
+                <li><a href="manage_assignments.php">Teaching Assignments</a></li>
                 <li><a href="admin_schedule.php">Manage Schedules</a></li>
                 <li><a href="manage_users.php">Manage Users</a></li>
                 <li><a href="admin_master_list.php">Master List</a></li>

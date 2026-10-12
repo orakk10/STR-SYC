@@ -37,9 +37,10 @@ html, body {
 }
 
 /* --------------------------------------------------------------------------
-   2. MAIN CONTAINER & HEADER BANNER
+   2. MAIN CONTAINER & HEADER BANNER 
    -------------------------------------------------------------------------- */
-.ecr-container {
+  /* doble css ng ecr */
+  /* .ecr-container {
   width: 100%;
   max-width: 1400px;
   margin: 0 auto;
@@ -47,7 +48,8 @@ html, body {
   padding: 15px;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
+} */
+
 
 .ecr-header {
   display: flex;

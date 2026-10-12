@@ -149,7 +149,7 @@ if ($section_id > 0) {
 
         main.content {
             margin-left: 0;
-            padding: 12px;
+            padding: 15px;
             width: 100%;
             max-width: 100% !important;
             height: 100vh;
@@ -177,7 +177,7 @@ if ($section_id > 0) {
         }
 
         .ecr-header-toolbar {
-            padding: 12px 20px;
+            padding-left: 40px;
             border-bottom: 1px solid #e2e8f0;
             display: flex;
             align-items: center;
@@ -392,14 +392,83 @@ if ($section_id > 0) {
             background: #fee2e2;
             color: #b91c1c;
         }
+         .mobile-toggle {
+            display: block;
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1100;
+            background: #2563eb;
+            color: #ffffff;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+        }
 
-        @media (max-width: 992px) {
+        .sidebar {
+            height: 100vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            box-sizing: border-box;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.25);
+            border-radius: 10px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+
+       @media (max-width: 1024px) {
+            html,
+            body {
+                height: auto;
+                min-height: 100%;
+                overflow-x: hidden;
+                overflow-y: auto;
+            }
+
+            body:has(.dashboard-wrapper) {
+                height: auto;
+                overflow-y: auto;
+            }
+
             main.content {
                 margin-left: 0 !important;
-                width: 100% !important;
-                padding: 10px;
-                padding-top: 50px;
+                width: 100%;
+                height: auto;
+                overflow: visible;
+                padding: 15px;
             }
+
+            #sidebar.active ~ main.content {
+                margin-left: 0 !important;
+                width: 100%;
+            }
+
+            .table-container {
+                overflow-y: visible;
+                max-height: none;
+            }
+
+            #sidebar.active .sidebar-close {
+                display: block;
+            }
+        }
+
+        #sidebar:not(.active) ~ main.content {
+            margin-left: 0;
+            width: 100%;
         }
     </style>
 </head>
@@ -431,12 +500,12 @@ if ($section_id > 0) {
                 <!-- Master Header Toolbar -->
                 <header class="ecr-header-toolbar">
                     <div class="header-title-group">
-                        <h2>
+                        <h1>
                             Final Grades Summary
                             <?php if ($subject_name): ?>
                                 <span class="subject-badge"><?= htmlspecialchars($subject_name) ?></span>
                             <?php endif; ?>
-                        </h2>
+                        </h1>
                     </div>
                     <div>
                         <button onclick="window.print()" class="btn-action">Print Summary</button>

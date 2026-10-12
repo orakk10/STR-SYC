@@ -78,21 +78,29 @@ if ($section_id > 0) {
             padding: 0;
             background-color: #f8fafc;
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
         }
 
-        .dashboard-wrapper {
-            display: flex;
-            min-height: 100vh;
+        .dashboard-wrapper { 
+            display: flex; 
+            height: 100vh; 
             width: 100%;
+            overflow: hidden;
             position: relative;
         }
 
-        main.content {
-            margin-left: 260px;
-            padding: 30px;
-            width: calc(100% - 260px);
-            box-sizing: border-box;
-            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+         main.content { 
+            flex-grow: 1;
+            margin-left: 260px; 
+            padding: 15px; 
+            width: 100%; 
+            max-width: 100% !important;
+            height: 100vh; 
+            box-sizing: border-box; 
+            display: flex; 
+            flex-direction: column; 
+            overflow: hidden; 
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         #sidebar:not(.active) ~ main.content {
@@ -211,13 +219,49 @@ if ($section_id > 0) {
             background-color: #1d4ed8;
         }
 
+        .mobile-toggle {
+            display: block;
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1100;
+            background: #2563eb;
+            color: #ffffff;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+        }
+
+        .sidebar {
+            height: 100vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            box-sizing: border-box;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.25);
+            border-radius: 10px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+
         /* Mobile View Rules */
         @media (max-width: 992px) {
             main.content {
                 margin-left: 0 !important;
                 width: 100% !important;
                 padding: 15px;
-                padding-top: 60px;
             }
 
             .input-layout {

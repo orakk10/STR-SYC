@@ -414,13 +414,22 @@ if ($current_section_id) {
 
         .mobile-toggle {
             display: none;
-            background: #2563eb;
-            color: white;
-            border: none;
-            padding: 8px 12px;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+            z-index: 999;
+            background: #2563eb; 
+            color: white; 
+            border: none; 
+            padding: 8px 12px; 
             border-radius: 6px;
             font-size: 1.1rem;
             cursor: pointer;
+            line-height: 1;
+        }
+
+        .mobile-toggle.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
         }
 
         .sidebar-close {

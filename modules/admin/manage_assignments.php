@@ -99,32 +99,265 @@ $assignments = $conn->query($query_str)->fetchAll(PDO::FETCH_ASSOC);
     <title>Manage Faculty Load Assignments | STRAND-SYNC</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
-        body { margin: 0; padding: 0; background-color: #f8fafc; font-family: 'Inter', system-ui, sans-serif; }
-        .dashboard-wrapper { display: flex; min-height: 100vh; width: 100%; }
-        main.content { flex-grow: 1; margin-left: 260px; padding: 30px; box-sizing: border-box; transition: margin-left 0.3s; }
-        #sidebar:not(.active) ~ main.content { margin-left: 0; width: 100%; }
-        
-        .admin-layout { display: grid; grid-template-columns: 360px 1fr; gap: 25px; margin-top: 20px; align-items: start; }
-        .card { background: white; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 2px 4px rgba(0,0,0,0.04); }
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.85rem; color: #475569; }
-        .form-group select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; font-size: 0.9rem; }
-        .btn-primary { background: #2563eb; color: white; border: none; padding: 12px; width: 100%; border-radius: 8px; font-weight: 700; cursor: pointer; transition: 0.2s; }
-        .btn-primary:hover { background: #1d4ed8; }
-        
-        .status-msg { padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem; font-weight: 600; }
-        .msg-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
-        .msg-warning { background: #fffbe3; color: #b45309; border: 1px solid #fde68a; }
-        .delete-btn { color: #ef4444; text-decoration: none; font-weight: bold; font-size: 0.85rem; }
-        .delete-btn:hover { text-decoration: underline; }
-        
-        .weight-pill { font-size: 0.75rem; background: #e0e7ff; color: #3730a3; padding: 2px 6px; border-radius: 4px; font-weight: 600; margin-left: 4px; }
-        .type-badge { font-size: 0.75rem; background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; font-weight: 600; margin-left: 6px; }
-        .table-container { background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; }
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #f8fafc;
+            font-family: 'Inter', system-ui, sans-serif;
+        }
 
-        @media (max-width: 1024px) {
-            main.content { margin-left: 0 !important; padding: 15px; padding-top: 60px; }
-            .admin-layout { grid-template-columns: 1fr; }
+        .dashboard-wrapper {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+            overflow: hidden;
+            position: relative;
+        }
+
+        main.content {
+            flex-grow: 1;
+            margin-left: 260px;
+            padding: 30px;
+            width: 100%;
+            max-width: 100%;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .content-header{
+            margin-left: 45px;
+        }
+
+        #sidebar:not(.active) ~ main.content {
+            margin-left: 0;
+            width: 100%;
+        }
+
+        .mobile-toggle {
+            display: none;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+            z-index: 999;
+        }
+
+        .mobile-toggle.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .sidebar-close {
+            display: none;
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0 5px;
+            line-height: 1;
+        }
+
+        .sidebar {
+            height: 100vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            box-sizing: border-box;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.25);
+            border-radius: 10px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .admin-layout {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 25px;
+            margin-top: 20px;
+            align-items: start;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #475569;
+        }
+
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px;
+            width: 100%;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+
+        .status-msg {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .msg-success {
+            background: #f0fdf4;
+            color: #16a34a;
+            border: 1px solid #bbf7d0;
+        }
+
+        .msg-warning {
+            background: #fffbe3;
+            color: #b45309;
+            border: 1px solid #fde68a;
+        }
+
+        .delete-btn {
+            color: #ef4444;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.85rem;
+        }
+
+        .delete-btn:hover {
+            text-decoration: underline;
+        }
+
+        .weight-pill {
+            display: inline-block;
+            font-size: 0.75rem;
+            background: #e0e7ff;
+            color: #3730a3;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            margin-left: 4px;
+        }
+
+        .type-badge {
+            display: inline-block;
+            font-size: 0.75rem;
+            background: #f1f5f9;
+            color: #475569;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            margin-left: 6px;
+        }
+
+        .table-container {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        @media (max-width: 768px) {
+            body {
+                overflow: auto;
+                min-height: 100vh;
+            }
+
+            .dashboard-wrapper {
+                height: auto;
+                min-height: 100vh;
+                overflow: visible;
+            }
+
+            .sidebar {
+                position: fixed;
+                left: -260px;
+                top: 0;
+                height: 100vh;
+                transition: 0.3s;
+                z-index: 1050;
+            }
+
+            .sidebar.active {
+                left: 0;
+            }
+
+            .mobile-toggle {
+                display: block;
+                position: fixed;
+                top: 10px;
+                left: 10px;
+                z-index: 1100;
+                background: #2563eb;
+                color: white;
+                border: none;
+                border-radius: 4px;
+            }
+
+            main.content {
+                margin-left: 0 !important;
+                width: 100%;
+                height: auto;
+                min-height: 100vh;
+                overflow: visible;
+                padding: 15px;
+                padding-top: 15px;
+            }
+
+            .admin-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .table-container {
+                overflow-y: visible;
+                max-height: none;
+            }
+
+            #sidebar.active .sidebar-close {
+                display: block;
+            }
         }
     </style>
 </head>
@@ -154,7 +387,7 @@ $assignments = $conn->query($query_str)->fetchAll(PDO::FETCH_ASSOC);
         <!-- Main Content Area -->
         <main class="content">
             <header class="content-header">
-                <h1>Faculty Teaching Assignments</h1>
+                <h1>Subject Assignment</h1>
                 <p>Assign subjects and sections to teachers to grant them E-Class Record access.</p>
             </header>
 
@@ -263,7 +496,16 @@ $assignments = $conn->query($query_str)->fetchAll(PDO::FETCH_ASSOC);
 
     <script>
         function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('active');
+            const sidebar = document.getElementById('sidebar');
+            const burger = document.getElementById('mobileBurger');
+
+            sidebar.classList.toggle('active');
+
+            if (sidebar.classList.contains('active')) {
+                burger.classList.add('hidden');
+            } else {
+                burger.classList.remove('hidden');
+            }
         }
     </script>
 </body>

@@ -132,28 +132,55 @@ if ($section_data) {
         }
 
         .dashboard-wrapper {
-            display: block;
-            height: 100vh;
+            display: flex;
+            min-height: 100vh;
+            height: auto;
             width: 100%;
+            overflow: visible;
             position: relative;
         }
 
         main.content {
+            flex-grow: 1;
             margin-left: 260px;
             padding: 30px;
-            width: calc(100% - 260px);
-            max-width: none;
+            width: 100%;
+            max-width: 100%;
             height: 100vh;
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
             transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            overflow-y: auto;
+            overflow: hidden;
         }
 
         #sidebar:not(.active) ~ main.content {
             margin-left: 0;
             width: 100%;
+        }
+
+        .sidebar {
+            height: 100vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            box-sizing: border-box;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.25);
+            border-radius: 10px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(255, 255, 255, 0.4);
         }
 
         .btn-table-action {
@@ -181,6 +208,64 @@ if ($section_data) {
             margin-bottom: 20px;
             font-size: 0.9rem;
             font-weight: 600;
+        }
+        .mobile-toggle {
+            display: block;
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1100;
+            background: #2563eb;
+            color: #ffffff;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+        }
+        @media (max-width: 1024px) {
+            html,
+            body {
+                height: auto;
+                min-height: 100%;
+                overflow-x: hidden;
+                overflow-y: auto;
+            }
+
+            body:has(.dashboard-wrapper) {
+                height: auto;
+                overflow-y: auto;
+            }
+
+            .dashboard-wrapper {
+                display: block;
+                width: 100%;
+                height: auto;
+                min-height: 100vh;
+                overflow: visible;
+            }
+
+            main.content {
+                margin-left: 0 !important;
+                width: 100%;
+                height: auto;
+                min-height: 100vh;
+                overflow: visible;
+                padding: 15px;
+                box-sizing: border-box;
+            }
+
+            .table-container {
+                overflow-y: visible;
+                max-height: none;
+            }
+
+            #sidebar.active .sidebar-close {
+                display: block;
+            }
+        }
+
+        #sidebar:not(.active) ~ main.content {
+            margin-left: 0;
+            width: 100%;
         }
     </style>
 </head>

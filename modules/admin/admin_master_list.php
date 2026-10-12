@@ -31,8 +31,8 @@ $students = $conn->query($query_str)->fetchAll();
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
         :root {
-            --primary: #6366f1;
-            --primary-hover: #4f46e5;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
             --slate-50: #f8fafc;
             --slate-100: #f1f5f9;
             --slate-200: #e2e8f0;
@@ -41,221 +41,277 @@ $students = $conn->query($query_str)->fetchAll();
             --slate-900: #0f172a;
         }
 
-        body { 
-            font-family: 'Inter', system-ui, -apple-system, sans-serif; 
-            background-color: var(--slate-50); 
-            color: var(--slate-900);
+        body {
             margin: 0;
             padding: 0;
-        }
-
-        .dashboard-wrapper { 
-            display: flex; 
-            height: 100vh; 
-            width: 100%;
             overflow: hidden;
-            position: relative;
+            background: var(--slate-50);
+            color: var(--slate-900);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
         }
 
-        .content-area {
+        .dashboard-wrapper {
+            display: flex;
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        main.content {
+            display: flex;
             flex-grow: 1;
-            margin-left: 260px;
-            padding: 30px;
+            flex-direction: column;
+            min-width: 0;
             width: 100%;
             max-width: 100%;
-            height: 100%;
+            height: 100vh;
+            margin-left: 260px;
+            padding: 30px;
             box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
             transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             overflow: hidden;
         }
 
-        .list-card { 
-            background: white; 
-            padding: 25px; 
-            border-radius: 12px; 
-            border: 1px solid var(--slate-200);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); 
+        #sidebar:not(.active) ~ main.content {
+            margin-left: 0;
         }
 
         .master-list-card {
-            flex: 1;
-            height: auto;
-            overflow: hidden;
             display: flex;
+            flex: 1;
             flex-direction: column;
+            min-height: 0;
+            padding: 25px;
+            overflow: hidden;
+            background: #fff;
+            border: 1px solid var(--slate-200);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
             box-sizing: border-box;
         }
 
-        .master-list-card .card-header,
-        .master-list-card .controls {
+        .master-list-header {
+            display: flex;
             flex: 0 0 auto;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 20px;
         }
 
-        .card-header h2 {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--slate-900);
-            letter-spacing: -0.025em;
+        .master-list-header h1 {
             margin: 0;
+            color: var(--slate-900);
+        }
+
+        .btn-group {
+            display: flex;
+            flex: 0 0 auto;
+            gap: 10px;
+        }
+
+        .btn-tool {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
+            padding: 10px 15px;
+            border: 0;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-decoration: none;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .btn-export {
+            background: #10b981;
+        }
+
+        .btn-export:hover {
+            background: #059669;
+        }
+
+        .btn-import {
+            background: #f59e0b;
+        }
+
+        .btn-import:hover {
+            background: #d97706;
+        }
+
+        .file-input-hidden {
+            display: none;
         }
 
         .controls {
             display: grid;
+            flex: 0 0 auto;
             grid-template-columns: 2fr 1fr 1fr;
-            gap: 12px;
-            background: var(--slate-100);
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 25px;
+            gap: 15px;
             align-items: end;
+            margin-bottom: 20px;
         }
 
         .controls label {
             display: block;
-            font-size: 0.75rem;
-            font-weight: 600;
+            margin-bottom: 6px;
             color: var(--slate-600);
-            margin-bottom: 5px;
-            text-transform: uppercase;
+            font-size: 0.85rem;
+            font-weight: 600;
         }
 
-        .controls input, .controls select {
+        .controls input,
+        .controls select {
             width: 100%;
+            min-height: 42px;
             padding: 10px 12px;
-            border: 1px solid var(--slate-200);
+            border: 1px solid #cbd5e1;
             border-radius: 8px;
-            font-size: 0.9rem;
+            background: #fff;
             color: var(--slate-700);
-            background: white;
+            font: inherit;
+            font-size: 0.9rem;
             box-sizing: border-box;
         }
 
-
-        .table-container { 
-            overflow-x: auto; 
-            overflow-y: auto;
-            margin-top: 10px;
-            flex: 1;
-            min-height: 0;
-            border: 1px solid var(--slate-200);
-            border-radius: 8px;
+        .controls input:focus,
+        .controls select:focus {
+            outline: 2px solid rgba(37, 99, 235, 0.2);
+            border-color: var(--primary);
         }
 
-        table { 
-            width: 100%; 
-            border-collapse: separate; 
+        .student-table-container {
+            flex: 1;
+            min-height: 0;
+            width: 100%;
+            overflow: auto;
+            border: 1px solid var(--slate-200);
+            border-radius: 8px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
             border-spacing: 0;
             table-layout: fixed;
         }
 
-        th { 
-            background-color: var(--slate-50);
-            text-align: left; 
-            padding: 12px 15px; 
-            color: var(--slate-600); 
-            font-size: 0.75rem; 
-            font-weight: 600;
-            text-transform: uppercase; 
-            border-bottom: 2px solid var(--slate-200);
-            letter-spacing: 0.05em;
+        th {
             position: sticky;
             top: 0;
-            z-index: 10;
+            z-index: 1;
+            padding: 12px 15px;
+            border-bottom: 2px solid var(--slate-200);
+            background: var(--slate-50);
+            color: var(--slate-600);
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-align: left;
+            text-transform: uppercase;
         }
 
-        td { 
-            padding: 16px 15px; 
-            border-bottom: 1px solid var(--slate-100); 
-            font-size: 0.95rem;
-            vertical-align: middle;
+        td {
+            padding: 14px 15px;
+            border-bottom: 1px solid var(--slate-100);
+            background: #fff;
             color: var(--slate-700);
-            background: white;
+            font-size: 0.9rem;
+            vertical-align: middle;
         }
 
-   
-        th:nth-child(1), td:nth-child(1) { width: 40%; }
-        th:nth-child(2), td:nth-child(2) { width: 15%; }
-        th:nth-child(3), td:nth-child(3) { width: 25%; }
-        th:nth-child(4), td:nth-child(4) { width: 20%; text-align: right; }
+        th:nth-child(1),
+        td:nth-child(1) {
+            width: 40%;
+        }
 
-        tr:hover td { 
-            background-color: #fcfcfd; 
+        th:nth-child(2),
+        td:nth-child(2) {
+            width: 15%;
+        }
+
+        th:nth-child(3),
+        td:nth-child(3) {
+            width: 25%;
+        }
+
+        th:nth-child(4),
+        td:nth-child(4) {
+            width: 20%;
+            text-align: right;
+        }
+
+        tbody tr:hover td {
+            background: #fcfcfd;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .student-name {
+            color: var(--slate-900);
+            font-weight: 600;
+        }
+
+        .grade-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: var(--slate-100);
+            color: var(--slate-700);
+            font-size: 0.8rem;
+            font-weight: 600;
         }
 
         .btn-print {
             display: inline-flex;
             align-items: center;
-            text-decoration: none;
-            background: #eff6ff;
-            color: #2563eb;
-            padding: 8px 16px;
+            justify-content: center;
+            padding: 8px 14px;
+            border: 1px solid #dbeafe;
             border-radius: 6px;
+            background: #eff6ff;
+            color: var(--primary);
             font-size: 0.85rem;
             font-weight: 600;
-            border: 1px solid #dbeafe;
-            transition: all 0.2s;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: background-color 0.2s ease, color 0.2s ease;
         }
 
-        .btn-print:hover { 
-            background: #2563eb; 
-            color: white; 
-            transform: translateY(-1px); 
+        .btn-print:hover {
+            background: var(--primary);
+            color: #fff;
         }
 
-        .btn-tool {
-            font-weight: 600;
-            padding: 10px 20px;
+        .empty-state {
+            padding: 40px 20px;
+            color: #94a3b8;
+            text-align: center;
         }
 
-        @media (max-width: 1024px) {
-            .dashboard-wrapper { 
-                overflow: auto; 
-                height: auto; 
-            }
-            
-            .content-area { 
-                margin-left: 0 !important; 
-                width: 100%; 
-                height: auto; 
-                overflow: visible;
-                padding: 15px; 
-            }
-            
-            .controls { 
-                grid-template-columns: 1fr; 
-            }
-            
-            .master-list-card { 
-                height: auto; 
-                overflow: visible; 
-            }
-            
-            .table-container { 
-                overflow-y: visible; 
-                max-height: none; 
-            }
-        }
-    
-        #sidebar:not(.active) ~ .content-area {
-            margin-left: 0;
-        }
         .sidebar-close {
             display: none;
-            background: none;
-            border: none;
-            color: white;
-            font-size: 1.5rem;
-            cursor: pointer;
             padding: 0 5px;
+            border: 0;
+            background: none;
+            color: #fff;
+            font-size: 1.5rem;
             line-height: 1;
+            cursor: pointer;
         }
 
         .sidebar {
             height: 100vh;
-            overflow-y: auto;
             overflow-x: hidden;
+            overflow-y: auto;
             box-sizing: border-box;
         }
 
@@ -268,12 +324,8 @@ $students = $conn->query($query_str)->fetchAll();
         }
 
         .sidebar::-webkit-scrollbar-thumb {
-            background-color: rgba(255, 255, 255, 0.25);
             border-radius: 10px;
-        }
-
-        .sidebar::-webkit-scrollbar-thumb:hover {
-            background-color: rgba(255, 255, 255, 0.4);
+            background: rgba(255, 255, 255, 0.25);
         }
 
         .mobile-toggle {
@@ -286,9 +338,89 @@ $students = $conn->query($query_str)->fetchAll();
             pointer-events: none;
         }
 
-        @media (max-width: 1024px) {
+        @media (max-width: 768px) {
+            body {
+                overflow: auto;
+            }
+
+            .dashboard-wrapper {
+                height: auto;
+                min-height: 100vh;
+                overflow: visible;
+            }
+
+            main.content {
+                width: 100%;
+                height: auto;
+                min-height: 100vh;
+                margin-left: 0 !important;
+                padding: 20px;
+                overflow: visible;
+            }
+
+            .master-list-card {
+                flex: initial;
+                min-height: 0;
+                overflow: visible;
+            }
+
+            .student-table-container {
+                flex: initial;
+                min-height: auto;
+                overflow-x: auto;
+                overflow-y: visible;
+            }
+
+            .controls {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .controls > div:first-child {
+                grid-column: 1 / -1;
+            }
+
+            table {
+                min-width: 680px;
+            }
+
             #sidebar.active .sidebar-close {
                 display: block;
+            }
+        }
+
+        @media (max-width: 600px) {
+
+            .master-list-card {
+                padding: 18px;
+            }
+
+            .master-list-header {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .master-list-header h1 {
+                font-size: 1.5rem;
+            }
+
+            .btn-group {
+                width: 100%;
+            }
+
+            .btn-tool {
+                flex: 1;
+                padding: 10px 8px;
+                font-size: 0.8rem;
+            }
+
+            .controls {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .controls > div:first-child {
+                grid-column: auto;
             }
         }
     </style>
@@ -307,6 +439,7 @@ $students = $conn->query($query_str)->fetchAll();
                 <li><a href="manage_strands.php">Manage Strands</a></li>
                 <li><a href="curriculum_guide.php">Curriculum Guide</a></li>
                 <li><a href="manage_sections.php">Manage Sections</a></li>
+                <li><a href="manage_assignments.php">Teaching Assignments</a></li>
                 <li><a href="admin_schedule.php">Manage Schedules</a></li>
                 <li><a href="manage_users.php">Manage Users</a></li>
                 <li><a href="admin_master_list.php" class="active">Master List</a></li>
@@ -316,25 +449,25 @@ $students = $conn->query($query_str)->fetchAll();
             </ul>
         </nav>
 
-        <main class="content-area">
-            <div class="list-card master-list-card">
-                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
-                    <h2>Master Student List</h2>
-                    <div class="btn-group" style="display: flex; gap: 10px;">
-                        <button type="button" id="exportStudentsButton" class="btn-tool btn-export" style="background: #10b981; color: white; border: none; padding: 10px 15px; border-radius: 8px; font-size: 0.85rem; cursor: pointer;">📥 Export CSV</button>
-                        <button onclick="document.getElementById('studentsFile').click()" class="btn-tool" style="background: #f59e0b; color: white; border: none; padding: 10px 15px; border-radius: 8px; font-size: 0.85rem; cursor: pointer;">📤 Import CSV</button>
-                        <input type="file" id="studentsFile" style="display:none" onchange="handleImport(this)">
-                    </div>
+        <main class="content">
+            <header class="content-header master-list-header">
+                <h1>Master Student List</h1>
+                <div class="btn-group">
+                    <button type="button" id="exportStudentsButton" class="btn-tool btn-export">📥 Export CSV</button>
+                    <button type="button" class="btn-tool btn-import" onclick="document.getElementById('studentsFile').click()">📤 Import CSV</button>
+                    <input type="file" id="studentsFile" class="file-input-hidden" onchange="handleImport(this)">
                 </div>
+            </header>
 
+            <div class="table-container master-list-card">
                 <div class="controls">
                     <div>
-                        <label>Search Name</label>
+                        <label for="searchRealTime">Search Name</label>
                         <input type="text" id="searchRealTime" placeholder="Type name to find instantly..." oninput="filterMasterList()">
                     </div>
                     
                     <div>
-                        <label>Level</label>
+                        <label for="gradeFilterRealTime">Level</label>
                         <select id="gradeFilterRealTime" onchange="filterMasterList()">
                             <option value="">All Grades</option>
                             <option value="11">Grade 11</option>
@@ -343,7 +476,7 @@ $students = $conn->query($query_str)->fetchAll();
                     </div>
 
                     <div>
-                        <label>Section</label>
+                        <label for="sectionFilterRealTime">Section</label>
                         <select id="sectionFilterRealTime" onchange="filterMasterList()">
                             <option value="">All Sections</option>
                             <?php foreach ($sections_dropdown as $s): ?>
@@ -355,7 +488,7 @@ $students = $conn->query($query_str)->fetchAll();
                     </div>
                 </div>
 
-                <div class="table-container">
+                <div class="student-table-container">
                     <table id="masterStudentTable">
                         <thead>
                             <tr>
@@ -373,20 +506,20 @@ $students = $conn->query($query_str)->fetchAll();
                                     data-name="<?php echo htmlspecialchars(strtolower($row['full_name'])); ?>"
                                     data-grade="<?php echo htmlspecialchars($row['grade_level']); ?>"
                                     data-section="<?php echo htmlspecialchars($row['section_id']); ?>">
-                                    <td><span style="font-weight: 600; color: var(--slate-900);"><?php echo htmlspecialchars($row['full_name']); ?></span></td>
-                                    <td><span class="badge" style="background: var(--slate-100); padding: 4px 8px; border-radius: 4px; font-size: 0.8rem;"><?php echo $row['grade_level']; ?></span></td>
+                                    <td><span class="student-name"><?php echo htmlspecialchars($row['full_name']); ?></span></td>
+                                    <td><span class="grade-badge"><?php echo htmlspecialchars($row['grade_level'] ?? ''); ?></span></td>
                                     <td><?php echo htmlspecialchars($row['section_name'] ?: 'Unassigned'); ?></td>
-                                    <td style="text-align: right;">
+                                    <td>
                                         <a href="print_report_card.php?student_id=<?php echo $row['id']; ?>" class="btn-print" target="_blank">Print SF9</a>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
                             <?php else: ?>
-                                <tr id="initialEmptyRow"><td colspan="4" style="text-align: center; padding: 60px; color: #94a3b8;">No student records found in database.</td></tr>
+                                <tr id="initialEmptyRow"><td colspan="4" class="empty-state">No student records found in database.</td></tr>
                         <?php endif; ?>
                             
                             <tr id="noResultsFallbackRow" style="display: none;">
-                                <td colspan="4" style="text-align: center; padding: 60px; color: #94a3b8;">
+                                <td colspan="4" class="empty-state">
                                     No student records found matching your criteria.
                                 </td>
                             </tr>
