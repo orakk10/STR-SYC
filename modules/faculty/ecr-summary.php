@@ -141,14 +141,16 @@ if ($section_id > 0) {
         }
 
         .dashboard-wrapper {
-            display: block;
+            display: flex;
             height: 100vh;
             width: 100%;
+            overflow: hidden;
             position: relative;
         }
 
         main.content {
-            margin-left: 0;
+            flex-grow: 1;
+            margin-left: 260px;
             padding: 15px;
             width: 100%;
             max-width: 100% !important;
@@ -160,9 +162,9 @@ if ($section_id > 0) {
             transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        #sidebar.active ~ main.content {
-            margin-left: 260px;
-            width: calc(100% - 260px);
+        #sidebar:not(.active) ~ main.content {
+            margin-left: 0;
+            width: 100%;
         }
 
         .ecr-card-master {
@@ -177,7 +179,7 @@ if ($section_id > 0) {
         }
 
         .ecr-header-toolbar {
-            padding-left: 40px;
+            padding: 15px 20px;
             border-bottom: 1px solid #e2e8f0;
             display: flex;
             align-items: center;
@@ -185,7 +187,7 @@ if ($section_id > 0) {
             background: #ffffff;
         }
 
-        .header-title-group h2 {
+        .header-title-group h1 {
             font-size: 1.1rem;
             font-weight: 700;
             margin: 0;
@@ -392,7 +394,8 @@ if ($section_id > 0) {
             background: #fee2e2;
             color: #b91c1c;
         }
-         .mobile-toggle {
+
+        .mobile-toggle {
             display: block;
             position: fixed;
             top: 10px;
@@ -412,63 +415,12 @@ if ($section_id > 0) {
             box-sizing: border-box;
         }
 
-        .sidebar::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .sidebar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .sidebar::-webkit-scrollbar-thumb {
-            background-color: rgba(255, 255, 255, 0.25);
-            border-radius: 10px;
-        }
-
-        .sidebar::-webkit-scrollbar-thumb:hover {
-            background-color: rgba(255, 255, 255, 0.4);
-        }
-
-       @media (max-width: 1024px) {
-            html,
-            body {
-                height: auto;
-                min-height: 100%;
-                overflow-x: hidden;
-                overflow-y: auto;
-            }
-
-            body:has(.dashboard-wrapper) {
-                height: auto;
-                overflow-y: auto;
-            }
-
+        @media (max-width: 1024px) {
             main.content {
                 margin-left: 0 !important;
-                width: 100%;
-                height: auto;
-                overflow: visible;
+                width: 100% !important;
                 padding: 15px;
             }
-
-            #sidebar.active ~ main.content {
-                margin-left: 0 !important;
-                width: 100%;
-            }
-
-            .table-container {
-                overflow-y: visible;
-                max-height: none;
-            }
-
-            #sidebar.active .sidebar-close {
-                display: block;
-            }
-        }
-
-        #sidebar:not(.active) ~ main.content {
-            margin-left: 0;
-            width: 100%;
         }
     </style>
 </head>
@@ -484,12 +436,12 @@ if ($section_id > 0) {
                 <button class="sidebar-close" onclick="toggleSidebar()">✕</button>
             </div>
             <ul class="menu">
-                <li><a href="faculty_dashboard.php" onclick="toggleSidebar()">Dashboard</a></li>
-                <li><a href="faculty_schedule.php" onclick="toggleSidebar()">Manage Schedule</a></li>
-                <li><a href="ecr-inputdata.php" onclick="toggleSidebar()">ECR Setup & Roster</a></li>
-                <li><a href="ecr-view.php?assignment_id=<?= $assignment_id ?>" onclick="toggleSidebar()">Encode Term Grades</a></li>
-                <li><a href="ecr-summary.php?assignment_id=<?= $assignment_id ?>" class="active" onclick="toggleSidebar()">ECR Summary</a></li>
-                <li><a href="../../manifest/logout.php" class="logout" onclick="toggleSidebar()">Logout</a></li>
+                <li><a href="faculty_dashboard.php">Dashboard</a></li>
+                <li><a href="faculty_schedule.php">Manage Schedule</a></li>
+                <li><a href="ecr-inputdata.php?assignment_id=<?= $assignment_id ?>">ECR Setup & Roster</a></li>
+                <li><a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=1">Encode Term Grades</a></li>
+                <li><a href="ecr-summary.php?assignment_id=<?= $assignment_id ?>" class="active">ECR Summary</a></li>
+                <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>
 
@@ -535,9 +487,9 @@ if ($section_id > 0) {
                     <?php endif; ?>
                 </div>
 
-                <!-- Navigation Tab Strip -->
+                <!-- Navigation Tab Strip carrying context -->
                 <nav class="ecr-tab-bar">
-                    <a href="ecr-inputdata.php" class="tab-link">INPUT DATA</a>
+                    <a href="ecr-inputdata.php?assignment_id=<?= $assignment_id ?>" class="tab-link">INPUT DATA</a>
                     <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=1" class="tab-link">TERM 1</a>
                     <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=2" class="tab-link">TERM 2</a>
                     <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=3" class="tab-link">TERM 3</a>
@@ -576,7 +528,7 @@ if ($section_id > 0) {
                                         
                                         $validTerms = array_filter([$t1,$t2, $t3], fn($v) => $v !== null);$average = count($validTerms) > 0 ? round(array_sum($validTerms) / count($validTerms), 2) : ($student['final_grade'] ?? null);
                                         
-                                        $letter  =$average ? getDepEdDescriptor($average) : '-';$remarks = $average ? ($average >= 75 ? 'PASSED' : 'FAILED') : '-';
+                                        $letter  =$average !== null ? getDepEdDescriptor($average) : '-';$remarks = $average !== null ? ($average >= 75 ? 'PASSED' : 'FAILED') : '-';
                                     ?>
                                     <tr class="summary-row" data-id="<?= $student['id'] ?>">
                                         <td class="col-sticky-name" title="<?= htmlspecialchars($student['name']) ?>">
@@ -617,7 +569,7 @@ if ($section_id > 0) {
                                         
                                         $validTerms = array_filter([$t1,$t2, $t3], fn($v) => $v !== null);$average = count($validTerms) > 0 ? round(array_sum($validTerms) / count($validTerms), 2) : ($student['final_grade'] ?? null);
                                         
-                                        $letter  =$average ? getDepEdDescriptor($average) : '-';$remarks = $average ? ($average >= 75 ? 'PASSED' : 'FAILED') : '-';
+                                        $letter  =$average !== null ? getDepEdDescriptor($average) : '-';$remarks = $average !== null ? ($average >= 75 ? 'PASSED' : 'FAILED') : '-';
                                     ?>
                                     <tr class="summary-row" data-id="<?= $student['id'] ?>">
                                         <td class="col-sticky-name" title="<?= htmlspecialchars($student['name']) ?>">

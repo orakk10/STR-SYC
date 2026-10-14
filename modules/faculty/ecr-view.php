@@ -74,35 +74,69 @@ if ($assignment_id > 0) {
         $weights      = getComponentWeights($subject_weight_data['subject_type'] ?? 'Core');
         $ww_weight    = $weights['ww'];
         $pt_weight    = $weights['pt'];
-        $qa_weight    =$weights['qa'];
-        $subject_name =$subject_weight_data['subject_name'] ?? "";
-        $section_id   = (int)$subject_weight_data['section_id'];$section_name = "Grade " . $subject_weight_data['grade_level'] . " - " . $subject_weight_data['section_name'];
+        $qa_weight    = $weights['qa'];
+        $subject_name = $subject_weight_data['subject_name'] ?? "";
+        $section_id   = (int)$subject_weight_data['section_id'];
+        $section_name = "Grade " . $subject_weight_data['grade_level'] . " - " . $subject_weight_data['section_name'];
     }
 }
 
-// 6. Fetch Section Students (Split by Gender)
-$males   = [];$females = [];
+// 6. Dynamic Assessment Components Query (Driven by ecr_assessment_components)
+$term_str = "Term " . $term;
+$db_components = ['WW' => [], 'PT' => [], 'QA' => []];
+
+if ($assignment_id > 0) {
+    $components_stmt = $pdo->prepare("
+        SELECT id, category, task_number, highest_possible_score 
+        FROM ecr_assessment_components 
+        WHERE assignment_id = :assignment_id AND term = :term
+        ORDER BY category ASC, task_number ASC
+    ");
+    $components_stmt->execute([
+        'assignment_id' => $assignment_id,
+        'term' => $term_str
+    ]);
+    $raw_components = $components_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($raw_components as $comp) {
+        if (isset($db_components[$comp['category']])) {
+            $db_components[$comp['category']][$comp['task_number']] = $comp;
+        }
+    }
+}
+
+// Fallback lists if no assessment components exist yet for this term
+$ww_list = !empty($db_components['WW']) ? $db_components['WW'] : array_fill(1, 8, ['highest_possible_score' => 100]);
+$pt_list = !empty($db_components['PT']) ? $db_components['PT'] : array_fill(1, 6, ['highest_possible_score' => 100]);
+$qa_list = !empty($db_components['QA']) ? $db_components['QA'] : array_fill(1, 1, ['highest_possible_score' => 100]);
+
+// Total table column span calculation for grouping headers
+$total_grid_columns = 1 + count($ww_list) + 2 + count($pt_list) + 2 + count($qa_list) + 2 + 4;
+
+// 7. Fetch Section Students (Split by Gender)
+$males   = [];
+$females = [];
 
 if ($section_id > 0) {
-    $m_stmt =$pdo->prepare("
+    $m_stmt = $pdo->prepare("
         SELECT u.id, u.full_name AS name 
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
         WHERE u.section_id = :section_id AND u.role = 'student' AND (sp.gender = 'Male' OR sp.gender IS NULL)
         ORDER BY u.full_name ASC
     ");
-    $m_stmt->execute(['section_id' =>$section_id]);
-    $males =$m_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $m_stmt->execute(['section_id' => $section_id]);
+    $males = $m_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $f_stmt =$pdo->prepare("
+    $f_stmt = $pdo->prepare("
         SELECT u.id, u.full_name AS name 
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
         WHERE u.section_id = :section_id AND u.role = 'student' AND sp.gender = 'Female'
         ORDER BY u.full_name ASC
     ");
-    $f_stmt->execute(['section_id' =>$section_id]);
-    $females =$f_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $f_stmt->execute(['section_id' => $section_id]);
+    $females = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 ?>
 
@@ -196,7 +230,7 @@ if ($section_id > 0) {
             background: #ffffff;
         }
 
-        .header-title-group h2 {
+        .header-title-group h1 {
             font-size: 1.1rem;
             font-weight: 700;
             margin: 0;
@@ -571,7 +605,7 @@ if ($section_id > 0) {
                         </div>
                     </div>
 
-                    <!-- Standard Flow Active Roster Text -->
+                    <!-- Active Roster Indicator -->
                     <?php if ($section_name): ?>
                         <div class="roster-info-pill">
                             Active Roster: <span><?= htmlspecialchars($section_name) ?></span>
@@ -592,46 +626,72 @@ if ($section_id > 0) {
                         <thead>
                             <tr>
                                 <th rowspan="2" class="col-sticky-name">LEARNERS' NAMES</th>
-                                <th colspan="8" class="th-ww">
+                                
+                                <!-- Dynamic WW Header Span -->
+                                <th colspan="<?= count($ww_list) ?>" class="th-ww">
                                     WRITTEN WORKS (<?= $ww_weight * 100 ?>%)
                                 </th>
                                 <th colspan="2" class="th-ww th-calc">WW CALC</th>
-                                <th colspan="6" class="th-pt">
+
+                                <!-- Dynamic PT Header Span -->
+                                <th colspan="<?= count($pt_list) ?>" class="th-pt">
                                     PERFORMANCE TASKS (<?= $pt_weight * 100 ?>%)
                                 </th>
                                 <th colspan="2" class="th-pt th-calc">PT CALC</th>
-                                <th colspan="3" class="th-qa">
+
+                                <!-- Dynamic QA Header Span -->
+                                <th colspan="<?= count($qa_list) ?>" class="th-qa">
                                     EXAMS (<?= $qa_weight * 100 ?>%)
                                 </th>
                                 <th colspan="2" class="th-qa th-calc">QA CALC</th>
+
                                 <th rowspan="2" class="th-final" style="width: 44px;">Initial</th>
                                 <th rowspan="2" class="th-final" style="width: 48px;">Trans.</th>
                                 <th rowspan="2" class="th-final" style="width: 44px;">Desc.</th>
                                 <th rowspan="2" class="th-final" style="width: 54px;">Remarks</th>
                             </tr>
 
+                            <!-- Dynamic HPS Input Row -->
                             <tr class="hps-row">
-                                <?php for ($i = 1; $i <= 8; $i++): ?>
+                                <!-- WW HPS Inputs -->
+                                <?php foreach ($ww_list as $task_num =>$comp): ?>
                                     <th>
-                                        <input type="number" min="1" max="100" class="hps-input" data-category="WW" data-task-number="<?= $i ?>" data-component-id="<?= $i ?>" placeholder="WW<?= $i ?>">
+                                        <input type="number" min="1" max="100" class="hps-input" 
+                                               data-category="WW" 
+                                               data-task-number="<?= $task_num ?>" 
+                                               data-component-id="<?= $comp['id'] ?? $task_num ?>"
+                                               value="<?= (float)($comp['highest_possible_score'] ?? 100) ?>" 
+                                               placeholder="WW<?= $task_num ?>">
                                     </th>
-                                <?php endfor; ?>
+                                <?php endforeach; ?>
                                 <th class="th-calc" style="width: 26px;">PS</th>
                                 <th class="th-calc" style="width: 26px;">WS</th>
 
-                                <?php for ($i = 1; $i <= 6; $i++): ?>
+                                <!-- PT HPS Inputs -->
+                                <?php foreach ($pt_list as $task_num =>$comp): ?>
                                     <th>
-                                        <input type="number" min="1" max="100" class="hps-input" data-category="PT" data-task-number="<?= $i ?>" data-component-id="<?= 8 + $i ?>" placeholder="PT<?= $i ?>">
+                                        <input type="number" min="1" max="100" class="hps-input" 
+                                               data-category="PT" 
+                                               data-task-number="<?= $task_num ?>" 
+                                               data-component-id="<?= $comp['id'] ?? ($task_num + 8) ?>"
+                                               value="<?= (float)($comp['highest_possible_score'] ?? 100) ?>" 
+                                               placeholder="PT<?= $task_num ?>">
                                     </th>
-                                <?php endfor; ?>
+                                <?php endforeach; ?>
                                 <th class="th-calc" style="width: 26px;">PS</th>
                                 <th class="th-calc" style="width: 26px;">WS</th>
 
-                                <?php for ($i = 1; $i <= 3; $i++): ?>
+                                <!-- QA HPS Inputs -->
+                                <?php foreach ($qa_list as $task_num =>$comp): ?>
                                     <th>
-                                        <input type="number" min="1" max="100" class="hps-input" data-category="QA" data-task-number="<?= $i ?>" data-component-id="<?= 14 + $i ?>" placeholder="QA<?= $i ?>">
+                                        <input type="number" min="1" max="100" class="hps-input" 
+                                               data-category="QA" 
+                                               data-task-number="<?= $task_num ?>" 
+                                               data-component-id="<?= $comp['id'] ?? ($task_num + 14) ?>"
+                                               value="<?= (float)($comp['highest_possible_score'] ?? 100) ?>" 
+                                               placeholder="QA<?= $task_num ?>">
                                     </th>
-                                <?php endfor; ?>
+                                <?php endforeach; ?>
                                 <th class="th-calc" style="width: 26px;">PS</th>
                                 <th class="th-calc" style="width: 26px;">WS</th>
                             </tr>
@@ -639,11 +699,11 @@ if ($section_id > 0) {
                         <tbody>
                             <!-- MALE SECTION -->
                             <tr class="group-header">
-                                <td colspan="27">MALE LEARNERS</td>
+                                <td colspan="<?= $total_grid_columns ?>">MALE LEARNERS</td>
                             </tr>
                             <?php if (empty($males)): ?>
                                 <tr>
-                                    <td colspan="27" style="padding: 10px !important; color: #94a3b8;">No male students registered in this section.</td>
+                                    <td colspan="<?= $total_grid_columns ?>" style="padding: 10px !important; color: #94a3b8;">No male students registered in this section.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($males as $index =>$student): ?>
@@ -652,30 +712,42 @@ if ($section_id > 0) {
                                             <?= ($index + 1) . '. ' . htmlspecialchars($student['name']) ?>
                                         </td>
                                         
-                                        <!-- Written Works (1-8) -->
-                                        <?php for ($i = 1; $i <= 8; $i++): ?>
+                                        <!-- Dynamic Written Works Inputs -->
+                                        <?php foreach ($ww_list as $task_num =>$comp): ?>
                                             <td>
-                                                <input type="number" min="0" max="100" class="score-input" data-category="WW" data-component-id="<?= $i ?>" data-student-id="<?= $student['id'] ?>">
+                                                <input type="number" min="0" max="100" class="score-input" 
+                                                       data-category="WW" 
+                                                       data-task-number="<?= $task_num ?>"
+                                                       data-component-id="<?= $comp['id'] ?? $task_num ?>" 
+                                                       data-student-id="<?= $student['id'] ?>">
                                             </td>
-                                        <?php endfor; ?>
+                                        <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="WW">0.00</td>
                                         <td class="ws-cell cell-calc" data-category="WW" style="font-weight: 600;">0.00</td>
 
-                                        <!-- Performance Tasks (1-6) -->
-                                        <?php for ($i = 1; $i <= 6; $i++): ?>
+                                        <!-- Dynamic Performance Tasks Inputs -->
+                                        <?php foreach ($pt_list as $task_num =>$comp): ?>
                                             <td>
-                                                <input type="number" min="0" max="100" class="score-input" data-category="PT" data-component-id="<?= 8 + $i ?>" data-student-id="<?= $student['id'] ?>">
+                                                <input type="number" min="0" max="100" class="score-input" 
+                                                       data-category="PT" 
+                                                       data-task-number="<?= $task_num ?>"
+                                                       data-component-id="<?= $comp['id'] ?? ($task_num + 8) ?>" 
+                                                       data-student-id="<?= $student['id'] ?>">
                                             </td>
-                                        <?php endfor; ?>
+                                        <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="PT">0.00</td>
                                         <td class="ws-cell cell-calc" data-category="PT" style="font-weight: 600;">0.00</td>
 
-                                        <!-- Quarterly Exam (1-3) -->
-                                        <?php for ($i = 1; $i <= 3; $i++): ?>
+                                        <!-- Dynamic Quarterly Exam Inputs -->
+                                        <?php foreach ($qa_list as $task_num =>$comp): ?>
                                             <td>
-                                                <input type="number" min="0" max="100" class="score-input" data-category="QA" data-component-id="<?= 14 + $i ?>" data-student-id="<?= $student['id'] ?>">
+                                                <input type="number" min="0" max="100" class="score-input" 
+                                                       data-category="QA" 
+                                                       data-task-number="<?= $task_num ?>"
+                                                       data-component-id="<?= $comp['id'] ?? ($task_num + 14) ?>" 
+                                                       data-student-id="<?= $student['id'] ?>">
                                             </td>
-                                        <?php endfor; ?>
+                                        <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="QA">0.00</td>
                                         <td class="ws-cell cell-calc" data-category="QA" style="font-weight: 600;">0.00</td>
 
@@ -692,11 +764,11 @@ if ($section_id > 0) {
 
                             <!-- FEMALE SECTION -->
                             <tr class="group-header">
-                                <td colspan="27">FEMALE LEARNERS</td>
+                                <td colspan="<?= $total_grid_columns ?>">FEMALE LEARNERS</td>
                             </tr>
                             <?php if (empty($females)): ?>
                                 <tr>
-                                    <td colspan="27" style="padding: 10px !important; color: #94a3b8;">No female students registered in this section.</td>
+                                    <td colspan="<?= $total_grid_columns ?>" style="padding: 10px !important; color: #94a3b8;">No female students registered in this section.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($females as $index =>$student): ?>
@@ -705,30 +777,42 @@ if ($section_id > 0) {
                                             <?= ($index + 1) . '. ' . htmlspecialchars($student['name']) ?>
                                         </td>
                                         
-                                        <!-- Written Works (1-8) -->
-                                        <?php for ($i = 1; $i <= 8; $i++): ?>
+                                        <!-- Dynamic Written Works Inputs -->
+                                        <?php foreach ($ww_list as $task_num =>$comp): ?>
                                             <td>
-                                                <input type="number" min="0" max="100" class="score-input" data-category="WW" data-component-id="<?= $i ?>" data-student-id="<?= $student['id'] ?>">
+                                                <input type="number" min="0" max="100" class="score-input" 
+                                                       data-category="WW" 
+                                                       data-task-number="<?= $task_num ?>"
+                                                       data-component-id="<?= $comp['id'] ?? $task_num ?>" 
+                                                       data-student-id="<?= $student['id'] ?>">
                                             </td>
-                                        <?php endfor; ?>
+                                        <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="WW">0.00</td>
                                         <td class="ws-cell cell-calc" data-category="WW" style="font-weight: 600;">0.00</td>
 
-                                        <!-- Performance Tasks (1-6) -->
-                                        <?php for ($i = 1; $i <= 6; $i++): ?>
+                                        <!-- Dynamic Performance Tasks Inputs -->
+                                        <?php foreach ($pt_list as $task_num =>$comp): ?>
                                             <td>
-                                                <input type="number" min="0" max="100" class="score-input" data-category="PT" data-component-id="<?= 8 + $i ?>" data-student-id="<?= $student['id'] ?>">
+                                                <input type="number" min="0" max="100" class="score-input" 
+                                                       data-category="PT" 
+                                                       data-task-number="<?= $task_num ?>"
+                                                       data-component-id="<?= $comp['id'] ?? ($task_num + 8) ?>" 
+                                                       data-student-id="<?= $student['id'] ?>">
                                             </td>
-                                        <?php endfor; ?>
+                                        <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="PT">0.00</td>
                                         <td class="ws-cell cell-calc" data-category="PT" style="font-weight: 600;">0.00</td>
 
-                                        <!-- Quarterly Exam (1-3) -->
-                                        <?php for ($i = 1; $i <= 3; $i++): ?>
+                                        <!-- Dynamic Quarterly Exam Inputs -->
+                                        <?php foreach ($qa_list as $task_num =>$comp): ?>
                                             <td>
-                                                <input type="number" min="0" max="100" class="score-input" data-category="QA" data-component-id="<?= 14 + $i ?>" data-student-id="<?= $student['id'] ?>">
+                                                <input type="number" min="0" max="100" class="score-input" 
+                                                       data-category="QA" 
+                                                       data-task-number="<?= $task_num ?>"
+                                                       data-component-id="<?= $comp['id'] ?? ($task_num + 14) ?>" 
+                                                       data-student-id="<?= $student['id'] ?>">
                                             </td>
-                                        <?php endfor; ?>
+                                        <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="QA">0.00</td>
                                         <td class="ws-cell cell-calc" data-category="QA" style="font-weight: 600;">0.00</td>
 

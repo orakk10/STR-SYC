@@ -13,53 +13,98 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'ad
     exit();
 }
 
-$user_id   = $_SESSION['user_id'];
-$user_role = $_SESSION['role'];
+$user_id   =$_SESSION['user_id'];
+$user_role =$_SESSION['role'];
 
-// 3. Fetch Teacher Info & Assigned Section Details from DB
-$teacher_query = $pdo->prepare("
-    SELECT u.full_name, s.id as section_id, s.section_name, s.grade_level, st.strand_code, st.strand_name
-    FROM users u
-    LEFT JOIN sections s ON s.adviser_id = u.id
-    LEFT JOIN strands st ON s.strand_id = st.id
-    WHERE u.id = :user_id
+// 3. Query Selected Term & Assignment
+$term = isset($_GET['term']) ? (int)$_GET['term'] : 1;
+if (!in_array($term, [1, 2, 3])) {$term = 1; }
+
+$assignment_id = isset($_GET['assignment_id']) ? (int)$_GET['assignment_id'] : 0;
+
+// 4. Fetch All Active Teaching Assignments for Faculty
+$assignments_stmt =$pdo->prepare("
+    SELECT sa.id AS assignment_id, sub.subject_name, sub.subject_code, sub.type AS subject_type,
+           sec.id AS section_id, sec.section_name, sec.grade_level, st.strand_code, st.strand_name
+    FROM subject_assignments sa
+    JOIN subjects sub ON sa.subject_id = sub.id
+    JOIN sections sec ON sa.section_id = sec.id
+    LEFT JOIN strands st ON sec.strand_id = st.id
+    WHERE sa.faculty_id = :faculty_id
+    ORDER BY sec.grade_level ASC, sec.section_name ASC, sub.subject_name ASC
 ");
-$teacher_query->execute(['user_id' => $user_id]);
-$teacher_data = $teacher_query->fetch(PDO::FETCH_ASSOC);
+$assignments_stmt->execute(['faculty_id' =>$user_id]);
+$my_assignments =$assignments_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$section_id = $teacher_data['section_id'] ?? 0;
+if ($assignment_id === 0 && !empty($my_assignments)) {
+    $assignment_id = (int)$my_assignments[0]['assignment_id'];
+}
 
-// Infer Track based on strand_code or strand_name
-$strand_identifier = ($teacher_data['strand_code'] ?? '') . ' ' . ($teacher_data['strand_name'] ?? '');
-$is_tech_track = (stripos($strand_identifier, 'TVL') !== false || stripos($strand_identifier, 'ICT') !== false);
+// 5. Extract Active Assignment Data
+$active_assignment = null;
+foreach ($my_assignments as$assign) {
+    if ((int)$assign['assignment_id'] ===$assignment_id) {
+        $active_assignment =$assign;
+        break;
+    }
+}
 
-// 4. Fetch Active Student Roster by Gender
-$male_students = [];
-$female_students = [];
+$section_id =$active_assignment['section_id'] ?? 0;
+$strand_identifier = ($active_assignment['strand_code'] ?? '') . ' ' . ($active_assignment['strand_name'] ?? '');$is_tech_track = (stripos($strand_identifier, 'TVL') !== false || stripos($strand_identifier, 'ICT') !== false);
+
+// 6. Fetch Teacher Name
+$teacher_stmt =$pdo->prepare("SELECT full_name FROM users WHERE id = :user_id");
+$teacher_stmt->execute(['user_id' =>$user_id]);
+$teacher_name =$teacher_stmt->fetchColumn() ?: 'Unassigned Teacher';
+
+// 7. Fetch Active Student Roster by Gender for Selected Assignment Section
+$male_students = [];$female_students = [];
 
 if ($section_id > 0) {
     // Fetch Male Roster
-    $m_stmt = $pdo->prepare("
+    $m_stmt =$pdo->prepare("
         SELECT u.id, u.username AS lrn, u.full_name 
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
         WHERE u.section_id = :section_id AND u.role = 'student' AND (sp.gender = 'Male' OR sp.gender IS NULL)
         ORDER BY u.full_name ASC
     ");
-    $m_stmt->execute(['section_id' => $section_id]);
-    $male_students = $m_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $m_stmt->execute(['section_id' =>$section_id]);
+    $male_students =$m_stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Fetch Female Roster
-    $f_stmt = $pdo->prepare("
+    $f_stmt =$pdo->prepare("
         SELECT u.id, u.username AS lrn, u.full_name 
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
         WHERE u.section_id = :section_id AND u.role = 'student' AND sp.gender = 'Female'
         ORDER BY u.full_name ASC
     ");
-    $f_stmt->execute(['section_id' => $section_id]);
-    $female_students = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $f_stmt->execute(['section_id' =>$section_id]);
+    $female_students =$f_stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
+// 8. Fetch Configured Assessment Counts & Scores from DB
+$term_str = "Term " . $term;
+$db_components = ['WW' => [], 'PT' => [], 'QA' => []];
+
+if ($assignment_id > 0) {
+    $comp_stmt =$pdo->prepare("
+        SELECT category, task_number, highest_possible_score
+        FROM ecr_assessment_components
+        WHERE assignment_id = :assignment_id AND term = :term
+        ORDER BY category ASC, task_number ASC
+    ");
+    $comp_stmt->execute(['assignment_id' => $assignment_id, 'term' =>$term_str]);
+    $rows =$comp_stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as$r) {
+        $db_components[$r['category']][$r['task_number']] =$r['highest_possible_score'];
+    }
+}
+
+$ww_count = !empty($db_components['WW']) ? count($db_components['WW']) : 8;
+$pt_count = !empty($db_components['PT']) ? count($db_components['PT']) : 6;
+$qa_count = !empty($db_components['QA']) ? count($db_components['QA']) : 1;
 ?>
 
 <!DOCTYPE html>
@@ -72,7 +117,6 @@ if ($section_id > 0) {
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <link rel="stylesheet" href="../../assets/css/style.css">
     <style>
-        /* Base Page Setup */
         body {
             margin: 0;
             padding: 0;
@@ -89,7 +133,7 @@ if ($section_id > 0) {
             position: relative;
         }
 
-         main.content { 
+        main.content { 
             flex-grow: 1;
             margin-left: 260px; 
             padding: 15px; 
@@ -99,7 +143,7 @@ if ($section_id > 0) {
             box-sizing: border-box; 
             display: flex; 
             flex-direction: column; 
-            overflow: hidden; 
+            overflow-y: auto; 
             transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
@@ -108,7 +152,6 @@ if ($section_id > 0) {
             width: 100%;
         }
 
-        /* ECR Card & Header Custom Styling */
         .ecr-card {
             background: white;
             border-radius: 12px;
@@ -118,7 +161,6 @@ if ($section_id > 0) {
             margin-bottom: 20px;
         }
 
-        /* Fixed High Contrast Card Headers */
         .card-title {
             background-color: #0f3854;
             color: #ffffff !important;
@@ -138,33 +180,92 @@ if ($section_id > 0) {
             align-items: center;
             justify-content: space-between;
             margin-bottom: 12px;
-            gap: 15px;
+            gap: 12px;
         }
 
         .field-group label {
-            font-size: 0.8rem;
+            font-size: 0.78rem;
             font-weight: 700;
             color: #475569;
-            white-space: nowrap;
+            flex: 1;
+            white-space: normal;
+            word-break: break-word;
         }
 
-        .form-input {
-            width: 65%;
+        .form-input, .form-select {
+            width: 55%;
             padding: 8px 12px;
             border: 1px solid #cbd5e1;
             border-radius: 6px;
+            background-color: #ffffff;
+            font-size: 0.85rem;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        .form-input[readonly] {
             background-color: #f8fafc;
+        }
+
+        /* Interactive Counter Controls */
+        .counter-box {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-count {
+            width: 30px;
+            height: 30px;
+            background: #e2e8f0;
+            color: #0f172a;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s ease;
+        }
+
+        .btn-count:hover {
+            background: #cbd5e1;
+        }
+
+        .form-input-count {
+            width: 45px !important;
+            text-align: center;
+            font-weight: 700;
+            padding: 4px !important;
+            background: #ffffff !important;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
             font-size: 0.85rem;
         }
 
-        /* Responsive Grid Layout */
+        .btn-action {
+            background-color: #2563eb;
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            font-weight: 600;
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .btn-action:hover {
+            background-color: #1d4ed8;
+        }
+
         .input-layout {
             display: grid;
-            grid-template-columns: 350px 1fr;
+            grid-template-columns: 380px 1fr;
             gap: 20px;
         }
 
-        /* Roster Display Styles */
         .gender-block {
             margin-bottom: 20px;
         }
@@ -239,24 +340,6 @@ if ($section_id > 0) {
             box-sizing: border-box;
         }
 
-        .sidebar::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .sidebar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .sidebar::-webkit-scrollbar-thumb {
-            background-color: rgba(255, 255, 255, 0.25);
-            border-radius: 10px;
-        }
-
-        .sidebar::-webkit-scrollbar-thumb:hover {
-            background-color: rgba(255, 255, 255, 0.4);
-        }
-
-        /* Mobile View Rules */
         @media (max-width: 992px) {
             main.content {
                 margin-left: 0 !important;
@@ -274,20 +357,8 @@ if ($section_id > 0) {
                 gap: 5px;
             }
 
-            .form-input {
+            .form-input, .form-select {
                 width: 100%;
-            }
-
-            .ecr-header {
-                flex-direction: column;
-                gap: 10px;
-                text-align: center;
-            }
-
-            .btn-proceed {
-                width: 100%;
-                text-align: center;
-                box-sizing: border-box;
             }
         }
     </style>
@@ -297,7 +368,6 @@ if ($section_id > 0) {
     <button class="mobile-toggle" id="mobileBurger" onclick="toggleSidebar()">☰</button>
 
     <div class="dashboard-wrapper">
-        <!-- Sidebar Navigation -->
         <nav class="sidebar" id="sidebar">
             <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                 <h3>STRAND-SYNC</h3>
@@ -307,16 +377,14 @@ if ($section_id > 0) {
                 <li><a href="faculty_dashboard.php">Dashboard</a></li>
                 <li><a href="faculty_schedule.php">Manage Schedule</a></li>
                 <li><a href="ecr-inputdata.php" class="active">ECR Setup & Roster</a></li>
-                <li><a href="ecr-view.php?term=1">Encode Term Grades</a></li>
+                <li><a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=1">Encode Term Grades</a></li>
                 <li><a href="ecr-summary.php">ECR Summary</a></li>
                 <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>
 
-        <!-- Main Content Area -->
         <main class="content">
             <div class="ecr-container">
-                <!-- Header Banner -->
                 <header class="ecr-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <img src="../../assets/icons/kagawaran-logo.png" alt="Kagawaran Logo" style="max-height: 50px;">
                     <div class="header-text" style="text-align: center;">
@@ -327,47 +395,106 @@ if ($section_id > 0) {
                 </header>
 
                 <div class="input-layout">
-                    <!-- Left Column: School & Class Configuration -->
+                    <!-- Left Column: School & Subject Assignment Configuration -->
                     <div class="config-column">
+                        
+                        <!-- Dynamic Assignment Selector -->
                         <div class="ecr-card">
-                            <div class="card-title">SCHOOL INFO</div>
+                            <div class="card-title">SUBJECT LOAD & TERM SELECTOR</div>
                             <div class="card-content">
                                 <div class="field-group">
-                                    <label>REGION:</label>
-                                    <input type="text" name="region" value="Region III" class="form-input" readonly>
+                                    <label for="assignSelect">ASSIGNED CLASS:</label>
+                                    <select id="assignSelect" class="form-select" onchange="switchAssignment(this.value)">
+                                        <?php if (empty($my_assignments)): ?>
+                                            <option value="0">No active subject load assigned</option>
+                                        <?php else: ?>
+                                            <?php foreach ($my_assignments as$assign): ?>
+                                                <option value="<?= $assign['assignment_id'] ?>" <?= $assign['assignment_id'] ==$assignment_id ? 'selected' : '' ?>>
+                                                    Grade <?= htmlspecialchars($assign['grade_level'] . ' - ' . $assign['section_name']) ?> \vert{} <?= htmlspecialchars($assign['subject_name']) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </select>
                                 </div>
                                 <div class="field-group">
-                                    <label>DIVISION:</label>
-                                    <input type="text" name="division" value="Tarlac" class="form-input" readonly>
-                                </div>
-                                <div class="field-group">
-                                    <label>SCHOOL ID:</label>
-                                    <input type="text" name="school_id" value="301000" class="form-input" readonly>
-                                </div>
-                                <div class="field-group">
-                                    <label>SCHOOL YEAR:</label>
-                                    <input type="text" name="school_year" value="2026-2027" class="form-input" readonly>
+                                    <label for="termSelect">ACADEMIC TERM:</label>
+                                    <select id="termSelect" class="form-select" onchange="switchTerm(this.value)">
+                                        <option value="1" <?= $term === 1 ? 'selected' : '' ?>>Term 1 (First Quarter)</option>
+                                        <option value="2" <?= $term === 2 ? 'selected' : '' ?>>Term 2 (Second Quarter)</option>
+                                        <option value="3" <?= $term === 3 ? 'selected' : '' ?>>Term 3 (Third Quarter)</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
 
+                        <!-- Class & Subject Info Card -->
                         <div class="ecr-card">
                             <div class="card-title">CLASS INFO</div>
                             <div class="card-content">
                                 <div class="field-group">
                                     <label>TEACHER:</label>
-                                    <input type="text" name="teacher_name" value="<?= htmlspecialchars($teacher_data['full_name'] ?? 'Unassigned') ?>" class="form-input" readonly>
+                                    <input type="text" value="<?= htmlspecialchars($teacher_name) ?>" class="form-input" readonly>
                                 </div>
                                 <div class="field-group">
-                                    <label>TRACK:</label>
-                                    <input type="text" value="<?= $is_tech_track ? 'TECHNICAL PROFESSIONAL / TVL' : 'ACADEMIC' ?>" class="form-input" readonly>
+                                    <label>SUBJECT TYPE:</label>
+                                    <input type="text" value="<?= htmlspecialchars($active_assignment['subject_type'] ?? 'Core') ?>" class="form-input" readonly>
+                                </div>
+                                <div class="field-group">
+                                    <label>TRACK / STRAND:</label>
+                                    <input type="text" value="<?= $is_tech_track ? 'TVL / ICT TRACK' : 'ACADEMIC TRACK' ?>" class="form-input" readonly>
                                 </div>
                                 <div class="field-group">
                                     <label>SECTION:</label>
-                                    <input type="text" name="section" value="<?= htmlspecialchars($teacher_data['section_name'] ?? 'Unassigned') ?>" class="form-input" readonly>
+                                    <input type="text" value="<?= htmlspecialchars(($active_assignment['grade_level'] ?? '') ? 'Grade ' . $active_assignment['grade_level'] . ' - ' .$active_assignment['section_name'] : 'Unassigned') ?>" class="form-input" readonly>
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Interactive Assessment Setup Card -->
+                        <div class="ecr-card">
+                            <div class="card-title">ASSESSMENT SETUP (TERM <?= $term ?>)</div>
+                            <div class="card-content">
+                                <form id="assessmentSetupForm" action="save-assessment-setup.php" method="POST">
+                                    <input type="hidden" name="assignment_id" value="<?= $assignment_id ?>">
+                                    <input type="hidden" name="term" value="Term <?= $term ?>">
+
+                                    <!-- Written Works Row -->
+                                    <div class="field-group">
+                                        <label>WRITTEN WORKS (WW):</label>
+                                        <div class="counter-box">
+                                            <button type="button" class="btn-count" onclick="adjustCount('ww_count', -1)">-</button>
+                                            <input type="number" id="ww_count" name="ww_count" min="1" max="10" value="<?= $ww_count ?>" class="form-input-count" readonly>
+                                            <button type="button" class="btn-count" onclick="adjustCount('ww_count', 1)">+</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Performance Tasks Row -->
+                                    <div class="field-group">
+                                        <label>PERFORMANCE TASKS (PT):</label>
+                                        <div class="counter-box">
+                                            <button type="button" class="btn-count" onclick="adjustCount('pt_count', -1)">-</button>
+                                            <input type="number" id="pt_count" name="pt_count" min="1" max="10" value="<?= $pt_count ?>" class="form-input-count" readonly>
+                                            <button type="button" class="btn-count" onclick="adjustCount('pt_count', 1)">+</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Quarterly Exam Row -->
+                                    <div class="field-group">
+                                        <label>QUARTERLY EXAM (QA):</label>
+                                        <div class="counter-box">
+                                            <button type="button" class="btn-count" onclick="adjustCount('qa_count', -1)">-</button>
+                                            <input type="number" id="qa_count" name="qa_count" min="1" max="3" value="<?= $qa_count ?>" class="form-input-count" readonly>
+                                            <button type="button" class="btn-count" onclick="adjustCount('qa_count', 1)">+</button>
+                                        </div>
+                                    </div>
+
+                                    <div style="margin-top: 15px; text-align: right;">
+                                        <button type="submit" class="btn-action">Update Columns</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
                     </div>
 
                     <!-- Right Column: Dynamic Student Roster -->
@@ -378,10 +505,10 @@ if ($section_id > 0) {
                                 
                                 <!-- Male Section -->
                                 <div class="gender-block">
-                                    <div class="gender-tag male-tag">MALE (<?= count($male_students) ?> Enrolled)</div>
+                                    <div class="gender-tag male-tag">MALE LEARNERS (<?= count($male_students) ?> Enrolled)</div>
                                     <div class="roster-list">
                                         <?php if (!empty($male_students)): ?>
-                                            <?php foreach ($male_students as $idx => $student): ?>
+                                            <?php foreach ($male_students as $idx =>$student): ?>
                                                 <div class="roster-entry">
                                                     <span class="entry-index"><?= $idx + 1 ?></span>
                                                     <input type="text" value="<?= htmlspecialchars($student['full_name']) ?> (LRN: <?= htmlspecialchars($student['lrn']) ?>)" class="roster-field" readonly>
@@ -395,10 +522,10 @@ if ($section_id > 0) {
 
                                 <!-- Female Section -->
                                 <div class="gender-block">
-                                    <div class="gender-tag female-tag">FEMALE (<?= count($female_students) ?> Enrolled)</div>
+                                    <div class="gender-tag female-tag">FEMALE LEARNERS (<?= count($female_students) ?> Enrolled)</div>
                                     <div class="roster-list">
                                         <?php if (!empty($female_students)): ?>
-                                            <?php foreach ($female_students as $idx => $student): ?>
+                                            <?php foreach ($female_students as $idx =>$student): ?>
                                                 <div class="roster-entry">
                                                     <span class="entry-index"><?= $idx + 1 ?></span>
                                                     <input type="text" value="<?= htmlspecialchars($student['full_name']) ?> (LRN: <?= htmlspecialchars($student['lrn']) ?>)" class="roster-field" readonly>
@@ -414,7 +541,9 @@ if ($section_id > 0) {
                         </div>
 
                         <div style="margin-top: 20px; text-align: right;">
-                            <a href="ecr-view.php" class="btn-proceed">Proceed to Class Hub & Grade Encoding →</a>
+                            <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=<?= $term ?>" class="btn-proceed">
+                                Proceed to Class Hub & Grade Encoding (Term <?= $term ?>) →
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -435,6 +564,27 @@ if ($section_id > 0) {
                 burger.classList.add('hidden');
             } else {
                 burger.classList.remove('hidden');
+            }
+        }
+
+        function switchAssignment(assignmentId) {
+            if (assignmentId > 0) {
+                window.location.href = `ecr-inputdata.php?assignment_id=${assignmentId}&term=<?= $term ?>`;
+            }
+        }
+
+        function switchTerm(term) {
+            window.location.href = `ecr-inputdata.php?assignment_id=<?= $assignment_id ?>&term=${term}`;
+        }
+
+        function adjustCount(inputId, change) {
+            const input = document.getElementById(inputId);
+            let val = parseInt(input.value) + change;
+            const min = parseInt(input.getAttribute('min'));
+            const max = parseInt(input.getAttribute('max'));
+
+            if (val >= min && val <= max) {
+                input.value = val;
             }
         }
     </script>
