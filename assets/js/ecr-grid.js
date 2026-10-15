@@ -113,6 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (row) recalculateRow(row);
         });
     });
+    document.querySelectorAll('.student-row').forEach(recalculateRow);
 
     // 3. Save Configuration Handler (api/faculty/save-ecr-input.php)
     const saveConfigBtn = document.getElementById('saveConfigBtn');
@@ -167,14 +168,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const payload = {
                 assignment_id: parseInt(assignmentId, 10),
+                term: activeTerm,
                 scores: [],
                 summaries: []
             };
 
             // Aggregate raw score inputs
             document.querySelectorAll('.score-input').forEach(input => {
+                const componentId = parseInt(input.dataset.componentId, 10);
+                if (!Number.isInteger(componentId) || componentId <= 0) return;
+
                 payload.scores.push({
-                    component_id: parseInt(input.dataset.componentId, 10),
+                    component_id: componentId,
                     student_id: parseInt(input.dataset.studentId, 10),
                     score: parseFloat(input.value) || 0
                 });
@@ -204,8 +209,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const result = await response.json();
                 if (response.ok && result.status === 'success') {
                     alert(result.message);
+                    window.location.reload();
                 } else {
                     alert('Save Failed: ' + result.message);
+                    if (response.status === 409) window.location.reload();
                 }
             } catch (err) {
                 console.error(err);

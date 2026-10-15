@@ -281,7 +281,7 @@ if ($section_data) {
             </div>
             <ul class="menu">
                 <li><a href="faculty_dashboard.php" class="active">Dashboard</a></li>
-                <li><a href="faculty_schedule.php">Manage Schedule</a></li>
+                <li><a href="faculty_schedule.php">My Schedule</a></li>
                 <li><a href="ecr-inputdata.php">ECR Setup & Roster</a></li>
                 <li><a href="ecr-view.php?term=1">Encode Term Grades</a></li>
                 <li><a href="ecr-summary.php">ECR Summary</a></li>

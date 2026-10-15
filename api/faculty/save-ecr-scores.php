@@ -15,13 +15,22 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'ad
 
 $data = json_decode(file_get_contents('php://input'), true);
 
-if (!$data || !isset($data['assignment_id'], $data['scores']) || !is_array($data['scores'])) {
+if (!$data || !isset($data['assignment_id'], $data['term'], $data['scores']) || !is_array($data['scores'])) {
     http_response_code(400);
     echo json_encode(['status' => 'error', 'message' => 'Invalid or missing payload structure.']);
     exit();
 }
 
 $assignmentId = (int)$data['assignment_id'];
+$termMatch = [];
+if (!preg_match('/^Term ([1-3])$/', (string)$data['term'], $termMatch)) {
+    http_response_code(400);
+    echo json_encode(['status' => 'error', 'message' => 'Invalid term.']);
+    exit();
+}
+$termNumber = (int)$termMatch[1];
+$termName = "Term {$termNumber}";
+$termColumn = "term{$termNumber}_transmuted";
 
 try {
     $db = getDBConnection();
@@ -36,8 +45,53 @@ try {
     $isLocked = $stmtLock->fetchColumn();
 
     if ($isLocked == 1 && $_SESSION['role'] !== 'admin') {
+        $db->rollBack();
         http_response_code(423);
         echo json_encode(['status' => 'error', 'message' => 'Grades are locked and cannot be updated.']);
+        exit();
+    }
+
+    // Serialize summary writes for this assignment, including first-time inserts.
+    $stmtAssignmentLock = $db->prepare("
+        SELECT id FROM subject_assignments
+        WHERE id = :assignment_id
+        FOR UPDATE
+    ");
+    $stmtAssignmentLock->execute(['assignment_id' => $assignmentId]);
+    if (!$stmtAssignmentLock->fetchColumn()) {
+        $db->rollBack();
+        http_response_code(404);
+        echo json_encode(['status' => 'error', 'message' => 'Subject assignment was not found.']);
+        exit();
+    }
+
+    $stmtSavedScores = $db->prepare("
+        SELECT COUNT(*)
+        FROM ecr_student_scores scores
+        JOIN ecr_assessment_components components ON components.id = scores.component_id
+        WHERE components.assignment_id = :assignment_id AND components.term = :term
+    ");
+    $stmtSavedScores->execute([
+        'assignment_id' => $assignmentId,
+        'term' => $termName
+    ]);
+    $hasSavedScores = (int)$stmtSavedScores->fetchColumn() > 0;
+
+    $stmtSavedSummary = $db->prepare("
+        SELECT COUNT(*)
+        FROM ecr_term_summaries
+        WHERE assignment_id = :assignment_id AND {$termColumn} IS NOT NULL
+    ");
+    $stmtSavedSummary->execute(['assignment_id' => $assignmentId]);
+    $hasSavedSummary = (int)$stmtSavedSummary->fetchColumn() > 0;
+
+    if ($hasSavedScores || $hasSavedSummary) {
+        $db->rollBack();
+        http_response_code(409);
+        echo json_encode([
+            'status' => 'error',
+            'message' => "{$termName} has already been saved and is now read-only."
+        ]);
         exit();
     }
 
@@ -64,36 +118,75 @@ try {
 
     // 2. Process Term Summaries (If initial grades are included in the payload)
     if (isset($data['summaries']) && is_array($data['summaries'])) {
-        $stmtSummary = $db->prepare("
+        $stmtExistingSummaries = $db->prepare("
+            SELECT id, term1_transmuted, term2_transmuted, term3_transmuted
+            FROM ecr_term_summaries
+            WHERE student_id = :student_id AND assignment_id = :assignment_id
+            ORDER BY id ASC
+            FOR UPDATE
+        ");
+        $stmtUpdateSummary = $db->prepare("
+            UPDATE ecr_term_summaries
+            SET term1_transmuted = :t1,
+                term2_transmuted = :t2,
+                term3_transmuted = :t3,
+                final_grade = :final_grade,
+                letter_grade = :letter_grade,
+                remarks = :remarks,
+                submitted_at = NOW()
+            WHERE id = :id
+        ");
+        $stmtDeleteDuplicateSummaries = $db->prepare("
+            DELETE FROM ecr_term_summaries
+            WHERE student_id = :student_id
+              AND assignment_id = :assignment_id
+              AND id <> :keep_id
+        ");
+        $stmtInsertSummary = $db->prepare("
             INSERT INTO ecr_term_summaries (
-                student_id, assignment_id, term1_transmuted, term2_transmuted, term3_transmuted, 
+                student_id, assignment_id, term1_transmuted, term2_transmuted, term3_transmuted,
                 final_grade, letter_grade, remarks, is_locked, submitted_at
             ) VALUES (
-                :student_id, :assignment_id, :t1, :t2, :t3, 
+                :student_id, :assignment_id, :t1, :t2, :t3,
                 :final_grade, :letter_grade, :remarks, 0, NOW()
             )
-            ON DUPLICATE KEY UPDATE
-                term1_transmuted = VALUES(term1_transmuted),
-                term2_transmuted = VALUES(term2_transmuted),
-                term3_transmuted = VALUES(term3_transmuted),
-                final_grade      = VALUES(final_grade),
-                letter_grade     = VALUES(letter_grade),
-                remarks          = VALUES(remarks),
-                submitted_at     = NOW()
         ");
 
         foreach ($data['summaries'] as $summary) {
             if (!isset($summary['student_id'])) continue;
 
             $studentId = (int)$summary['student_id'];
-            
-            $t1Initial = isset($summary['term1_initial']) ? (float)$summary['term1_initial'] : null;
-            $t2Initial = isset($summary['term2_initial']) ? (float)$summary['term2_initial'] : null;
-            $t3Initial = isset($summary['term3_initial']) ? (float)$summary['term3_initial'] : null;
 
-            $t1 = ($t1Initial !== null) ? DepEdTransmutation::transmute($t1Initial) : null;
-            $t2 = ($t2Initial !== null) ? DepEdTransmutation::transmute($t2Initial) : null;
-            $t3 = ($t3Initial !== null) ? DepEdTransmutation::transmute($t3Initial) : null;
+            $stmtExistingSummaries->execute([
+                'student_id' => $studentId,
+                'assignment_id' => $assignmentId
+            ]);
+            $existingSummaries = $stmtExistingSummaries->fetchAll(PDO::FETCH_ASSOC);
+
+            $terms = [
+                'term1_transmuted' => null,
+                'term2_transmuted' => null,
+                'term3_transmuted' => null
+            ];
+            foreach ($existingSummaries as $existingSummary) {
+                foreach ($terms as $column => $value) {
+                    if ($terms[$column] === null && $existingSummary[$column] !== null) {
+                        $terms[$column] = (float)$existingSummary[$column];
+                    }
+                }
+            }
+
+            foreach ([1, 2, 3] as $termNumber) {
+                $initialKey = "term{$termNumber}_initial";
+                $termColumn = "term{$termNumber}_transmuted";
+                if (isset($summary[$initialKey])) {
+                    $terms[$termColumn] = DepEdTransmutation::transmute((float)$summary[$initialKey]);
+                }
+            }
+
+            $t1 = $terms['term1_transmuted'];
+            $t2 = $terms['term2_transmuted'];
+            $t3 = $terms['term3_transmuted'];
 
             $validTerms = array_filter([$t1, $t2, $t3], fn($v) => $v !== null);
             
@@ -107,16 +200,29 @@ try {
                 $remarks     = DepEdTransmutation::getRemark($finalGrade);
             }
 
-            $stmtSummary->execute([
-                'student_id'    => $studentId,
-                'assignment_id' => $assignmentId,
-                't1'            => $t1,
-                't2'            => $t2,
-                't3'            => $t3,
-                'final_grade'   => $finalGrade,
-                'letter_grade'  => $letterGrade,
-                'remarks'       => $remarks
-            ]);
+            $summaryValues = [
+                't1' => $t1,
+                't2' => $t2,
+                't3' => $t3,
+                'final_grade' => $finalGrade,
+                'letter_grade' => $letterGrade,
+                'remarks' => $remarks
+            ];
+
+            if ($existingSummaries) {
+                $keepId = (int)$existingSummaries[0]['id'];
+                $stmtUpdateSummary->execute($summaryValues + ['id' => $keepId]);
+                $stmtDeleteDuplicateSummaries->execute([
+                    'student_id' => $studentId,
+                    'assignment_id' => $assignmentId,
+                    'keep_id' => $keepId
+                ]);
+            } else {
+                $stmtInsertSummary->execute($summaryValues + [
+                    'student_id' => $studentId,
+                    'assignment_id' => $assignmentId
+                ]);
+            }
         }
     }
 

@@ -95,7 +95,18 @@ if ($section_id > 0) {
                ts.remarks
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
-        LEFT JOIN ecr_term_summaries ts ON u.id = ts.student_id AND ts.assignment_id = :assignment_id
+        LEFT JOIN (
+            SELECT student_id, assignment_id,
+                   MAX(term1_transmuted) AS term1_transmuted,
+                   MAX(term2_transmuted) AS term2_transmuted,
+                   MAX(term3_transmuted) AS term3_transmuted,
+                   MAX(final_grade) AS final_grade,
+                   MAX(letter_grade) AS letter_grade,
+                   MAX(remarks) AS remarks
+            FROM ecr_term_summaries
+            WHERE assignment_id = :assignment_id
+            GROUP BY student_id, assignment_id
+        ) ts ON u.id = ts.student_id
         WHERE u.section_id = :section_id AND u.role = 'student' AND (sp.gender = 'Male' OR sp.gender IS NULL)
         ORDER BY u.full_name ASC
     ");
@@ -113,7 +124,18 @@ if ($section_id > 0) {
                ts.remarks
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
-        LEFT JOIN ecr_term_summaries ts ON u.id = ts.student_id AND ts.assignment_id = :assignment_id
+        LEFT JOIN (
+            SELECT student_id, assignment_id,
+                   MAX(term1_transmuted) AS term1_transmuted,
+                   MAX(term2_transmuted) AS term2_transmuted,
+                   MAX(term3_transmuted) AS term3_transmuted,
+                   MAX(final_grade) AS final_grade,
+                   MAX(letter_grade) AS letter_grade,
+                   MAX(remarks) AS remarks
+            FROM ecr_term_summaries
+            WHERE assignment_id = :assignment_id
+            GROUP BY student_id, assignment_id
+        ) ts ON u.id = ts.student_id
         WHERE u.section_id = :section_id AND u.role = 'student' AND sp.gender = 'Female'
         ORDER BY u.full_name ASC
     ");
@@ -437,7 +459,7 @@ if ($section_id > 0) {
             </div>
             <ul class="menu">
                 <li><a href="faculty_dashboard.php">Dashboard</a></li>
-                <li><a href="faculty_schedule.php">Manage Schedule</a></li>
+                <li><a href="faculty_schedule.php">My Schedule</a></li>
                 <li><a href="ecr-inputdata.php?assignment_id=<?= $assignment_id ?>">ECR Setup & Roster</a></li>
                 <li><a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=1">Encode Term Grades</a></li>
                 <li><a href="ecr-summary.php?assignment_id=<?= $assignment_id ?>" class="active">ECR Summary</a></li>

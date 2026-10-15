@@ -17,14 +17,53 @@ $term          = trim($_POST['term'] ?? 'Term 1');
 $new_ww_count  = (int)($_POST['ww_count'] ?? 8);
 $new_pt_count  = (int)($_POST['pt_count'] ?? 6);
 $new_qa_count  = (int)($_POST['qa_count'] ?? 1);
+$term_match    = [];
 
-if ($assignment_id === 0) {
+if ($assignment_id <= 0 || !preg_match('/^Term ([1-3])$/', $term, $term_match)) {
     header("Location: ecr-inputdata.php");
     exit();
 }
+$term_number = (int)$term_match[1];
+$term_column = "term{$term_number}_transmuted";
 
 try {
     $pdo->beginTransaction();
+
+    $assignment_lock_stmt = $pdo->prepare("
+        SELECT id FROM subject_assignments WHERE id = :assignment_id FOR UPDATE
+    ");
+    $assignment_lock_stmt->execute(['assignment_id' => $assignment_id]);
+    if (!$assignment_lock_stmt->fetchColumn()) {
+        $pdo->rollBack();
+        header("Location: ecr-inputdata.php?error=assignment_not_found");
+        exit();
+    }
+
+    $saved_scores_stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM ecr_student_scores scores
+        JOIN ecr_assessment_components components ON components.id = scores.component_id
+        WHERE components.assignment_id = :assignment_id AND components.term = :term
+    ");
+    $saved_scores_stmt->execute([
+        'assignment_id' => $assignment_id,
+        'term' => $term
+    ]);
+    $has_saved_scores = (int)$saved_scores_stmt->fetchColumn() > 0;
+
+    $saved_summary_stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM ecr_term_summaries
+        WHERE assignment_id = :assignment_id AND {$term_column} IS NOT NULL
+    ");
+    $saved_summary_stmt->execute(['assignment_id' => $assignment_id]);
+    $has_saved_summary = (int)$saved_summary_stmt->fetchColumn() > 0;
+
+    if ($has_saved_scores || $has_saved_summary) {
+        $pdo->rollBack();
+        header("Location: ecr-inputdata.php?assignment_id={$assignment_id}&term={$term_number}&error=term_locked");
+        exit();
+    }
 
     $categories = [
         'WW' => $new_ww_count,

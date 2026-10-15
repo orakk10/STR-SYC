@@ -84,8 +84,42 @@ if ($assignment_id > 0) {
 // 6. Dynamic Assessment Components Query (Driven by ecr_assessment_components)
 $term_str = "Term " . $term;
 $db_components = ['WW' => [], 'PT' => [], 'QA' => []];
+$term_is_locked = false;
+$saved_scores = [];
 
 if ($assignment_id > 0) {
+    $default_component_counts = ['WW' => 8, 'PT' => 6, 'QA' => 1];
+    $existing_categories_stmt = $pdo->prepare("
+        SELECT DISTINCT category
+        FROM ecr_assessment_components
+        WHERE assignment_id = :assignment_id AND term = :term
+    ");
+    $existing_categories_stmt->execute([
+        'assignment_id' => $assignment_id,
+        'term' => $term_str
+    ]);
+    $existing_categories = $existing_categories_stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    $insert_component_stmt = $pdo->prepare("
+        INSERT INTO ecr_assessment_components
+            (assignment_id, term, category, task_number, highest_possible_score)
+        VALUES (:assignment_id, :term, :category, :task_number, 100.00)
+    ");
+    foreach ($default_component_counts as $category => $default_count) {
+        if (in_array($category, $existing_categories, true)) {
+            continue;
+        }
+
+        for ($task_number = 1; $task_number <= $default_count; $task_number++) {
+            $insert_component_stmt->execute([
+                'assignment_id' => $assignment_id,
+                'term' => $term_str,
+                'category' => $category,
+                'task_number' => $task_number
+            ]);
+        }
+    }
+
     $components_stmt = $pdo->prepare("
         SELECT id, category, task_number, highest_possible_score 
         FROM ecr_assessment_components 
@@ -103,6 +137,29 @@ if ($assignment_id > 0) {
             $db_components[$comp['category']][$comp['task_number']] = $comp;
         }
     }
+
+    $saved_scores_stmt = $pdo->prepare("
+        SELECT scores.component_id, scores.student_id, scores.score
+        FROM ecr_student_scores scores
+        JOIN ecr_assessment_components components ON components.id = scores.component_id
+        WHERE components.assignment_id = :assignment_id AND components.term = :term
+    ");
+    $saved_scores_stmt->execute([
+        'assignment_id' => $assignment_id,
+        'term' => $term_str
+    ]);
+    foreach ($saved_scores_stmt->fetchAll(PDO::FETCH_ASSOC) as $saved_score) {
+        $saved_scores[$saved_score['student_id']][$saved_score['component_id']] = $saved_score['score'];
+    }
+
+    $term_column = "term{$term}_transmuted";
+    $saved_summary_stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM ecr_term_summaries
+        WHERE assignment_id = :assignment_id AND {$term_column} IS NOT NULL
+    ");
+    $saved_summary_stmt->execute(['assignment_id' => $assignment_id]);
+    $term_is_locked = !empty($saved_scores) || (int)$saved_summary_stmt->fetchColumn() > 0;
 }
 
 // Fallback lists if no assessment components exist yet for this term
@@ -561,7 +618,7 @@ if ($section_id > 0) {
             </div>
             <ul class="menu">
                 <li><a href="faculty_dashboard.php" onclick="toggleSidebar()">Dashboard</a></li>
-                <li><a href="faculty_schedule.php" onclick="toggleSidebar()">Manage Schedule</a></li>
+                <li><a href="faculty_schedule.php" onclick="toggleSidebar()">My Schedule</a></li>
                 <li><a href="ecr-inputdata.php" onclick="toggleSidebar()">ECR Setup & Roster</a></li>
                 <li><a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=<?= $term ?>" class="active" onclick="toggleSidebar()">Encode Term Grades</a></li>
                 <li><a href="ecr-summary.php" onclick="toggleSidebar()">ECR Summary</a></li>
@@ -600,8 +657,8 @@ if ($section_id > 0) {
 
                         <!-- Action Buttons Beside Assigned Subject Select -->
                         <div class="control-action-buttons">
-                            <button id="saveConfigBtn" class="btn-action btn-secondary">Save HPS Setup</button>
-                            <button id="saveScoresBtn" class="btn-action">Save ECR Scores</button>
+                            <button id="saveConfigBtn" class="btn-action btn-secondary" <?= $term_is_locked ? 'disabled' : '' ?>>Save HPS Setup</button>
+                            <button id="saveScoresBtn" class="btn-action" <?= $term_is_locked ? 'disabled' : '' ?>><?= $term_is_locked ? 'Term Already Saved' : 'Save ECR Scores' ?></button>
                         </div>
                     </div>
 
@@ -622,6 +679,11 @@ if ($section_id > 0) {
                 </nav>
 
                 <div class="table-viewport-container">
+                    <?php if ($term_is_locked): ?>
+                        <div role="status" style="padding: 10px 20px; color: #92400e; background: #fffbeb; border-bottom: 1px solid #fde68a; font-weight: 600;">
+                            <?= htmlspecialchars($term_str) ?> has already been saved. This term is read-only and cannot be entered again.
+                        </div>
+                    <?php endif; ?>
                     <table class="ecr-grid">
                         <thead>
                             <tr>
@@ -661,7 +723,7 @@ if ($section_id > 0) {
                                                data-task-number="<?= $task_num ?>" 
                                                data-component-id="<?= $comp['id'] ?? $task_num ?>"
                                                value="<?= (float)($comp['highest_possible_score'] ?? 100) ?>" 
-                                               placeholder="WW<?= $task_num ?>">
+                                               placeholder="WW<?= $task_num ?>" <?= $term_is_locked ? 'readonly' : '' ?>>
                                     </th>
                                 <?php endforeach; ?>
                                 <th class="th-calc" style="width: 26px;">PS</th>
@@ -675,7 +737,7 @@ if ($section_id > 0) {
                                                data-task-number="<?= $task_num ?>" 
                                                data-component-id="<?= $comp['id'] ?? ($task_num + 8) ?>"
                                                value="<?= (float)($comp['highest_possible_score'] ?? 100) ?>" 
-                                               placeholder="PT<?= $task_num ?>">
+                                               placeholder="PT<?= $task_num ?>" <?= $term_is_locked ? 'readonly' : '' ?>>
                                     </th>
                                 <?php endforeach; ?>
                                 <th class="th-calc" style="width: 26px;">PS</th>
@@ -689,7 +751,7 @@ if ($section_id > 0) {
                                                data-task-number="<?= $task_num ?>" 
                                                data-component-id="<?= $comp['id'] ?? ($task_num + 14) ?>"
                                                value="<?= (float)($comp['highest_possible_score'] ?? 100) ?>" 
-                                               placeholder="QA<?= $task_num ?>">
+                                               placeholder="QA<?= $task_num ?>" <?= $term_is_locked ? 'readonly' : '' ?>>
                                     </th>
                                 <?php endforeach; ?>
                                 <th class="th-calc" style="width: 26px;">PS</th>
@@ -719,7 +781,9 @@ if ($section_id > 0) {
                                                        data-category="WW" 
                                                        data-task-number="<?= $task_num ?>"
                                                        data-component-id="<?= $comp['id'] ?? $task_num ?>" 
-                                                       data-student-id="<?= $student['id'] ?>">
+                                                       data-student-id="<?= $student['id'] ?>"
+                                                       value="<?= htmlspecialchars((string)($saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                       <?= $term_is_locked ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="WW">0.00</td>
@@ -732,7 +796,9 @@ if ($section_id > 0) {
                                                        data-category="PT" 
                                                        data-task-number="<?= $task_num ?>"
                                                        data-component-id="<?= $comp['id'] ?? ($task_num + 8) ?>" 
-                                                       data-student-id="<?= $student['id'] ?>">
+                                                       data-student-id="<?= $student['id'] ?>"
+                                                       value="<?= htmlspecialchars((string)($saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                       <?= $term_is_locked ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="PT">0.00</td>
@@ -745,7 +811,9 @@ if ($section_id > 0) {
                                                        data-category="QA" 
                                                        data-task-number="<?= $task_num ?>"
                                                        data-component-id="<?= $comp['id'] ?? ($task_num + 14) ?>" 
-                                                       data-student-id="<?= $student['id'] ?>">
+                                                       data-student-id="<?= $student['id'] ?>"
+                                                       value="<?= htmlspecialchars((string)($saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                       <?= $term_is_locked ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="QA">0.00</td>
@@ -784,7 +852,9 @@ if ($section_id > 0) {
                                                        data-category="WW" 
                                                        data-task-number="<?= $task_num ?>"
                                                        data-component-id="<?= $comp['id'] ?? $task_num ?>" 
-                                                       data-student-id="<?= $student['id'] ?>">
+                                                       data-student-id="<?= $student['id'] ?>"
+                                                       value="<?= htmlspecialchars((string)($saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                       <?= $term_is_locked ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="WW">0.00</td>
@@ -797,7 +867,9 @@ if ($section_id > 0) {
                                                        data-category="PT" 
                                                        data-task-number="<?= $task_num ?>"
                                                        data-component-id="<?= $comp['id'] ?? ($task_num + 8) ?>" 
-                                                       data-student-id="<?= $student['id'] ?>">
+                                                       data-student-id="<?= $student['id'] ?>"
+                                                       value="<?= htmlspecialchars((string)($saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                       <?= $term_is_locked ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="PT">0.00</td>
@@ -810,7 +882,9 @@ if ($section_id > 0) {
                                                        data-category="QA" 
                                                        data-task-number="<?= $task_num ?>"
                                                        data-component-id="<?= $comp['id'] ?? ($task_num + 14) ?>" 
-                                                       data-student-id="<?= $student['id'] ?>">
+                                                       data-student-id="<?= $student['id'] ?>"
+                                                       value="<?= htmlspecialchars((string)($saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                       <?= $term_is_locked ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="QA">0.00</td>

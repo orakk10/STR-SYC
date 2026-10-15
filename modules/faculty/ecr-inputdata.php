@@ -105,6 +105,29 @@ if ($assignment_id > 0) {
 $ww_count = !empty($db_components['WW']) ? count($db_components['WW']) : 8;
 $pt_count = !empty($db_components['PT']) ? count($db_components['PT']) : 6;
 $qa_count = !empty($db_components['QA']) ? count($db_components['QA']) : 1;
+$term_is_locked = false;
+
+if ($assignment_id > 0) {
+    $term_column = "term{$term}_transmuted";
+    $saved_scores_stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM ecr_student_scores scores
+        JOIN ecr_assessment_components components ON components.id = scores.component_id
+        WHERE components.assignment_id = :assignment_id AND components.term = :term
+    ");
+    $saved_scores_stmt->execute([
+        'assignment_id' => $assignment_id,
+        'term' => $term_str
+    ]);
+    $saved_summary_stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM ecr_term_summaries
+        WHERE assignment_id = :assignment_id AND {$term_column} IS NOT NULL
+    ");
+    $saved_summary_stmt->execute(['assignment_id' => $assignment_id]);
+    $term_is_locked = (int)$saved_scores_stmt->fetchColumn() > 0
+        || (int)$saved_summary_stmt->fetchColumn() > 0;
+}
 ?>
 
 <!DOCTYPE html>
@@ -375,7 +398,7 @@ $qa_count = !empty($db_components['QA']) ? count($db_components['QA']) : 1;
             </div>
             <ul class="menu">
                 <li><a href="faculty_dashboard.php">Dashboard</a></li>
-                <li><a href="faculty_schedule.php">Manage Schedule</a></li>
+                <li><a href="faculty_schedule.php">My Schedule</a></li>
                 <li><a href="ecr-inputdata.php" class="active">ECR Setup & Roster</a></li>
                 <li><a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=1">Encode Term Grades</a></li>
                 <li><a href="ecr-summary.php">ECR Summary</a></li>
@@ -454,6 +477,11 @@ $qa_count = !empty($db_components['QA']) ? count($db_components['QA']) : 1;
                         <div class="ecr-card">
                             <div class="card-title">ASSESSMENT SETUP (TERM <?= $term ?>)</div>
                             <div class="card-content">
+                                <?php if ($term_is_locked): ?>
+                                    <p role="status" style="padding: 10px; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;">
+                                        This term has already been saved. Its assessment setup cannot be changed.
+                                    </p>
+                                <?php endif; ?>
                                 <form id="assessmentSetupForm" action="save-assessment-setup.php" method="POST">
                                     <input type="hidden" name="assignment_id" value="<?= $assignment_id ?>">
                                     <input type="hidden" name="term" value="Term <?= $term ?>">
@@ -462,9 +490,9 @@ $qa_count = !empty($db_components['QA']) ? count($db_components['QA']) : 1;
                                     <div class="field-group">
                                         <label>WRITTEN WORKS (WW):</label>
                                         <div class="counter-box">
-                                            <button type="button" class="btn-count" onclick="adjustCount('ww_count', -1)">-</button>
+                                            <button type="button" class="btn-count" onclick="adjustCount('ww_count', -1)" <?= $term_is_locked ? 'disabled' : '' ?>>-</button>
                                             <input type="number" id="ww_count" name="ww_count" min="1" max="10" value="<?= $ww_count ?>" class="form-input-count" readonly>
-                                            <button type="button" class="btn-count" onclick="adjustCount('ww_count', 1)">+</button>
+                                            <button type="button" class="btn-count" onclick="adjustCount('ww_count', 1)" <?= $term_is_locked ? 'disabled' : '' ?>>+</button>
                                         </div>
                                     </div>
 
@@ -472,9 +500,9 @@ $qa_count = !empty($db_components['QA']) ? count($db_components['QA']) : 1;
                                     <div class="field-group">
                                         <label>PERFORMANCE TASKS (PT):</label>
                                         <div class="counter-box">
-                                            <button type="button" class="btn-count" onclick="adjustCount('pt_count', -1)">-</button>
+                                            <button type="button" class="btn-count" onclick="adjustCount('pt_count', -1)" <?= $term_is_locked ? 'disabled' : '' ?>>-</button>
                                             <input type="number" id="pt_count" name="pt_count" min="1" max="10" value="<?= $pt_count ?>" class="form-input-count" readonly>
-                                            <button type="button" class="btn-count" onclick="adjustCount('pt_count', 1)">+</button>
+                                            <button type="button" class="btn-count" onclick="adjustCount('pt_count', 1)" <?= $term_is_locked ? 'disabled' : '' ?>>+</button>
                                         </div>
                                     </div>
 
@@ -482,14 +510,14 @@ $qa_count = !empty($db_components['QA']) ? count($db_components['QA']) : 1;
                                     <div class="field-group">
                                         <label>QUARTERLY EXAM (QA):</label>
                                         <div class="counter-box">
-                                            <button type="button" class="btn-count" onclick="adjustCount('qa_count', -1)">-</button>
+                                            <button type="button" class="btn-count" onclick="adjustCount('qa_count', -1)" <?= $term_is_locked ? 'disabled' : '' ?>>-</button>
                                             <input type="number" id="qa_count" name="qa_count" min="1" max="3" value="<?= $qa_count ?>" class="form-input-count" readonly>
-                                            <button type="button" class="btn-count" onclick="adjustCount('qa_count', 1)">+</button>
+                                            <button type="button" class="btn-count" onclick="adjustCount('qa_count', 1)" <?= $term_is_locked ? 'disabled' : '' ?>>+</button>
                                         </div>
                                     </div>
 
                                     <div style="margin-top: 15px; text-align: right;">
-                                        <button type="submit" class="btn-action">Update Columns</button>
+                                        <button type="submit" class="btn-action" <?= $term_is_locked ? 'disabled' : '' ?>>Update Columns</button>
                                     </div>
                                 </form>
                             </div>

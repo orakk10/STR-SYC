@@ -380,6 +380,7 @@ $assignments = $conn->query($query_str)->fetchAll(PDO::FETCH_ASSOC);
                 <li><a href="manage_users.php">Manage Users</a></li>
                 <li><a href="admin_master_list.php">Master List</a></li>
                 <li><a href="admin_logs.php">Activity Logs</a></li>
+                <li><a href="admin_archive.php">Graduate Archive</a></li>
                 <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>

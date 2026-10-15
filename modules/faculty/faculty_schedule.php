@@ -3,112 +3,59 @@ session_start();
 require_once __DIR__ . '/../../config/database.php';
 $conn = getDBConnection();
 
-// 1. Access Control
-if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['adviser', 'faculty'])) {
-    header("Location: ../../login.php");
+if (
+    !isset($_SESSION['user_id']) ||
+    !in_array(strtolower($_SESSION['role'] ?? ''), ['adviser', 'faculty'], true)
+) {
+    header('Location: ../../manifest/login.php');
     exit();
 }
 
-$message = "";
+$schedule_stmt = $conn->prepare("
+    SELECT DISTINCT
+        sch.day_of_week,
+        sch.start_time,
+        sch.end_time,
+        sch.room_number,
+        sub.subject_name,
+        sub.subject_code,
+        sec.section_name
+    FROM schedules sch
+    JOIN subjects sub ON sub.id = sch.subject_id
+    JOIN sections sec ON sec.id = sch.section_id
+    JOIN subject_assignments sa
+        ON sa.subject_id = sch.subject_id
+        AND sa.section_id = sch.section_id
+        AND sa.faculty_id = :faculty_id
+    ORDER BY FIELD(sch.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'),
+             sch.start_time ASC
+");
+$schedule_stmt->execute(['faculty_id' => $_SESSION['user_id']]);
 
-// 2. Handle Form Submission with Room & Section Conflict Check
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_schedule'])) {
-    $section_id = $_POST['section_id'] ?? null;
-    $subject_id = $_POST['subject_id'] ?? null;
-    $day        = $_POST['day_of_week'] ?? null;
-    $start      = $_POST['start_time'] ?? null;
-    $end        = $_POST['end_time'] ?? null;
-    $room       = isset($_POST['room_number']) ? trim($_POST['room_number']) : null;
-
-    if (!$section_id || !$subject_id || !$day || !$start || !$end || !$room) {
-        $message = "missing_fields";
-    } else {
-        $check_query = "SELECT section_id, room_number FROM schedules 
-                        WHERE day_of_week = :day
-                        AND (section_id = :section_id OR room_number = :room)
-                        AND (start_time < :end_time AND end_time > :start_time)";
-
-        $check_stmt = $conn->prepare($check_query);
-        $check_stmt->execute([
-            ':day' => $day,
-            ':section_id' => $section_id,
-            ':room' => $room,
-            ':end_time' => $end,
-            ':start_time' => $start,
-        ]);
-        $conflict = $check_stmt->fetch(PDO::FETCH_ASSOC);
-
-        if ($conflict) {
-            $message = ($conflict['room_number'] === $room && (int)$conflict['section_id'] != (int)$section_id)
-                ? "room_conflict"
-                : "section_conflict";
-        } else {
-            $insert_query = "INSERT INTO schedules (section_id, subject_id, day_of_week, start_time, end_time, room_number) VALUES (:section_id, :subject_id, :day, :start_time, :end_time, :room)";
-            $stmt = $conn->prepare($insert_query);
-            $result = $stmt->execute([
-                ':section_id' => $section_id,
-                ':subject_id' => $subject_id,
-                ':day' => $day,
-                ':start_time' => $start,
-                ':end_time' => $end,
-                ':room' => $room,
-            ]);
-            $message = $result ? 'success' : 'error';
-        }
-    }
+$schedule_data = [];
+foreach ($schedule_stmt->fetchAll(PDO::FETCH_ASSOC) as $class) {
+    $schedule_data[$class['day_of_week']][] = $class;
 }
 
-// 3. Handle Delete
-if (isset($_GET['delete'])) {
-    $id = (int) $_GET['delete'];
-    if ($id > 0) {
-        $stmt = $conn->prepare("DELETE FROM schedules WHERE id = :id");
-        $stmt->execute([':id' => $id]);
-    }
-    header("Location: admin_schedule.php?msg=deleted");
-    exit();
-}
-
-// 4. Data for Stats & Select Inputs
-$total_classes = (int) $conn->query("SELECT COUNT(*) FROM schedules")->fetchColumn();
-$total_rooms   = (int) $conn->query("SELECT COUNT(DISTINCT room_number) FROM schedules")->fetchColumn();
-$sections = $conn->query("SELECT id, section_name FROM sections ORDER BY section_name")->fetchAll(PDO::FETCH_ASSOC);
-
-// 5. Fetch Table Data with Filters
-$filter_section = isset($_GET['filter_section']) ? (int) $_GET['filter_section'] : null;
-$sched_query = "SELECT sch.*, s.section_name, sub.subject_name, sub.subject_code 
-                FROM schedules sch 
-                JOIN sections s ON sch.section_id = s.id 
-                JOIN subjects sub ON sch.subject_id = sub.id";
-$params = [];
-if ($filter_section > 0) {
-    $sched_query .= " WHERE sch.section_id = :section_id";
-    $params[':section_id'] = $filter_section;
-}
-$sched_query .= " ORDER BY FIELD(day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'), start_time ASC";
-$sched_stmt = $conn->prepare($sched_query);
-$sched_stmt->execute($params);
-$schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
+$days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Schedules | STRAND-SYNC</title>
+    <title>My Class Schedule | STRAND-SYNC</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
-        /* Layered Sidebar Fixes */
-         body { 
+        body {
             margin: 0;
             padding: 0;
             overflow-x: hidden;
-            overflow-y: auto; 
+            overflow-y: auto;
         }
 
-        .dashboard-wrapper { 
-            display: flex; 
+        .dashboard-wrapper {
+            display: flex;
             min-height: 100vh;
             height: auto;
             width: 100%;
@@ -116,41 +63,96 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
             position: relative;
         }
 
-        main.content { 
+        main.content {
             flex-grow: 1;
             margin-left: 260px;
             padding: 30px;
             width: 100%;
             max-width: 100%;
-            height: 100vh; 
+            min-height: 100vh;
             box-sizing: border-box;
-            display: flex; 
-            flex-direction: column; 
+            display: flex;
+            flex-direction: column;
             transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            overflow: hidden;
         }
 
-        .table-container { 
-            flex: 1; 
-            min-height: 0; 
-            overflow-y: auto; 
-            overflow-x: auto; 
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
+        .schedule-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .day-column {
+            padding: 15px;
+            background: #f8fafc;
             border: 1px solid #e2e8f0;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            border-radius: 12px;
+        }
+
+        .day-header {
+            padding-bottom: 10px;
+            margin: 0 0 15px;
+            border-bottom: 2px solid #3b82f6;
+            color: #1e293b;
+            font-weight: 700;
+        }
+
+        .class-card {
+            padding: 15px;
+            margin-bottom: 12px;
+            background: #ffffff;
+            border-left: 4px solid #3b82f6;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .time-slot {
+            display: block;
+            margin-bottom: 5px;
+            color: #3b82f6;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .subject-info {
+            display: block;
+            color: #0f172a;
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+
+        .meta-info {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 5px;
+            color: #64748b;
+            font-size: 0.8rem;
+        }
+
+        .empty-day {
+            padding: 20px;
+            color: #94a3b8;
+            font-size: 0.9rem;
+            font-style: italic;
+            text-align: center;
         }
 
         .mobile-toggle {
+            display: none;
             transition: opacity 0.2s ease, visibility 0.2s ease;
             z-index: 999;
-        }
-
-        .mobile-toggle.hidden {
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            line-height: 1;
+            margin-bottom: 15px;
+            align-self: flex-start;
         }
 
         .sidebar-close {
@@ -164,46 +166,58 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
             line-height: 1;
         }
 
-       @media (max-width: 1024px) {
-            html,
-            body {
-                height: auto;
+        @media (max-width: 1024px) {
+            html, body {
+                margin: 0;
+                padding: 0;
+                width: 100%;
                 min-height: 100%;
+                height: auto;
                 overflow-x: hidden;
                 overflow-y: auto;
             }
 
             .dashboard-wrapper {
-                display: flex;
-                flex-direction: column;
+                display: block;
                 width: 100%;
-                height: auto;
                 min-height: 100vh;
+                height: auto;
                 overflow: visible;
+                position: relative;
+            }
+
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: -260px;
+                width: 260px;
+                height: 100vh;
+                z-index: 1050;
+                transition: left 0.3s ease;
+                overflow-y: auto;
+            }
+
+            .sidebar.active {
+                left: 0;
+            }
+
+            .mobile-toggle {
+                display: block;
+                position: relative;
+                z-index: 1000;
             }
 
             main.content {
+                display: block;
                 margin-left: 0 !important;
                 width: 100%;
-                height: auto;
+                max-width: 100%;
+                height: auto !important;
                 min-height: 100vh;
-                overflow: visible;
                 padding: 15px;
+                padding-top: 20px;
                 box-sizing: border-box;
-            }
-
-            .admin-layout {
-                grid-template-columns: 1fr;
-                width: 100%;
-            }
-
-            .table-container {
-                width: 100%;
-                max-height: none;
-                height: auto;
-                overflow-x: auto;
-                overflow-y: visible;
-                box-sizing: border-box;
+                overflow: visible !important;
             }
 
             #sidebar.active .sidebar-close {
@@ -211,94 +225,15 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
             }
         }
 
-        #sidebar:not(.active) ~ main.content { 
-            margin-left: 0; 
-            width: 100%; 
-        }
-        .admin-layout { 
-            display: grid; 
-            grid-template-columns: 350px 1fr; 
-            gap: 25px; margin-top: 20px; 
-            align-items: start; 
-        }
-        @media (max-width: 1100px) { 
-            .admin-layout { grid-template-columns: 1fr; } 
-        }
-
-        .card { 
-            background: white; 
-            padding: 25px; 
-            border-radius: 12px; 
-            border: 1px solid #e5e7eb; 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
-        }
-        .form-group { 
-            margin-bottom: 15px; 
-        }
-        .form-group label { 
-            display: block; 
-            margin-bottom: 6px; 
-            font-weight: 600; 
-            font-size: 0.85rem; 
-            color: #475569; 
-        }
-        .form-group select, .form-group input { 
-            width: 100%; 
-            padding: 10px; 
-            border: 1px solid #e2e8f0; 
-            border-radius: 8px; 
-            font-family: inherit; 
-        }
-        
-        .btn-primary { 
-            background: #2563eb; 
-            color: white; 
-            border: none; 
-            padding: 12px; 
-            width: 100%; 
-            border-radius: 8px; 
-            font-weight: 700; 
-            cursor: pointer; 
-            transition: 0.2s; 
-        }
-        .btn-primary:hover { 
-            background: #1d4ed8; 
-        }
-        
-        .status-msg { 
-            padding: 12px; 
-            border-radius: 8px; 
-            margin-bottom: 15px; 
-            font-size: 0.85rem; 
-            font-weight: 600; 
-        }
-        .msg-success { 
-            background: #f0fdf4; 
-            color: #16a34a; 
-            border: 1px solid #bbf7d0; 
-        }
-        .msg-conflict { 
-            background: #fef2f2; 
-            color: #dc2626; 
-            border: 1px solid #fecaca; 
-        }
-        
-        .delete-btn { 
-            color: #ef4444; 
-            text-decoration: none; 
-            font-weight: 700; 
-            font-size: 0.8rem; 
-        }
-        .table-header-flex { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            margin-bottom: 15px; 
+        #sidebar:not(.active) ~ main.content {
+            margin-left: 0;
+            width: 100%;
         }
     </style>
 </head>
 <body>
     <button class="mobile-toggle" id="mobileBurger" onclick="toggleSidebar()">☰</button>
+
     <div class="dashboard-wrapper">
         <nav class="sidebar" id="sidebar">
             <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
@@ -307,8 +242,8 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
             <ul class="menu">
                 <li><a href="faculty_dashboard.php">Dashboard</a></li>
-                <li><a href="faculty_schedule.php" class="active">Manage Schedule</a></li>
-                <li><a href="ecr-inputdata.php">ECR Setup & Roster</a></li>
+                <li><a href="faculty_schedule.php" class="active">My Schedule</a></li>
+                <li><a href="ecr-inputdata.php">ECR Setup &amp; Roster</a></li>
                 <li><a href="ecr-view.php?term=1">Encode Term Grades</a></li>
                 <li><a href="ecr-summary.php">ECR Summary</a></li>
                 <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
@@ -317,128 +252,43 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
 
         <main class="content">
             <header class="content-header">
-                <h1>Schedule Management</h1>
-                <p>Assign subjects to sections and rooms while avoiding conflicts.</p>
+                <h1>My Class Schedule</h1>
+                <p>Weekly timetable for your assigned classes.</p>
             </header>
 
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon" style="background:#eff6ff; color:#3b82f6;">📅</div>
-                    <div class="stat-info"><h3>Total Classes</h3><div class="number"><?/*= $total_classes; */?></div></div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon" style="background:#fef2f2; color:#ef4444;">🏫</div>
-                    <div class="stat-info"><h3>Active Rooms</h3><div class="number"><?/*= $total_rooms; */?></div></div>
-                </div>
-            </div>
-
-            <div class="admin-layout">
-                <div class="card">
-                    <h3>Add New Entry</h3>
-                    <?php if($message == "success"): ?><div class="status-msg msg-success">✔ Schedule saved successfully!</div><?php endif; ?>
-                    <?php if($message == "section_conflict"): ?><div class="status-msg msg-conflict">⚠ Section is already busy during this time!</div><?php endif; ?>
-                    <?php if($message == "room_conflict"): ?><div class="status-msg msg-conflict">⚠ Room is already occupied by another class!</div><?php endif; ?>
-                    
-                    <form method="POST">
-                        <div class="form-group">
-                            <label>Section</label>
-                            <select name="section_id" id="sectionSelect" onchange="fetchSubjects(this.value)" required>
-                                <option value="">Select Section</option>
-                                <?php foreach ($sections as $s): ?>
-                                    <option value="<?= $s['id']; ?>"><?= htmlspecialchars($s['section_name']); ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Subject</label>
-                            <select name="subject_id" id="subjectSelect" required disabled>
-                                <option value="">Select a section first</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Day of Week</label>
-                            <select name="day_of_week" required>
-                                <option value="Monday">Monday</option>
-                                <option value="Tuesday">Tuesday</option>
-                                <option value="Wednesday">Wednesday</option>
-                                <option value="Thursday">Thursday</option>
-                                <option value="Friday">Friday</option>
-                            </select>
-                        </div>
-                        <div style="display:flex; gap:10px;">
-                            <div class="form-group" style="flex:1;"><label>Start</label><input type="time" name="start_time" required></div>
-                            <div class="form-group" style="flex:1;"><label>End</label><input type="time" name="end_time" required></div>
-                        </div>
-                        <div class="form-group"><label>Room Number</label><input type="text" name="room_number" placeholder="e.g., Room 301" required></div>
-                        <button type="submit" name="add_schedule" class="btn-primary">Save Schedule</button>
-                    </form>
-                </div>
-
-               <div class="table-container">
-                    <div class="table-header-flex">
-                        <h2>Timetable Overview</h2>
-                        <form method="GET">
-                            <select name="filter_section" onchange="this.form.submit()" style="padding:8px; border-radius:6px; border:1px solid #ddd;">
-                                <option value="">All Sections</option>
-                                <?php foreach ($sections as $s): ?>
-                                    <option value="<?= $s['id']; ?>" <?= ($filter_section == (int) $s['id']) ? 'selected' : ''; ?>><?= htmlspecialchars($s['section_name']); ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </form>
-                    </div>
-                    <table>
-                        <thead>
-                            <tr><th>Section</th><th>Day</th><th>Subject</th><th>Time</th><th>Room</th><th>Action</th></tr>
-                        </thead>
-                        <tbody>
-                            <?php if (!empty($schedules)): ?>
-                                <?php foreach ($schedules as $row): ?>
-                                <tr>
-                                    <td><strong><?= htmlspecialchars($row['section_name']); ?></strong></td>
-                                    <td><?= htmlspecialchars($row['day_of_week']); ?></td>
-                                    <td><?= htmlspecialchars($row['subject_name']); ?></td>
-                                    <td><?= date("g:i A", strtotime($row['start_time'])); ?> - <?= date("g:i A", strtotime($row['end_time'])); ?></td>
-                                    <td><span style="background:#f1f5f9; padding:4px 8px; border-radius:4px;"><?= htmlspecialchars($row['room_number']); ?></span></td>
-                                    <td><a href="?delete=<?= (int) $row['id']; ?>" class="delete-btn" onclick="return confirm('Remove this schedule?')">Delete</a></td>
-                                </tr>
-                                <?php endforeach; ?>
-                            <?php else: ?>
-                                <tr><td colspan="6" style="text-align:center; padding:20px; color:#64748b;">No schedules found.</td></tr>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
+            <div class="schedule-grid">
+                <?php foreach ($days as $day): ?>
+                    <section class="day-column">
+                        <h2 class="day-header"><?= htmlspecialchars($day) ?></h2>
+                        <?php if (!empty($schedule_data[$day])): ?>
+                            <?php foreach ($schedule_data[$day] as $class): ?>
+                                <article class="class-card">
+                                    <span class="time-slot">
+                                        <?= date('g:i A', strtotime($class['start_time'])) ?> -
+                                        <?= date('g:i A', strtotime($class['end_time'])) ?>
+                                    </span>
+                                    <span class="subject-info">
+                                        <?= htmlspecialchars($class['subject_name']) ?>
+                                        (<?= htmlspecialchars($class['subject_code']) ?>)
+                                    </span>
+                                    <div class="meta-info">
+                                        <span><?= htmlspecialchars($class['section_name']) ?></span>
+                                        <span>Rm: <?= htmlspecialchars($class['room_number'] ?: 'TBA') ?></span>
+                                    </div>
+                                </article>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <div class="empty-day">No classes scheduled</div>
+                        <?php endif; ?>
+                    </section>
+                <?php endforeach; ?>
             </div>
         </main>
     </div>
 
     <script>
-        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('active'); }
-
-        function fetchSubjects(sectionId) {
-            const subjectSelect = document.getElementById('subjectSelect');
-            if (!sectionId) {
-                subjectSelect.innerHTML = '<option value="">Select a section first</option>';
-                subjectSelect.disabled = true;
-                return;
-            }
-            fetch(`get_filtered_subjects.php?section_id=${sectionId}`)
-                .then(response => response.json())
-                .then(data => {
-                    subjectSelect.innerHTML = '<option value="">Select Subject</option>';
-                    if (data.length === 0) {
-                        subjectSelect.innerHTML = '<option value="">No subjects found</option>';
-                        subjectSelect.disabled = true;
-                    } else {
-                        data.forEach(sub => {
-                            let option = document.createElement('option');
-                            option.value = sub.id;
-                            option.textContent = `${sub.subject_name} (${sub.subject_code})`;
-                            subjectSelect.appendChild(option);
-                        });
-                        subjectSelect.disabled = false;
-                    }
-                });
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('active');
         }
     </script>
 </body>
