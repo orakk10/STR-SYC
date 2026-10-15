@@ -22,6 +22,16 @@ if (!in_array($term, [1, 2, 3])) {
 
 $assignment_id = isset($_GET['assignment_id']) ? (int)$_GET['assignment_id'] : 0;
 
+// Variables for dynamic navigation sidebar
+$nav_assignment_param = !empty($assignment_id) ? "?assignment_id={$assignment_id}" : "";
+$nav_term_param = !empty($assignment_id) 
+    ? "?assignment_id={$assignment_id}&term=" . ($term ?? 1) 
+    : "?term=" . ($term ?? 1);
+
+$user_role_clean = strtolower($_SESSION['role'] ?? 'faculty');
+$is_adviser_or_admin = in_array($user_role_clean, ['adviser', 'admin'], true);
+$current_page = basename($_SERVER['PHP_SELF']);
+
 // Helper: DepEd DO 8, s. 2015 Subject Weights Mapper
 function getComponentWeights(?string $type): array {
     switch ($type) {
@@ -611,18 +621,59 @@ if ($section_id > 0) {
     <button class="mobile-toggle" id="mobileBurger" onclick="toggleSidebar()">☰</button>
 
     <div class="dashboard-wrapper">
+        <!-- Dynamic Sidebar Navigation -->
         <nav class="sidebar" id="sidebar">
             <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                 <h3>STRAND-SYNC</h3>
                 <button class="sidebar-close" onclick="toggleSidebar()">✕</button>
             </div>
             <ul class="menu">
-                <li><a href="faculty_dashboard.php" onclick="toggleSidebar()">Dashboard</a></li>
-                <li><a href="faculty_schedule.php" onclick="toggleSidebar()">My Schedule</a></li>
-                <li><a href="ecr-inputdata.php" onclick="toggleSidebar()">ECR Setup & Roster</a></li>
-                <li><a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=<?= $term ?>" class="active" onclick="toggleSidebar()">Encode Term Grades</a></li>
-                <li><a href="ecr-summary.php" onclick="toggleSidebar()">ECR Summary</a></li>
-                <li><a href="../../manifest/logout.php" class="logout" onclick="toggleSidebar()">Logout</a></li>
+                <li>
+                    <a href="faculty_dashboard.php" class="<?= $current_page == 'faculty_dashboard.php' ? 'active' : '' ?>">
+                        Dashboard
+                    </a>
+                </li>
+                <li>
+                    <a href="faculty_schedule.php" class="<?= $current_page == 'faculty_schedule.php' ? 'active' : '' ?>">
+                        My Schedule
+                    </a>
+                </li>
+                <li>
+                    <a href="ecr-inputdata.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'ecr-inputdata.php' ? 'active' : '' ?>">
+                        ECR Setup &amp; Roster
+                    </a>
+                </li>
+                <li>
+                    <a href="ecr-view.php<?= $nav_term_param ?>" class="<?= $current_page == 'ecr-view.php' ? 'active' : '' ?>">
+                        Encode Term Grades
+                    </a>
+                </li>
+                <li>
+                    <a href="ecr-summary.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'ecr-summary.php' ? 'active' : '' ?>">
+                        ECR Summary
+                    </a>
+                </li>
+
+                <?php if ($is_adviser_or_admin): ?>
+                    <!-- Official DepEd Advisory Forms Section -->
+                    <li class="menu-divider" style="padding: 12px 16px 4px 16px; font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">
+                        Advisory Forms
+                    </li>
+                    <li>
+                        <a href="sf9-reportcard.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'sf9-reportcard.php' ? 'active' : '' ?>">
+                            SF9 (Report Card)
+                        </a>
+                    </li>
+                    <li>
+                        <a href="sf10-record.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'sf10-record.php' ? 'active' : '' ?>">
+                            SF10 (Permanent Record)
+                        </a>
+                    </li>
+                <?php endif; ?>
+
+                <li>
+                    <a href="../../manifest/logout.php" class="logout">Logout</a>
+                </li>
             </ul>
         </nav>
 
@@ -647,9 +698,9 @@ if ($section_id > 0) {
                             <?php if (empty($my_assignments)): ?>
                                 <option value="0">No teaching subjects assigned</option>
                             <?php else: ?>
-                                <?php foreach ($my_assignments as$assign): ?>
-                                    <option value="<?= $assign['assignment_id'] ?>" <?= $assign['assignment_id'] ==$assignment_id ? 'selected' : '' ?>>
-                                        Grade <?= htmlspecialchars($assign['grade_level'] . ' - ' .$assign['section_name']) ?> | <?= htmlspecialchars($assign['subject_name'] . ' (' .$assign['subject_code'] . ')') ?>
+                                <?php foreach ($my_assignments as $assign): ?>
+                                    <option value="<?= $assign['assignment_id'] ?>" <?= $assign['assignment_id'] == $assignment_id ? 'selected' : '' ?>>
+                                        Grade <?= htmlspecialchars($assign['grade_level'] . ' - ' . $assign['section_name']) ?> | <?= htmlspecialchars($assign['subject_name'] . ' (' . $assign['subject_code'] . ')') ?>
                                     </option>
                                 <?php endforeach; ?>
                             <?php endif; ?>
@@ -716,7 +767,7 @@ if ($section_id > 0) {
                             <!-- Dynamic HPS Input Row -->
                             <tr class="hps-row">
                                 <!-- WW HPS Inputs -->
-                                <?php foreach ($ww_list as $task_num =>$comp): ?>
+                                <?php foreach ($ww_list as $task_num => $comp): ?>
                                     <th>
                                         <input type="number" min="1" max="100" class="hps-input" 
                                                data-category="WW" 
@@ -730,7 +781,7 @@ if ($section_id > 0) {
                                 <th class="th-calc" style="width: 26px;">WS</th>
 
                                 <!-- PT HPS Inputs -->
-                                <?php foreach ($pt_list as $task_num =>$comp): ?>
+                                <?php foreach ($pt_list as $task_num => $comp): ?>
                                     <th>
                                         <input type="number" min="1" max="100" class="hps-input" 
                                                data-category="PT" 
@@ -744,7 +795,7 @@ if ($section_id > 0) {
                                 <th class="th-calc" style="width: 26px;">WS</th>
 
                                 <!-- QA HPS Inputs -->
-                                <?php foreach ($qa_list as $task_num =>$comp): ?>
+                                <?php foreach ($qa_list as $task_num => $comp): ?>
                                     <th>
                                         <input type="number" min="1" max="100" class="hps-input" 
                                                data-category="QA" 
@@ -768,14 +819,14 @@ if ($section_id > 0) {
                                     <td colspan="<?= $total_grid_columns ?>" style="padding: 10px !important; color: #94a3b8;">No male students registered in this section.</td>
                                 </tr>
                             <?php else: ?>
-                                <?php foreach ($males as $index =>$student): ?>
+                                <?php foreach ($males as $index => $student): ?>
                                     <tr class="student-row" data-student-id="<?= $student['id'] ?>">
                                         <td class="col-sticky-name" title="<?= htmlspecialchars($student['name']) ?>">
                                             <?= ($index + 1) . '. ' . htmlspecialchars($student['name']) ?>
                                         </td>
                                         
                                         <!-- Dynamic Written Works Inputs -->
-                                        <?php foreach ($ww_list as $task_num =>$comp): ?>
+                                        <?php foreach ($ww_list as $task_num => $comp): ?>
                                             <td>
                                                 <input type="number" min="0" max="100" class="score-input" 
                                                        data-category="WW" 

@@ -13,6 +13,7 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['adviser', 'fa
 
 $user_id   = $_SESSION['user_id'];
 $user_role = $_SESSION['role'];
+$is_adviser_or_admin = in_array($user_role, ['adviser', 'admin']);
 $success_msg = "";
 
 // 1. Process Announcement Broadcast
@@ -151,7 +152,7 @@ if ($section_data) {
             display: flex;
             flex-direction: column;
             transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            overflow: hidden;
+            overflow-y: auto;
         }
 
         #sidebar:not(.active) ~ main.content {
@@ -209,6 +210,7 @@ if ($section_data) {
             font-size: 0.9rem;
             font-weight: 600;
         }
+
         .mobile-toggle {
             display: block;
             position: fixed;
@@ -221,6 +223,7 @@ if ($section_data) {
             padding: 10px 15px;
             border-radius: 4px;
         }
+
         @media (max-width: 1024px) {
             html,
             body {
@@ -274,18 +277,49 @@ if ($section_data) {
     <button class="mobile-toggle" id="mobileBurger" onclick="toggleSidebar()">☰</button>
 
     <div class="dashboard-wrapper">
+        <!-- Sidebar Navigation -->
         <nav class="sidebar" id="sidebar">
             <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                 <h3>STRAND-SYNC</h3>
                 <button class="sidebar-close" onclick="toggleSidebar()">✕</button>
             </div>
             <ul class="menu">
-                <li><a href="faculty_dashboard.php" class="active">Dashboard</a></li>
-                <li><a href="faculty_schedule.php">My Schedule</a></li>
-                <li><a href="ecr-inputdata.php">ECR Setup & Roster</a></li>
-                <li><a href="ecr-view.php?term=1">Encode Term Grades</a></li>
-                <li><a href="ecr-summary.php">ECR Summary</a></li>
-                <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
+                <li>
+                    <a href="faculty_dashboard.php" class="<?= basename($_SERVER['PHP_SELF']) == 'faculty_dashboard.php' ? 'active' : '' ?>">Dashboard</a>
+                </li>
+                <li>
+                    <a href="faculty_schedule.php" class="<?= basename($_SERVER['PHP_SELF']) == 'faculty_schedule.php' ? 'active' : '' ?>">My Schedule</a>
+                </li>
+                <li>
+                    <a href="ecr-inputdata.php" class="<?= basename($_SERVER['PHP_SELF']) == 'ecr-inputdata.php' ? 'active' : '' ?>">ECR Setup & Roster</a>
+                </li>
+                <li>
+                    <a href="ecr-view.php?term=1" class="<?= basename($_SERVER['PHP_SELF']) == 'ecr-view.php' ? 'active' : '' ?>">Encode Term Grades</a>
+                </li>
+                <li>
+                    <a href="ecr-summary.php" class="<?= basename($_SERVER['PHP_SELF']) == 'ecr-summary.php' ? 'active' : '' ?>">ECR Summary</a>
+                </li>
+
+                <?php if ($is_adviser_or_admin): ?>
+                    <!-- Official DepEd Advisory Forms Section -->
+                    <li class="menu-divider" style="padding: 12px 16px 4px 16px; font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">
+                        Advisory Forms
+                    </li>
+                    <li>
+                        <a href="sf9-reportcard.php" class="<?= basename($_SERVER['PHP_SELF']) == 'sf9-reportcard.php' ? 'active' : '' ?>">
+                            SF9 (Report Card)
+                        </a>
+                    </li>
+                    <li>
+                        <a href="sf10-record.php" class="<?= basename($_SERVER['PHP_SELF']) == 'sf10-record.php' ? 'active' : '' ?>">
+                            SF10 (Permanent Record)
+                        </a>
+                    </li>
+                <?php endif; ?>
+
+                <li>
+                    <a href="../../manifest/logout.php" class="logout">Logout</a>
+                </li>
             </ul>
         </nav>
 
@@ -398,8 +432,8 @@ if ($section_data) {
                                                 </span>
                                             </td>
                                             <td style="padding: 10px; text-align: center;">
-                                                <!-- Fixed routing link to pass assignment_id -->
-                                                <a href="ecr-inputdata.php?assignment_id=<?php echo $load['assignment_id']; ?>&term=Term+1" class="btn-table-action">Enter Grades</a>
+                                                <!-- Fixed routing link passing clean numeric parameters -->
+                                                <a href="ecr-inputdata.php?assignment_id=<?php echo $load['assignment_id']; ?>&term=1" class="btn-table-action">Enter Grades</a>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>

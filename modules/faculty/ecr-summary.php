@@ -19,11 +19,21 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'ad
     exit();
 }
 
-$user_id   =$_SESSION['user_id'];
-$user_role =$_SESSION['role'];
+$user_id   = $_SESSION['user_id'];
+$user_role = $_SESSION['role'];
 
 // 3. Subject Assignment & Section Query Parameters
 $assignment_id = isset($_GET['assignment_id']) ? (int)$_GET['assignment_id'] : 0;
+
+// Variables for dynamic navigation sidebar
+$nav_assignment_param = !empty($assignment_id) ? "?assignment_id={$assignment_id}" : "";
+$nav_term_param = !empty($assignment_id) 
+    ? "?assignment_id={$assignment_id}&term=" . ($term ?? 1) 
+    : "?term=" . ($term ?? 1);
+
+$user_role_clean = strtolower($_SESSION['role'] ?? 'faculty');
+$is_adviser_or_admin = in_array($user_role_clean, ['adviser', 'admin'], true);
+$current_page = basename($_SERVER['PHP_SELF']);
 
 // Fetch Active Faculty Subject Load
 $assignments_stmt =$pdo->prepare("
@@ -458,12 +468,52 @@ if ($section_id > 0) {
                 <button class="sidebar-close" onclick="toggleSidebar()">✕</button>
             </div>
             <ul class="menu">
-                <li><a href="faculty_dashboard.php">Dashboard</a></li>
-                <li><a href="faculty_schedule.php">My Schedule</a></li>
-                <li><a href="ecr-inputdata.php?assignment_id=<?= $assignment_id ?>">ECR Setup & Roster</a></li>
-                <li><a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=1">Encode Term Grades</a></li>
-                <li><a href="ecr-summary.php?assignment_id=<?= $assignment_id ?>" class="active">ECR Summary</a></li>
-                <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
+                <li>
+                    <a href="faculty_dashboard.php" class="<?= $current_page == 'faculty_dashboard.php' ? 'active' : '' ?>">
+                        Dashboard
+                    </a>
+                </li>
+                <li>
+                    <a href="faculty_schedule.php" class="<?= $current_page == 'faculty_schedule.php' ? 'active' : '' ?>">
+                        My Schedule
+                    </a>
+                </li>
+                <li>
+                    <a href="ecr-inputdata.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'ecr-inputdata.php' ? 'active' : '' ?>">
+                        ECR Setup &amp; Roster
+                    </a>
+                </li>
+                <li>
+                    <a href="ecr-view.php<?= $nav_term_param ?>" class="<?= $current_page == 'ecr-view.php' ? 'active' : '' ?>">
+                        Encode Term Grades
+                    </a>
+                </li>
+                <li>
+                    <a href="ecr-summary.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'ecr-summary.php' ? 'active' : '' ?>">
+                        ECR Summary
+                    </a>
+                </li>
+
+                <?php if ($is_adviser_or_admin): ?>
+                    <!-- Official DepEd Advisory Forms Section -->
+                    <li class="menu-divider" style="padding: 12px 16px 4px 16px; font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">
+                        Advisory Forms
+                    </li>
+                    <li>
+                        <a href="sf9-reportcard.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'sf9-reportcard.php' ? 'active' : '' ?>">
+                            SF9 (Report Card)
+                        </a>
+                    </li>
+                    <li>
+                        <a href="sf10-record.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'sf10-record.php' ? 'active' : '' ?>">
+                            SF10 (Permanent Record)
+                        </a>
+                    </li>
+                <?php endif; ?>
+
+                <li>
+                    <a href="../../manifest/logout.php" class="logout">Logout</a>
+                </li>
             </ul>
         </nav>
 

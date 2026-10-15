@@ -13,17 +13,27 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'ad
     exit();
 }
 
-$user_id   =$_SESSION['user_id'];
-$user_role =$_SESSION['role'];
+$user_id   = $_SESSION['user_id'];
+$user_role = $_SESSION['role'];
+
+// Variables for dynamic navigation sidebar
+$nav_assignment_param = !empty($assignment_id) ? "?assignment_id={$assignment_id}" : "";
+$nav_term_param = !empty($assignment_id) 
+    ? "?assignment_id={$assignment_id}&term=" . ($term ?? 1) 
+    : "?term=" . ($term ?? 1);
+
+$user_role_clean = strtolower($_SESSION['role'] ?? 'faculty');
+$is_adviser_or_admin = in_array($user_role_clean, ['adviser', 'admin'], true);
+$current_page = basename($_SERVER['PHP_SELF']);
 
 // 3. Query Selected Term & Assignment
 $term = isset($_GET['term']) ? (int)$_GET['term'] : 1;
-if (!in_array($term, [1, 2, 3])) {$term = 1; }
+if (!in_array($term, [1, 2, 3])) { $term = 1; }
 
 $assignment_id = isset($_GET['assignment_id']) ? (int)$_GET['assignment_id'] : 0;
 
 // 4. Fetch All Active Teaching Assignments for Faculty
-$assignments_stmt =$pdo->prepare("
+$assignments_stmt = $pdo->prepare("
     SELECT sa.id AS assignment_id, sub.subject_name, sub.subject_code, sub.type AS subject_type,
            sec.id AS section_id, sec.section_name, sec.grade_level, st.strand_code, st.strand_name
     FROM subject_assignments sa
@@ -33,8 +43,8 @@ $assignments_stmt =$pdo->prepare("
     WHERE sa.faculty_id = :faculty_id
     ORDER BY sec.grade_level ASC, sec.section_name ASC, sub.subject_name ASC
 ");
-$assignments_stmt->execute(['faculty_id' =>$user_id]);
-$my_assignments =$assignments_stmt->fetchAll(PDO::FETCH_ASSOC);
+$assignments_stmt->execute(['faculty_id' => $user_id]);
+$my_assignments = $assignments_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 if ($assignment_id === 0 && !empty($my_assignments)) {
     $assignment_id = (int)$my_assignments[0]['assignment_id'];
@@ -42,19 +52,20 @@ if ($assignment_id === 0 && !empty($my_assignments)) {
 
 // 5. Extract Active Assignment Data
 $active_assignment = null;
-foreach ($my_assignments as$assign) {
-    if ((int)$assign['assignment_id'] ===$assignment_id) {
-        $active_assignment =$assign;
+foreach ($my_assignments as $assign) {
+    if ((int)$assign['assignment_id'] === $assignment_id) {
+        $active_assignment = $assign;
         break;
     }
 }
 
-$section_id =$active_assignment['section_id'] ?? 0;
-$strand_identifier = ($active_assignment['strand_code'] ?? '') . ' ' . ($active_assignment['strand_name'] ?? '');$is_tech_track = (stripos($strand_identifier, 'TVL') !== false || stripos($strand_identifier, 'ICT') !== false);
+$section_id = $active_assignment['section_id'] ?? 0;
+$strand_identifier = ($active_assignment['strand_code'] ?? '') . ' ' . ($active_assignment['strand_name'] ?? '');
+$is_tech_track = (stripos($strand_identifier, 'TVL') !== false || stripos($strand_identifier, 'ICT') !== false);
 
 // 6. Fetch Teacher Name
-$teacher_stmt =$pdo->prepare("SELECT full_name FROM users WHERE id = :user_id");
-$teacher_stmt->execute(['user_id' =>$user_id]);
+$teacher_stmt = $pdo->prepare("SELECT full_name FROM users WHERE id = :user_id");
+$teacher_stmt->execute(['user_id' => $user_id]);
 $teacher_name =$teacher_stmt->fetchColumn() ?: 'Unassigned Teacher';
 
 // 7. Fetch Active Student Roster by Gender for Selected Assignment Section
@@ -109,7 +120,7 @@ $term_is_locked = false;
 
 if ($assignment_id > 0) {
     $term_column = "term{$term}_transmuted";
-    $saved_scores_stmt = $pdo->prepare("
+    $saved_scores_stmt =$pdo->prepare("
         SELECT COUNT(*)
         FROM ecr_student_scores scores
         JOIN ecr_assessment_components components ON components.id = scores.component_id
@@ -119,13 +130,12 @@ if ($assignment_id > 0) {
         'assignment_id' => $assignment_id,
         'term' => $term_str
     ]);
-    $saved_summary_stmt = $pdo->prepare("
+    $saved_summary_stmt =$pdo->prepare("
         SELECT COUNT(*)
         FROM ecr_term_summaries
         WHERE assignment_id = :assignment_id AND {$term_column} IS NOT NULL
     ");
-    $saved_summary_stmt->execute(['assignment_id' => $assignment_id]);
-    $term_is_locked = (int)$saved_scores_stmt->fetchColumn() > 0
+    $saved_summary_stmt->execute(['assignment_id' => $assignment_id]);$term_is_locked = (int)$saved_scores_stmt->fetchColumn() > 0
         || (int)$saved_summary_stmt->fetchColumn() > 0;
 }
 ?>
@@ -391,18 +401,59 @@ if ($assignment_id > 0) {
     <button class="mobile-toggle" id="mobileBurger" onclick="toggleSidebar()">☰</button>
 
     <div class="dashboard-wrapper">
+        <!-- Dynamic Sidebar Navigation -->
         <nav class="sidebar" id="sidebar">
             <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                 <h3>STRAND-SYNC</h3>
                 <button class="sidebar-close" onclick="toggleSidebar()">✕</button>
             </div>
             <ul class="menu">
-                <li><a href="faculty_dashboard.php">Dashboard</a></li>
-                <li><a href="faculty_schedule.php">My Schedule</a></li>
-                <li><a href="ecr-inputdata.php" class="active">ECR Setup & Roster</a></li>
-                <li><a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=1">Encode Term Grades</a></li>
-                <li><a href="ecr-summary.php">ECR Summary</a></li>
-                <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
+                <li>
+                    <a href="faculty_dashboard.php" class="<?= $current_page == 'faculty_dashboard.php' ? 'active' : '' ?>">
+                        Dashboard
+                    </a>
+                </li>
+                <li>
+                    <a href="faculty_schedule.php" class="<?= $current_page == 'faculty_schedule.php' ? 'active' : '' ?>">
+                        My Schedule
+                    </a>
+                </li>
+                <li>
+                    <a href="ecr-inputdata.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'ecr-inputdata.php' ? 'active' : '' ?>">
+                        ECR Setup &amp; Roster
+                    </a>
+                </li>
+                <li>
+                    <a href="ecr-view.php<?= $nav_term_param ?>" class="<?= $current_page == 'ecr-view.php' ? 'active' : '' ?>">
+                        Encode Term Grades
+                    </a>
+                </li>
+                <li>
+                    <a href="ecr-summary.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'ecr-summary.php' ? 'active' : '' ?>">
+                        ECR Summary
+                    </a>
+                </li>
+
+                <?php if ($is_adviser_or_admin): ?>
+                    <!-- Official DepEd Advisory Forms Section -->
+                    <li class="menu-divider" style="padding: 12px 16px 4px 16px; font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">
+                        Advisory Forms
+                    </li>
+                    <li>
+                        <a href="sf9-reportcard.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'sf9-reportcard.php' ? 'active' : '' ?>">
+                            SF9 (Report Card)
+                        </a>
+                    </li>
+                    <li>
+                        <a href="sf10-record.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'sf10-record.php' ? 'active' : '' ?>">
+                            SF10 (Permanent Record)
+                        </a>
+                    </li>
+                <?php endif; ?>
+
+                <li>
+                    <a href="../../manifest/logout.php" class="logout">Logout</a>
+                </li>
             </ul>
         </nav>
 
@@ -433,7 +484,7 @@ if ($assignment_id > 0) {
                                         <?php else: ?>
                                             <?php foreach ($my_assignments as$assign): ?>
                                                 <option value="<?= $assign['assignment_id'] ?>" <?= $assign['assignment_id'] ==$assignment_id ? 'selected' : '' ?>>
-                                                    Grade <?= htmlspecialchars($assign['grade_level'] . ' - ' . $assign['section_name']) ?> \vert{} <?= htmlspecialchars($assign['subject_name']) ?>
+                                                    Grade <?= htmlspecialchars($assign['grade_level'] . ' - ' . $assign['section_name']) ?> | <?= htmlspecialchars($assign['subject_name']) ?>
                                                 </option>
                                             <?php endforeach; ?>
                                         <?php endif; ?>
