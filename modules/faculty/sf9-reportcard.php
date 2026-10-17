@@ -41,12 +41,16 @@ if (isset($conn) && $conn instanceof mysqli) {
     }
 }
 
-// Calculate Age from Birthdate
-$calculated_age = '';
-if (!empty($db_student['birthdate'])) {
-    $dob = new DateTime($db_student['birthdate']);
-    $now = new DateTime();
-    $calculated_age = $now->diff($dob)->y;
+// Calculate Exact Age dynamically based on the student's birthdate
+$calculated_age = 'N/A';
+if (!empty($db_student['birthdate']) && $db_student['birthdate'] !== '0000-00-00') {
+    try {
+        $dob = new DateTime($db_student['birthdate']);
+        $now = new DateTime();
+        $calculated_age = $now->diff($dob)->y;
+    } catch (Exception $e) {
+        $calculated_age = 'N/A';
+    }
 }
 
 // Format Student Full Name
@@ -56,7 +60,7 @@ $full_name = strtoupper(($db_student['first_name'] ?? '') . $middle_initial . ' 
 $student = [
     'full_name' => !empty(trim($full_name)) ? $full_name : 'JUAN A. DELA CRUZ',
     'lrn'       => $db_student['lrn'] ?? '123456789012',
-    'age'       => $calculated_age ?: '17',
+    'age'       => $calculated_age,
     'gender'    => $db_student['gender'] ?? 'Male',
     'grade'     => $db_student['grade_level'] ?? '11',
     'section'   => $db_student['section_name'] ?? 'STEM-A',
