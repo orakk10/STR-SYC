@@ -1,19 +1,70 @@
 <?php
 session_start();
 
-// Sample Data Structure
+// Database Connection Setup
+if (file_exists('../../config/database.php')) {
+    require_once '../../config/database.php';
+}
+
+// Fallback logic for connection variable names ($conn vs $db)
+if (!isset($conn) && isset($db)) {
+    $conn = $db;
+}
+
+// Get Student ID or User ID from URL parameter
+$student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : (isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 1);
+
+$db_student = null;
+
+// Only execute query if $conn is valid MySQLi instance
+if (isset($conn) && $conn instanceof mysqli) {
+    $stmt = $conn->prepare("
+        SELECT 
+            u.first_name, u.middle_name, u.last_name, u.lrn,
+            sp.birthdate, sp.gender,
+            s.grade_level, s.section_name, s.track_strand,
+            sch.region, sch.division, sch.district, sch.school_name
+        FROM users u
+        LEFT JOIN student_profiles sp ON u.id = sp.user_id
+        LEFT JOIN sections s ON u.section_id = s.id
+        LEFT JOIN schools sch ON u.school_id = sch.id
+        WHERE u.id = ?
+        LIMIT 1
+    ");
+
+    if ($stmt) {
+        $stmt->bind_param("i", $student_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $db_student = $result->fetch_assoc();
+        $stmt->close();
+    }
+}
+
+// Calculate Age from Birthdate
+$calculated_age = '';
+if (!empty($db_student['birthdate'])) {
+    $dob = new DateTime($db_student['birthdate']);
+    $now = new DateTime();
+    $calculated_age = $now->diff($dob)->y;
+}
+
+// Format Student Full Name
+$middle_initial = !empty($db_student['middle_name']) ? ' ' . strtoupper(substr($db_student['middle_name'], 0, 1)) . '.' : '';
+$full_name = strtoupper(($db_student['first_name'] ?? '') . $middle_initial . ' ' . ($db_student['last_name'] ?? ''));
+
 $student = [
-    'full_name' => 'JUAN A. DELA CRUZ',
-    'lrn'       => '123456789012',
-    'age'       => '17',
-    'gender'    => 'Male',
-    'grade'     => '11',
-    'section'   => 'STEM-A',
-    'track'     => 'Academic / STEM',
-    'region'    => 'REGION III',
-    'division'  => 'SCHOOLS DIVISION OF TARLAC',
-    'district'  => 'District I',
-    'school'    => 'ABC NATIONAL HIGH SCHOOL'
+    'full_name' => !empty(trim($full_name)) ? $full_name : 'JUAN A. DELA CRUZ',
+    'lrn'       => $db_student['lrn'] ?? '123456789012',
+    'age'       => $calculated_age ?: '17',
+    'gender'    => $db_student['gender'] ?? 'Male',
+    'grade'     => $db_student['grade_level'] ?? '11',
+    'section'   => $db_student['section_name'] ?? 'STEM-A',
+    'track'     => $db_student['track_strand'] ?? 'Academic / STEM',
+    'region'    => $db_student['region'] ?? 'REGION III',
+    'division'  => $db_student['division'] ?? 'SCHOOLS DIVISION OF TARLAC',
+    'district'  => $db_student['district'] ?? 'District I',
+    'school'    => $db_student['school_name'] ?? 'ABC NATIONAL HIGH SCHOOL'
 ];
 
 $core_subjects = [
@@ -76,7 +127,8 @@ $tot_abs  = array_sum($days_absent);
             box-sizing: border-box !important;
         }
 
-        body {
+        html, body {
+            height: 100%;
             margin: 0;
             padding: 0;
             background-color: #f1f5f9;
@@ -86,9 +138,8 @@ $tot_abs  = array_sum($days_absent);
 
         .dashboard-wrapper {
             display: flex;
-            height: 100vh;
+            min-height: 100vh;
             width: 100%;
-            overflow: hidden;
             position: relative;
         }
 
@@ -97,7 +148,7 @@ $tot_abs  = array_sum($days_absent);
             margin-left: 260px;
             padding: 16px 20px;
             width: calc(100% - 260px);
-            height: 100vh;
+            min-height: 100vh;
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
@@ -192,7 +243,6 @@ $tot_abs  = array_sum($days_absent);
             padding: 8px 10px;
             box-sizing: border-box;
             background: #ffffff;
-            overflow: hidden;
         }
 
         .header-section {
