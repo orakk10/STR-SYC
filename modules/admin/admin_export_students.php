@@ -31,9 +31,13 @@ $students = [];
 
 if ($studentIds) {
     $placeholders = implode(',', array_fill(0, count($studentIds), '?'));
-    $query = "SELECT u.id, u.full_name, s.grade_level, s.section_name
+    $query = "SELECT u.id, u.lrn, u.full_name, s.grade_level, s.section_name, st.strand_name,
+                     sp.birthdate, sp.gender, sp.address, sp.contact_no, sp.guardian_name,
+                     sp.guardian_contact, sp.specialization
               FROM users u
               LEFT JOIN sections s ON u.section_id = s.id
+              LEFT JOIN strands st ON s.strand_id = st.id
+              LEFT JOIN student_profiles sp ON sp.user_id = u.id
               WHERE u.role = 'student' AND u.id IN ($placeholders)";
     $statement = $conn->prepare($query);
     $statement->execute($studentIds);
@@ -47,7 +51,11 @@ header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename="Master_Student_List.csv"');
 
 $output = fopen('php://output', 'w');
-fputcsv($output, ['Student Name', 'Grade', 'Section Name']);
+fputcsv($output, [
+    'LRN', 'Student Name', 'Grade Level', 'Strand', 'Section Name',
+    'Birthdate', 'Gender', 'Address', 'Contact No', 'Guardian Name',
+    'Guardian Contact', 'Specialization'
+]);
 
 foreach ($studentIds as $studentId) {
     if (!isset($students[$studentId])) {
@@ -56,9 +64,18 @@ foreach ($studentIds as $studentId) {
 
     $student = $students[$studentId];
     fputcsv($output, [
+        $student['lrn'],
         $student['full_name'],
         $student['grade_level'] ?? '',
+        $student['strand_name'] ?? '',
         $student['section_name'] ?? 'Unassigned',
+        $student['birthdate'] ?: 'N/A',
+        $student['gender'] ?: 'N/A',
+        $student['address'] ?: 'N/A',
+        $student['contact_no'] ?: 'N/A',
+        $student['guardian_name'] ?: 'N/A',
+        $student['guardian_contact'] ?: 'N/A',
+        $student['specialization'] ?: 'N/A',
     ]);
 }
 

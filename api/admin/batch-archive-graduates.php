@@ -22,6 +22,11 @@ if (!isset($data['section_id'], $data['batch_year'])) {
 
 $sectionId = (int)$data['section_id'];
 $batchYear = (int)$data['batch_year'];
+if ($sectionId <= 0 || $batchYear < 1901 || $batchYear > 2155) {
+    http_response_code(400);
+    echo json_encode(['status' => 'error', 'message' => 'Invalid section_id or batch_year.']);
+    exit();
+}
 
 $db = null;
 
@@ -29,14 +34,30 @@ try {
     $db = getDBConnection();
     $db->beginTransaction();
 
-    // 1. Copy active students from section into archived_students table
+    $sectionStmt = $db->prepare("SELECT grade_level FROM sections WHERE id = :section_id FOR UPDATE");
+    $sectionStmt->execute(['section_id' => $sectionId]);
+    $gradeLevel = $sectionStmt->fetchColumn();
+    if ($gradeLevel === false) {
+        $db->rollBack();
+        http_response_code(404);
+        echo json_encode(['status' => 'error', 'message' => 'Section was not found.']);
+        exit();
+    }
+    if ((int)$gradeLevel !== 12) {
+        $db->rollBack();
+        http_response_code(409);
+        echo json_encode(['status' => 'error', 'message' => 'Only Grade 12 students can be archived.']);
+        exit();
+    }
+
+    // Archive only Grade 12 students; Grade 11 remains active.
     $stmtArchive = $db->prepare("
         INSERT INTO archived_students (original_id, lrn, username, full_name, strand_id, section_id, batch_year, archived_at)
         SELECT 
             u.id, u.lrn, u.username, u.full_name, s.strand_id, u.section_id, :batch_year, NOW()
         FROM users u
         INNER JOIN sections s ON u.section_id = s.id
-        WHERE u.section_id = :section_id AND u.role = 'student'
+        WHERE u.section_id = :section_id AND u.role = 'student' AND s.grade_level = 12
     ");
     $stmtArchive->execute([
         'batch_year' => $batchYear,
@@ -47,9 +68,10 @@ try {
 
     // 2. Update user roles to 'alumni' and decouple active section_id
     $stmtUpdateUsers = $db->prepare("
-        UPDATE users 
-        SET role = 'alumni', section_id = NULL 
-        WHERE section_id = :section_id AND role = 'student'
+        UPDATE users u
+        INNER JOIN sections s ON s.id = u.section_id
+        SET u.role = 'alumni', u.section_id = NULL
+        WHERE u.section_id = :section_id AND u.role = 'student' AND s.grade_level = 12
     ");
     $stmtUpdateUsers->execute(['section_id' => $sectionId]);
 

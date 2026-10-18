@@ -48,6 +48,12 @@ const DepEdTransmutation = {
 document.addEventListener('DOMContentLoaded', () => {
     const assignmentId = document.getElementById('assignment_id')?.value;
     const activeTerm = document.getElementById('active_term')?.value || 'Term 1';
+    const draftStatus = document.getElementById('draftStatus');
+    const saveDraftBtn = document.getElementById('saveDraftBtn');
+
+    function markDraftUnsaved() {
+        if (draftStatus) draftStatus.textContent = 'Unsaved draft changes';
+    }
 
     // Subject component percentage weights (e.g., Core: 25% WW, 50% PT, 25% QA)
     const weights = {
@@ -111,9 +117,56 @@ document.addEventListener('DOMContentLoaded', () => {
         input.addEventListener('input', (e) => {
             const row = e.target.closest('tr');
             if (row) recalculateRow(row);
+            markDraftUnsaved();
         });
     });
     document.querySelectorAll('.student-row').forEach(recalculateRow);
+
+    if (saveDraftBtn) {
+        saveDraftBtn.addEventListener('click', async () => {
+            saveDraftBtn.disabled = true;
+            saveDraftBtn.textContent = 'Saving Draft...';
+            if (draftStatus) draftStatus.textContent = 'Saving draft...';
+
+            const payload = {
+                assignment_id: parseInt(assignmentId, 10),
+                term: activeTerm,
+                scores: []
+            };
+
+            document.querySelectorAll('.score-input').forEach(input => {
+                if (input.value === '') return;
+                payload.scores.push({
+                    component_id: parseInt(input.dataset.componentId, 10),
+                    student_id: parseInt(input.dataset.studentId, 10),
+                    score: input.value
+                });
+            });
+
+            try {
+                const response = await fetch('../../api/faculty/save-ecr-draft.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (response.ok && result.status === 'success') {
+                    if (draftStatus) draftStatus.textContent = 'Draft saved just now.';
+                } else {
+                    const message = result.message || 'Unable to save the draft.';
+                    if (draftStatus) draftStatus.textContent = 'Draft not saved.';
+                    alert('Draft save failed: ' + message);
+                }
+            } catch (err) {
+                console.error(err);
+                if (draftStatus) draftStatus.textContent = 'Draft not saved.';
+                alert('A network error occurred while saving the draft.');
+            } finally {
+                saveDraftBtn.disabled = false;
+                saveDraftBtn.textContent = 'Save Draft';
+            }
+        });
+    }
 
     // 3. Save Configuration Handler (api/faculty/save-ecr-input.php)
     const saveConfigBtn = document.getElementById('saveConfigBtn');

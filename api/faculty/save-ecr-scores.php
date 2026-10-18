@@ -5,6 +5,7 @@ session_start();
 
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../core/DepEdTransmutation.php';
+require_once __DIR__ . '/../../core/EcrDraftStore.php';
 
 // Check authorization
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'adviser', 'admin'])) {
@@ -34,6 +35,7 @@ $termColumn = "term{$termNumber}_transmuted";
 
 try {
     $db = getDBConnection();
+    ensureEcrDraftTable($db);
     $db->beginTransaction();
 
     // Check if grades are locked
@@ -235,6 +237,16 @@ try {
         'uid'    => $_SESSION['user_id'],
         'action' => "Saved scores and summaries for assignment_id: {$assignmentId}",
         'ip'     => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+    ]);
+
+    $stmtDeleteDraft = $db->prepare("
+        DELETE FROM ecr_score_drafts
+        WHERE user_id = :user_id AND assignment_id = :assignment_id AND term = :term
+    ");
+    $stmtDeleteDraft->execute([
+        'user_id' => (int)$_SESSION['user_id'],
+        'assignment_id' => $assignmentId,
+        'term' => $termName
     ]);
 
     $db->commit();

@@ -3,6 +3,7 @@ session_start();
 
 // 1. Path Resolution & Database Connection
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../core/EcrDraftStore.php';
 $pdo = getDBConnection();
 
 // 2. Access Control
@@ -10,6 +11,8 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'ad
     header("Location: ../../manifest/login.php");
     exit();
 }
+
+ensureEcrDraftTable($pdo);
 
 $user_id   = $_SESSION['user_id'];
 $user_role = $_SESSION['role'];
@@ -96,6 +99,8 @@ $term_str = "Term " . $term;
 $db_components = ['WW' => [], 'PT' => [], 'QA' => []];
 $term_is_locked = false;
 $saved_scores = [];
+$draft_scores = [];
+$draft_saved_at = null;
 
 if ($assignment_id > 0) {
     $default_component_counts = ['WW' => 8, 'PT' => 6, 'QA' => 1];
@@ -170,6 +175,31 @@ if ($assignment_id > 0) {
     ");
     $saved_summary_stmt->execute(['assignment_id' => $assignment_id]);
     $term_is_locked = !empty($saved_scores) || (int)$saved_summary_stmt->fetchColumn() > 0;
+
+    if (!$term_is_locked) {
+        $draft_stmt = $pdo->prepare("
+            SELECT draft_data, updated_at
+            FROM ecr_score_drafts
+            WHERE user_id = :user_id AND assignment_id = :assignment_id AND term = :term
+        ");
+        $draft_stmt->execute([
+            'user_id' => (int)$user_id,
+            'assignment_id' => $assignment_id,
+            'term' => $term_str
+        ]);
+        $draft = $draft_stmt->fetch(PDO::FETCH_ASSOC);
+        if ($draft) {
+            $draft_data = json_decode($draft['draft_data'], true);
+            if (is_array($draft_data) && isset($draft_data['scores']) && is_array($draft_data['scores'])) {
+                foreach ($draft_data['scores'] as $draft_score) {
+                    if (isset($draft_score['student_id'], $draft_score['component_id'], $draft_score['score'])) {
+                        $draft_scores[(int)$draft_score['student_id']][(int)$draft_score['component_id']] = (string)$draft_score['score'];
+                    }
+                }
+                $draft_saved_at = $draft['updated_at'];
+            }
+        }
+    }
 }
 
 // Fallback lists if no assessment components exist yet for this term
@@ -709,9 +739,15 @@ if ($section_id > 0) {
                         <!-- Action Buttons Beside Assigned Subject Select -->
                         <div class="control-action-buttons">
                             <button id="saveConfigBtn" class="btn-action btn-secondary" <?= $term_is_locked ? 'disabled' : '' ?>>Save HPS Setup</button>
+                            <button type="button" id="saveDraftBtn" class="btn-action btn-secondary" <?= ($term_is_locked || $assignment_id <= 0) ? 'disabled' : '' ?>>Save Draft</button>
                             <button id="saveScoresBtn" class="btn-action" <?= $term_is_locked ? 'disabled' : '' ?>><?= $term_is_locked ? 'Term Already Saved' : 'Save ECR Scores' ?></button>
                         </div>
                     </div>
+                    <span id="draftStatus" role="status" aria-live="polite">
+                        <?php if ($draft_saved_at): ?>
+                            Draft saved <?= htmlspecialchars(date('M j, Y g:i A', strtotime($draft_saved_at)), ENT_QUOTES, 'UTF-8') ?>
+                        <?php endif; ?>
+                    </span>
 
                     <!-- Active Roster Indicator -->
                     <?php if ($section_name): ?>
@@ -833,7 +869,7 @@ if ($section_id > 0) {
                                                        data-task-number="<?= $task_num ?>"
                                                        data-component-id="<?= $comp['id'] ?? $task_num ?>" 
                                                        data-student-id="<?= $student['id'] ?>"
-                                                       value="<?= htmlspecialchars((string)($saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                       value="<?= htmlspecialchars((string)($draft_scores[$student['id']][$comp['id'] ?? ''] ?? $saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                                        <?= $term_is_locked ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
@@ -848,7 +884,7 @@ if ($section_id > 0) {
                                                        data-task-number="<?= $task_num ?>"
                                                        data-component-id="<?= $comp['id'] ?? ($task_num + 8) ?>" 
                                                        data-student-id="<?= $student['id'] ?>"
-                                                       value="<?= htmlspecialchars((string)($saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                       value="<?= htmlspecialchars((string)($draft_scores[$student['id']][$comp['id'] ?? ''] ?? $saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                                        <?= $term_is_locked ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
@@ -863,7 +899,7 @@ if ($section_id > 0) {
                                                        data-task-number="<?= $task_num ?>"
                                                        data-component-id="<?= $comp['id'] ?? ($task_num + 14) ?>" 
                                                        data-student-id="<?= $student['id'] ?>"
-                                                       value="<?= htmlspecialchars((string)($saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                       value="<?= htmlspecialchars((string)($draft_scores[$student['id']][$comp['id'] ?? ''] ?? $saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                                        <?= $term_is_locked ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
@@ -904,7 +940,7 @@ if ($section_id > 0) {
                                                        data-task-number="<?= $task_num ?>"
                                                        data-component-id="<?= $comp['id'] ?? $task_num ?>" 
                                                        data-student-id="<?= $student['id'] ?>"
-                                                       value="<?= htmlspecialchars((string)($saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                       value="<?= htmlspecialchars((string)($draft_scores[$student['id']][$comp['id'] ?? ''] ?? $saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                                        <?= $term_is_locked ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
@@ -919,7 +955,7 @@ if ($section_id > 0) {
                                                        data-task-number="<?= $task_num ?>"
                                                        data-component-id="<?= $comp['id'] ?? ($task_num + 8) ?>" 
                                                        data-student-id="<?= $student['id'] ?>"
-                                                       value="<?= htmlspecialchars((string)($saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                       value="<?= htmlspecialchars((string)($draft_scores[$student['id']][$comp['id'] ?? ''] ?? $saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                                        <?= $term_is_locked ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
@@ -934,7 +970,7 @@ if ($section_id > 0) {
                                                        data-task-number="<?= $task_num ?>"
                                                        data-component-id="<?= $comp['id'] ?? ($task_num + 14) ?>" 
                                                        data-student-id="<?= $student['id'] ?>"
-                                                       value="<?= htmlspecialchars((string)($saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                       value="<?= htmlspecialchars((string)($draft_scores[$student['id']][$comp['id'] ?? ''] ?? $saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                                        <?= $term_is_locked ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
@@ -960,7 +996,7 @@ if ($section_id > 0) {
 
     <!-- JavaScript Handlers -->
     <script src="../../assets/js/app.js"></script>
-    <script src="../../assets/js/ecr-grid.js"></script>
+    <script src="../../assets/js/ecr-grid.js?v=<?= filemtime(__DIR__ . '/../../assets/js/ecr-grid.js') ?>"></script>
     <script>
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');

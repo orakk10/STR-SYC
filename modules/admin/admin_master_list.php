@@ -144,6 +144,14 @@ $students = $conn->query($query_str)->fetchAll();
             background: #d97706;
         }
 
+        .btn-template {
+            background: #475569;
+        }
+
+        .btn-template:hover {
+            background: #334155;
+        }
+
         .file-input-hidden {
             display: none;
         }
@@ -454,8 +462,9 @@ $students = $conn->query($query_str)->fetchAll();
                 <h1>Master Student List</h1>
                 <div class="btn-group">
                     <button type="button" id="exportStudentsButton" class="btn-tool btn-export">📥 Export CSV</button>
+                    <a class="btn-tool btn-template" href="../../assets/templates/sample_master_list.csv" download>⬇️ CSV Template</a>
                     <button type="button" class="btn-tool btn-import" onclick="document.getElementById('studentsFile').click()">📤 Import CSV</button>
-                    <input type="file" id="studentsFile" class="file-input-hidden" onchange="handleImport(this)">
+                    <input type="file" id="studentsFile" class="file-input-hidden" accept=".csv,text/csv" onchange="handleImport(this)">
                 </div>
             </header>
 
@@ -604,7 +613,7 @@ $students = $conn->query($query_str)->fetchAll();
             const formData = new FormData();
             formData.append('import_file', input.files[0]);
 
-            if(!confirm('Import students? This will update the Master List.')) {
+            if(!confirm('Import students? The CSV must include LRN, student name, grade level, strand, and section. Birthdate, gender, address, contact, guardian, and specialization details are optional; blank details will be imported as N/A. Rows with missing required fields or a mismatched grade or strand will be skipped.')) {
                 input.value = '';
                 return;
             }

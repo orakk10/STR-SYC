@@ -227,6 +227,7 @@ if ($section_id > 0) {
             align-items: center;
             gap: 10px;
             color: #0f172a;
+            padding-left: 20px;
         }
 
         .subject-badge { 

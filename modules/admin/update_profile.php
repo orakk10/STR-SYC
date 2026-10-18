@@ -20,7 +20,10 @@ if ($user_id <= 0) {
 }
 
 $section_id = isset($_POST['section_id']) && $_POST['section_id'] !== '' ? (int) $_POST['section_id'] : null;
-$gender = trim($_POST['gender'] ?? '');
+$gender = trim($_POST['gender'] ?? 'N/A');
+if ($gender === '') {
+    $gender = 'N/A';
+}
 $birthdate = $_POST['birthdate'] ?? null;
 $contact_no = trim($_POST['contact_no'] ?? '');
 $address = trim($_POST['address'] ?? '');

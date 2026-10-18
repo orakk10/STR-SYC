@@ -329,7 +329,7 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div><label>Gender</label><select name="gender" id="prof_gender"><option value="Male">Male</option><option value="Female">Female</option></select></div>
+                    <div><label>Gender</label><select name="gender" id="prof_gender"><option value="N/A" selected>N/A</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
                     <div><label>Birthdate</label>
                         <input type="date" name="birthdate" id="prof_bday" max="<?php echo $min_age_date; ?>" required>
                     </div>

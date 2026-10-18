@@ -14,7 +14,7 @@ function getDashboardUrl($role) {
         case 'student':
             return "../modules/student/student_dashboard.php";
         case 'alumni':
-            return "../modules/alumni/alumni_dashboard.php";
+            return "../modules/alimni/alumni_dashboard.php";
         default:
             return "../index.php";
     }

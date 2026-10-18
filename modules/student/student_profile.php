@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Grab new extended profile values safely
         $birthdate = !empty($_POST['birthdate']) ? $_POST['birthdate'] : null;
-        $gender = !empty($_POST['gender']) ? $_POST['gender'] : null;
+        $gender = !empty($_POST['gender']) ? $_POST['gender'] : 'N/A';
         $address = trim($_POST['address']);
         $contact_no = trim($_POST['contact_no']);
         $guardian_name = trim($_POST['guardian_name']);
@@ -530,10 +530,9 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
                             <div class="form-group">
                                 <label for="gender">Gender Orientation</label>
                                 <select name="gender" id="gender" class="form-control">
-                                    <option value="">Select Gender...</option>
+                                    <option value="N/A" <?php echo (empty($student_data['gender']) || ($student_data['gender'] ?? '') === 'N/A') ? 'selected' : ''; ?>>N/A</option>
                                     <option value="Male" <?php echo (($student_data['gender'] ?? '') === 'Male') ? 'selected' : ''; ?>>Male</option>
                                     <option value="Female" <?php echo (($student_data['gender'] ?? '') === 'Female') ? 'selected' : ''; ?>>Female</option>
-                                    <option value="Other" <?php echo (($student_data['gender'] ?? '') === 'Other') ? 'selected' : ''; ?>>Other</option>
                                 </select>
                             </div>
                         </div>

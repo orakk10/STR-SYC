@@ -122,10 +122,12 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")-
             background: #6366f1;
             color: white;
             padding: 6px 12px;
+            border: 0;
             border-radius: 6px;
             text-decoration: none;
             font-size: 0.8rem;
             font-weight: 600;
+            cursor: pointer;
             transition: background 0.2s;
         }
 
@@ -300,18 +302,28 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")-
                 <p>Manage and search historical records of graduated students.</p>
             </header>
 
-            <?php if(isset($_GET['status']) && $_GET['status'] == 'success'): ?>
-                <div style="background: #dcfce7; color: #166534; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #bbf7d0;">
-                    Batch archive completed successfully. Records moved to storage.
-                </div>
+            <?php if (isset($_GET['status'])): ?>
+                <?php
+                    $statusMessages = [
+                        'success' => ['Grade 12 archive completed. Grade 11 students were left active; archived accounts were retained as alumni.', '#dcfce7', '#166534', '#bbf7d0'],
+                        'restored' => ['Student account restored successfully.', '#dcfce7', '#166534', '#bbf7d0'],
+                        'error' => ['The requested archive operation could not be completed. No records were changed.', '#fee2e2', '#991b1b', '#fecaca']
+                    ];
+                    $status = $statusMessages[$_GET['status']] ?? null;
+                ?>
+                <?php if ($status): ?>
+                    <div role="status" style="background: <?= $status[1] ?>; color: <?= $status[2] ?>; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid <?= $status[3] ?>;">
+                        <?= htmlspecialchars($status[0], ENT_QUOTES, 'UTF-8') ?>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
 
             <div class="archive-banner">
                 <div>
                     <h3 style="margin: 0; font-size: 1.2rem;">Run End-of-Year Archive</h3>
-                    <p style="margin: 5px 0 0; opacity: 0.8; font-size: 0.9rem;">This will move all active students to the graduate records for the year <?php echo date("Y"); ?>.</p>
+                    <p style="margin: 5px 0 0; opacity: 0.8; font-size: 0.9rem;">This archives currently active Grade 12 students for batch year <?php echo date("Y"); ?>. Grade 11 students remain active. Archived accounts are retained and changed to alumni.</p>
                 </div>
-                <form action="process_archive.php" method="POST" onsubmit="return confirm('CRITICAL: This will move all current students to the archive. Proceed?')">
+                <form action="process_archive.php" method="POST" onsubmit="return confirm('Archive all currently active Grade 12 students as alumni for <?= date('Y') ?>? Grade 11 students will remain active.')">
                     <button type="submit" name="trigger_archive" class="btn-run-archive">📦 Start Archiving</button>
                 </form>
             </div>
@@ -319,7 +331,7 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")-
             <div class="filter-bar">
                 <div class="filter-group" style="flex: 2;">
                     <label>Quick Search</label>
-                    <input type="text" id="archiveSearch" placeholder="Search by name, LRN, or email..." onkeyup="runFilters()">
+                    <input type="text" id="archiveSearch" placeholder="Search by name, LRN, or username..." onkeyup="runFilters()">
                 </div>
                 <div class="filter-group">
                     <label>Batch Year</label>
@@ -349,25 +361,27 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")-
                             <th>Student Name</th>
                             <th>Strand</th>
                             <th>Batch</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="archiveTableBody">
                         <?php if (!empty($archive_list)): ?>
                             <?php foreach ($archive_list as $row): ?>
-                            <tr>
-                                <td style="font-family: monospace; font-weight: bold;"><?php echo htmlspecialchars($row['username']); ?></td>
-                                <td><?php echo htmlspecialchars($row['full_name'] ?? 'Unassigned'); ?></td>
-                                <td><span class="strand-cell"><?php echo htmlspecialchars($row['strand_name'] ?? 'Unassigned'); ?></span></td>
-                                <td><span class="batch-year-tag"><?php echo $row['batch_year']; ?></span></td>
+                            <tr data-archive-row>
+                                <td style="font-family: monospace; font-weight: bold;"><?php echo htmlspecialchars($row['lrn'] ?: ($row['username'] ?? 'N/A'), ENT_QUOTES, 'UTF-8'); ?></td>
+                                <td><?php echo htmlspecialchars($row['full_name'] ?? 'Unassigned', ENT_QUOTES, 'UTF-8'); ?></td>
+                                <td><span class="strand-cell"><?php echo htmlspecialchars($row['strand_name'] ?? 'Unassigned', ENT_QUOTES, 'UTF-8'); ?></span></td>
+                                <td><span class="batch-year-tag"><?php echo htmlspecialchars((string)($row['batch_year'] ?? 'N/A'), ENT_QUOTES, 'UTF-8'); ?></span></td>
                                 <td style="text-align: right;">
-                                    <a href="process_restore.php?id=<?php echo $row['id']; ?>" 
-                                       class="btn-restore-action" 
-                                       onclick="return confirm('Restore this student to active status?')">🔄 Restore</a>
+                                    <form action="process_restore.php" method="POST" onsubmit="return confirm('Restore this student account to active student status?')">
+                                        <input type="hidden" name="id" value="<?php echo (int)$row['id']; ?>">
+                                        <button type="submit" class="btn-restore-action">🔄 Restore</button>
+                                    </form>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
                         <?php else: ?>
-                            <tr><td colspan="5" style="text-align:center; padding: 40px; color: #64748b;">No archived records found.</td></tr>
+                            <tr data-empty-row><td colspan="5" style="text-align:center; padding: 40px; color: #64748b;">No archived records found.</td></tr>
                         <?php endif; ?>
                     </tbody>
                 </table>
@@ -397,11 +411,11 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")-
 
             rows.forEach(row => {
                 // Ignore empty-state row if it exists
-                if (row.cells.length < 4) return;
+                if (!row.hasAttribute('data-archive-row')) return;
 
                 const rowText = row.innerText.toLowerCase();
-                const rowBatch = row.querySelector('.batch-year-tag').innerText;
-                const rowStrand = row.querySelector('.strand-cell').innerText.toLowerCase();
+                const rowBatch = row.querySelector('.batch-year-tag')?.innerText || '';
+                const rowStrand = row.querySelector('.strand-cell')?.innerText.toLowerCase() || '';
 
                 const matchesSearch = rowText.includes(search);
                 const matchesBatch = (batch === "") || (rowBatch === batch);
