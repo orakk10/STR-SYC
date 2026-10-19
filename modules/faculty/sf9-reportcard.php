@@ -1,32 +1,69 @@
 <?php
 session_start();
 
-// Database Connection Setup
+// 1. Database Connection Setup
 if (file_exists('../../config/database.php')) {
     require_once '../../config/database.php';
 }
 
-// Fallback logic for connection variable names ($conn vs $db)
 if (!isset($conn) && isset($db)) {
     $conn = $db;
 }
 
-// Get Student ID or User ID from URL parameter
-$student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : (isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 1);
+// 2. Fetch Roster / Student List for the Adviser Selector Dropdown
+$roster = [];
+if (isset($conn) && $conn instanceof mysqli) {
+    // Fetch all student records from users table
+    $roster_sql = "
+        SELECT id, full_name, lrn 
+        FROM users 
+        WHERE LOWER(role) = 'student' OR section_id IS NOT NULL
+        ORDER BY id ASC
+    ";
+    $roster_res = $conn->query($roster_sql);
+    
+    if ($roster_res && $roster_res->num_rows > 0) {
+        while ($r = $roster_res->fetch_assoc()) {
+            $roster[] = $r;
+        }
+    } else {
+        // Fallback query if role filtering yields empty results
+        $fallback_sql = "SELECT id, full_name, lrn FROM users WHERE id IN (9, 11) ORDER BY id ASC";
+        $fallback_res = $conn->query($fallback_sql);
+        if ($fallback_res) {
+            while ($r = $fallback_res->fetch_assoc()) {
+                $roster[] = $r;
+            }
+        }
+    }
+}
+
+// 3. Resolve Active Student ID (defaults to first student in roster or ID 9)
+if (isset($_GET['student_id']) && intval($_GET['student_id']) > 0) {
+    $student_id = intval($_GET['student_id']);
+} elseif (!empty($roster)) {
+    $student_id = intval($roster[0]['id']);
+} else {
+    $student_id = 9; // Direct DB fallback
+}
 
 $db_student = null;
+$core_subjects = [];
+$elective_subjects = [];
 
-// Only execute query if $conn is valid MySQLi instance
 if (isset($conn) && $conn instanceof mysqli) {
+    // A. Fetch Student Info (joined with student_profiles, sections, strands, and schools)
     $stmt = $conn->prepare("
         SELECT 
-            u.first_name, u.middle_name, u.last_name, u.lrn,
+            u.id AS user_id, u.full_name, u.lrn,
             sp.birthdate, sp.gender,
-            s.grade_level, s.section_name, s.track_strand,
+            s.grade_level, s.section_name,
+            st.strand_code, st.strand_name,
             sch.region, sch.division, sch.district, sch.school_name
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
         LEFT JOIN sections s ON u.section_id = s.id
+        LEFT JOIN strands st ON s.strand_id = st.id
         LEFT JOIN schools sch ON u.school_id = sch.id
         WHERE u.id = ?
         LIMIT 1
@@ -35,13 +72,78 @@ if (isset($conn) && $conn instanceof mysqli) {
     if ($stmt) {
         $stmt->bind_param("i", $student_id);
         $stmt->execute();
-        $result = $stmt->get_result();
-        $db_student = $result->fetch_assoc();
+        $db_student = $stmt->get_result()->fetch_assoc();
         $stmt->close();
+    }
+
+    // B. Fetch Dynamic Grades using LEFT JOINs so empty grade entries don't filter out subjects
+    $grades_query = "
+        SELECT 
+            sub.subject_name AS name,
+            sub.type AS subject_type,
+            COALESCE(sub.units, 3) AS units,
+            ets.term1_transmuted AS t1,
+            ets.term2_transmuted AS t2,
+            ets.term3_transmuted AS t3,
+            ets.final_grade,
+            ets.remarks
+        FROM subjects sub
+        LEFT JOIN subject_assignments sa ON sa.subject_id = sub.id
+        LEFT JOIN ecr_term_summaries ets ON (ets.assignment_id = sa.id AND ets.student_id = ?)
+        ORDER BY sub.type ASC, sub.subject_name ASC
+    ";
+
+    $stmt_grades = $conn->prepare($grades_query);
+    if ($stmt_grades) {
+        $stmt_grades->bind_param("i", $student_id);
+        $stmt_grades->execute();
+        $res_grades = $stmt_grades->get_result();
+
+        while ($row = $res_grades->fetch_assoc()) {
+            $item = [
+                'name'        => $row['name'],
+                't1'          => $row['t1'] !== null ? round(floatval($row['t1'])) : null,
+                't2'          => $row['t2'] !== null ? round(floatval($row['t2'])) : null,
+                't3'          => $row['t3'] !== null ? round(floatval($row['t3'])) : null,
+                'units'       => intval($row['units']),
+                'final_grade' => $row['final_grade'] !== null ? round(floatval($row['final_grade'])) : null,
+                'remarks'     => $row['remarks'] ?? '',
+                'dis_t1'      => false,
+                'dis_t2'      => false,
+                'dis_t3'      => false
+            ];
+
+            if (strtolower($row['subject_type']) === 'core') {
+                $core_subjects[] = $item;
+            } else {
+                $elective_subjects[] = $item;
+            }
+        }
+        $stmt_grades->close();
     }
 }
 
-// Calculate Exact Age dynamically based on the student's birthdate
+// Fallback Default Core Subjects if Database returns empty
+if (empty($core_subjects)) {
+    $core_subjects = [
+        ['name' => 'Effective Communication / Mabisang Komunikasyon', 't1' => null, 't2' => null, 't3' => null, 'units' => 6],
+        ['name' => 'General Mathematics', 't1' => null, 't2' => null, 't3' => null, 'units' => 6],
+        ['name' => 'General Science', 't1' => null, 't2' => null, 't3' => null, 'units' => 6],
+        ['name' => 'Life and Career Skills', 't1' => null, 't2' => null, 't3' => null, 'units' => 6],
+        ['name' => 'Pag-aaral ng Kasaysayan at Lipunang Pilipino', 't1' => null, 't2' => null, 't3' => null, 'units' => 6],
+    ];
+}
+
+// Fallback Default Elective Subjects if Database returns empty
+if (empty($elective_subjects)) {
+    $elective_subjects = [
+        ['name' => 'Academic Elective 1 (Pre-Calculus)', 't1' => null, 't2' => null, 't3' => null, 'units' => 3, 'dis_t1' => false, 'dis_t2' => false, 'dis_t3' => false],
+        ['name' => 'Academic Elective 2 (Basic Calculus)', 't1' => null, 't2' => null, 't3' => null, 'units' => 3, 'dis_t1' => true, 'dis_t2' => false, 'dis_t3' => true],
+        ['name' => 'Academic Elective 3 (General Physics)', 't1' => null, 't2' => null, 't3' => null, 'units' => 3, 'dis_t1' => true, 'dis_t2' => true, 'dis_t3' => false],
+    ];
+}
+
+// 4. Dynamic Age Calculation
 $calculated_age = 'N/A';
 if (!empty($db_student['birthdate']) && $db_student['birthdate'] !== '0000-00-00') {
     try {
@@ -53,49 +155,42 @@ if (!empty($db_student['birthdate']) && $db_student['birthdate'] !== '0000-00-00
     }
 }
 
-// Format Student Full Name
-$middle_initial = !empty($db_student['middle_name']) ? ' ' . strtoupper(substr($db_student['middle_name'], 0, 1)) . '.' : '';
-$full_name = strtoupper(($db_student['first_name'] ?? '') . $middle_initial . ' ' . ($db_student['last_name'] ?? ''));
+// Dynamic Track / Strand display
+$track_display = 'Academic';
+if (!empty($db_student['strand_code']) || !empty($db_student['strand_name'])) {
+    $track_display = 'Academic / ' . ($db_student['strand_code'] ?: $db_student['strand_name']);
+}
 
 $student = [
-    'full_name' => !empty(trim($full_name)) ? $full_name : 'JUAN A. DELA CRUZ',
-    'lrn'       => $db_student['lrn'] ?? '123456789012',
+    'full_name' => !empty($db_student['full_name']) ? strtoupper($db_student['full_name']) : 'STUDENT RECORD',
+    'lrn'       => !empty($db_student['lrn']) ? $db_student['lrn'] : 'N/A',
     'age'       => $calculated_age,
     'gender'    => $db_student['gender'] ?? 'Male',
     'grade'     => $db_student['grade_level'] ?? '11',
     'section'   => $db_student['section_name'] ?? 'STEM-A',
-    'track'     => $db_student['track_strand'] ?? 'Academic / STEM',
+    'track'     => $track_display,
     'region'    => $db_student['region'] ?? 'REGION III',
     'division'  => $db_student['division'] ?? 'SCHOOLS DIVISION OF TARLAC',
     'district'  => $db_student['district'] ?? 'District I',
     'school'    => $db_student['school_name'] ?? 'ABC NATIONAL HIGH SCHOOL'
 ];
 
-$core_subjects = [
-    ['name' => 'Effective Communication / Mabisang Komunikasyon', 't1' => 88, 't2' => 90, 't3' => 92, 'units' => 6],
-    ['name' => 'General Mathematics', 't1' => 85, 't2' => 87, 't3' => 89, 'units' => 6],
-    ['name' => 'General Science', 't1' => 90, 't2' => 91, 't3' => 93, 'units' => 6],
-    ['name' => 'Life and Career Skills', 't1' => 92, 't2' => 94, 't3' => 95, 'units' => 6],
-    ['name' => 'Pag-aaral ng Kasaysayan at Lipunang Pilipino', 't1' => 89, 't2' => 90, 't3' => 92, 'units' => 6],
-];
-
-$elective_subjects = [
-    ['name' => 'Academic Elective 1 (Pre-Calculus)', 't1' => 84, 't2' => 86, 't3' => 88, 'units' => 3, 'dis_t1' => false, 'dis_t2' => false, 'dis_t3' => false],
-    ['name' => 'Academic Elective 2 (Basic Calculus)', 't1' => null, 't2' => 85, 't3' => null, 'units' => 3, 'dis_t1' => true, 'dis_t2' => false, 'dis_t3' => true],
-    ['name' => 'Academic Elective 3 (General Physics)', 't1' => null, 't2' => null, 't3' => 87, 'units' => 3, 'dis_t1' => true, 'dis_t2' => true, 'dis_t3' => false],
-];
-
-function calcFinalGrade($t1, $t2, $t3) {
-    $scores = array_filter([$t1, $t2, $t3], fn($v) => $v !== null);
+// Helper Function for Final Grade & Remark
+function calcFinalGrade($subj) {
+    if (isset($subj['final_grade']) && $subj['final_grade'] !== null) {
+        return ['final' => $subj['final_grade'], 'remark' => $subj['remarks'] ?: ($subj['final_grade'] >= 75 ? 'Passed' : 'Failed')];
+    }
+    $scores = array_filter([$subj['t1'] ?? null, $subj['t2'] ?? null, $subj['t3'] ?? null], fn($v) => $v !== null && $v !== '');
     if (empty($scores)) return ['final' => '', 'remark' => ''];
     $final = round(array_sum($scores) / count($scores));
     return ['final' => $final, 'remark' => $final >= 75 ? 'Passed' : 'Failed'];
 }
 
+// Calculate General Averages
 $all_subjs = array_merge($core_subjects, $elective_subjects);
-$t1_all = array_filter(array_column($all_subjs, 't1'), fn($v) => $v !== null);
-$t2_all = array_filter(array_column($all_subjs, 't2'), fn($v) => $v !== null);
-$t3_all = array_filter(array_column($all_subjs, 't3'), fn($v) => $v !== null);
+$t1_all = array_filter(array_column($all_subjs, 't1'), fn($v) => $v !== null && $v !== '');
+$t2_all = array_filter(array_column($all_subjs, 't2'), fn($v) => $v !== null && $v !== '');
+$t3_all = array_filter(array_column($all_subjs, 't3'), fn($v) => $v !== null && $v !== '');
 
 $gen_t1 = !empty($t1_all) ? round(array_sum($t1_all) / count($t1_all)) : '';
 $gen_t2 = !empty($t2_all) ? round(array_sum($t2_all) / count($t2_all)) : '';
@@ -105,6 +200,7 @@ $valid_gen = array_filter([$gen_t1, $gen_t2, $gen_t3], fn($v) => $v !== '');
 $final_gen_avg = !empty($valid_gen) ? round(array_sum($valid_gen) / count($valid_gen)) : '';
 $total_units = array_sum(array_column($all_subjs, 'units'));
 
+// Attendance Calculations (Static placeholders until attendance_records table is added)
 $school_days  = ['Jun' => 20, 'Jul' => 20, 'Aug' => 20, 'Sep' => 20, 'Oct' => 20, 'Nov' => 20, 'Dec' => 20, 'Jan' => 18, 'Feb' => 18, 'Mar' => 20, 'Apr' => 5];
 $days_present = ['Jun' => 20, 'Jul' => 19, 'Aug' => 20, 'Sep' => 18, 'Oct' => 20, 'Nov' => 20, 'Dec' => 19, 'Jan' => 18, 'Feb' => 18, 'Mar' => 20, 'Apr' => 5];
 $days_absent  = [];
@@ -165,7 +261,6 @@ $tot_abs  = array_sum($days_absent);
             width: 100%;
         }
 
-        /* Top Bar Screen Control */
         .sf9-toolbar {
             display: flex;
             justify-content: space-between;
@@ -192,13 +287,6 @@ $tot_abs  = array_sum($days_absent);
             margin-right: 12px;
         }
 
-        .toolbar-title {
-            display: flex;
-            align-items: center;
-            font-size: 0.92rem;
-            color: #334155;
-        }
-
         .btn-print {
             background-color: #2563eb;
             color: #ffffff;
@@ -215,38 +303,38 @@ $tot_abs  = array_sum($days_absent);
             background-color: #1d4ed8;
         }
 
-        /* 2-Page Bi-Fold Sheet Screen Layout */
         .report-document-wrapper {
             display: flex;
             justify-content: center;
             width: 100%;
-            overflow-x: auto;
+            container-type: inline-size;
             padding-bottom: 20px;
         }
 
         .report-document {
             display: flex;
-            gap: 12px;
+            flex-direction: row;
+            gap: 1%;
             background: #ffffff;
-            padding: 14px;
+            padding: 1.5%;
             border-radius: 8px;
             border: 1px solid #cbd5e1;
             box-shadow: 0 4px 12px rgba(0,0,0,0.06);
             width: 100%;
-            min-width: 860px;
             box-sizing: border-box;
             font-family: 'Times New Roman', Times, serif;
             color: #000000;
+            font-size: clamp(8px, 0.95cqw, 14px);
         }
 
         .doc-page {
-            flex: 1 1 50%;
-            width: 50%;
-            max-width: 50%;
+            flex: 0 0 49.5%;
+            width: 49.5%;
             border: 1px solid #000000;
-            padding: 8px 10px;
+            padding: 1.5%;
             box-sizing: border-box;
             background: #ffffff;
+            position: relative;
         }
 
         .header-section {
@@ -259,22 +347,22 @@ $tot_abs  = array_sum($days_absent);
             position: absolute;
             left: 0;
             top: 0;
-            width: 36px;
-            height: 36px;
+            width: 2.8em;
+            height: 2.8em;
         }
 
         .school-logo-box {
             position: absolute;
             right: 0;
             top: 0;
-            width: 34px;
-            height: 34px;
+            width: 2.8em;
+            height: 2.8em;
             border: 1px dashed #000000;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.48rem;
+            font-size: 0.7em;
             text-align: center;
             font-family: sans-serif;
         }
@@ -282,12 +370,12 @@ $tot_abs  = array_sum($days_absent);
         .header-section h5, .header-section h4, .header-section h3 {
             margin: 1px 0;
             font-weight: normal;
-            font-size: 0.7rem;
+            font-size: 0.9em;
         }
 
         .header-section h3 {
             font-weight: bold;
-            font-size: 0.8rem;
+            font-size: 1.1em;
         }
 
         .line-field {
@@ -298,7 +386,7 @@ $tot_abs  = array_sum($days_absent);
 
         .student-info-block {
             margin-bottom: 6px;
-            font-size: 0.68rem;
+            font-size: 0.9em;
             line-height: 1.3;
         }
 
@@ -309,7 +397,7 @@ $tot_abs  = array_sum($days_absent);
         }
 
         .message-block {
-            font-size: 0.64rem;
+            font-size: 0.85em;
             margin-bottom: 6px;
             text-align: justify;
             line-height: 1.25;
@@ -324,7 +412,7 @@ $tot_abs  = array_sum($days_absent);
             display: flex;
             justify-content: space-between;
             margin: 8px 0 6px 0;
-            font-size: 0.68rem;
+            font-size: 0.9em;
             text-align: center;
         }
 
@@ -337,24 +425,23 @@ $tot_abs  = array_sum($days_absent);
         .section-heading {
             text-align: center;
             font-weight: bold;
-            font-size: 0.72rem;
+            font-size: 0.95em;
             margin: 6px 0 4px 0;
             text-transform: uppercase;
         }
 
-        /* Standardized Table Formatting */
         table.doc-table {
-            width: 100%;
-            table-layout: fixed;
-            border-collapse: collapse;
-            font-size: 0.60rem;
+            width: 100% !important;
+            table-layout: fixed !important;
+            border-collapse: collapse !important;
+            font-size: 0.8em;
             margin-bottom: 4px;
             box-sizing: border-box;
         }
 
         table.doc-table th, table.doc-table td {
             border: 1px solid #000000;
-            padding: 2px 0px;
+            padding: 0.25em 1px;
             text-align: center;
             word-wrap: break-word;
             overflow-wrap: break-word;
@@ -363,27 +450,20 @@ $tot_abs  = array_sum($days_absent);
 
         table.doc-table td.text-left {
             text-align: left;
-            padding-left: 2px;
-        }
-
-        /* Specific Overrides for Attendance Table */
-        table.attendance-table {
-            width: 100% !important;
-            table-layout: fixed !important;
-            border-collapse: collapse !important;
+            padding-left: 3px;
         }
 
         table.attendance-table th, 
         table.attendance-table td {
-            padding: 1px 0px !important;
-            font-size: 0.50rem !important;
+            padding: 0.2em 0px !important;
+            font-size: 0.72em !important;
             text-align: center !important;
             white-space: nowrap !important;
         }
 
         table.attendance-table td.text-left {
             text-align: left !important;
-            padding-left: 2px !important;
+            padding-left: 3px !important;
             white-space: normal !important;
         }
 
@@ -395,7 +475,7 @@ $tot_abs  = array_sum($days_absent);
             width: 100%;
             border-collapse: collapse;
             text-align: center;
-            font-size: 0.60rem;
+            font-size: 0.8em;
             margin-top: 2px;
         }
 
@@ -406,19 +486,19 @@ $tot_abs  = array_sum($days_absent);
 
         .comment-area {
             border: 1px solid #000000;
-            height: 28px;
+            min-height: 2.2em;
             margin-bottom: 4px;
             padding: 2px 4px;
-            font-size: 0.62rem;
+            font-size: 0.82em;
         }
 
         .signature-row {
             margin-bottom: 4px;
-            font-size: 0.64rem;
+            font-size: 0.85em;
         }
 
         .transfer-cert-body {
-            font-size: 0.64rem;
+            font-size: 0.85em;
             line-height: 1.3;
             margin-top: 6px;
         }
@@ -433,27 +513,25 @@ $tot_abs  = array_sum($days_absent);
         .footer-signatures .field {
             text-align: center;
             width: 45%;
-            font-size: 0.64rem;
+            font-size: 0.85em;
         }
 
         .footer-signatures .field .line {
             border-top: 1px solid #000000;
-            margin-top: 14px;
+            margin-top: 1.5em;
             padding-top: 2px;
         }
 
-        /* Screen Sizing Adjustments */
-        @media screen and (max-width: 1200px) {
-            main.content { padding: 12px; }
-            .report-document { min-width: 800px; padding: 10px; }
+        @media screen and (max-width: 600px) {
+            .report-document {
+                flex-direction: column !important;
+            }
+            .doc-page {
+                width: 100% !important;
+                flex: 1 1 100% !important;
+            }
         }
 
-        @media screen and (max-width: 992px) {
-            main.content { margin-left: 0; width: 100%; }
-            .report-document { min-width: 750px; }
-        }
-
-        /* STRICT PRINT PREVIEW MEDIA OVERRIDES */
         @media print {
             @page {
                 size: A4 landscape !important;
@@ -495,14 +573,13 @@ $tot_abs  = array_sum($days_absent);
                 flex-direction: row !important;
                 justify-content: space-between !important;
                 width: 100% !important;
-                min-width: 0 !important;
-                max-width: 100% !important;
                 border: none !important;
                 box-shadow: none !important;
                 padding: 0 !important;
                 margin: 0 !important;
                 gap: 4mm !important;
                 box-sizing: border-box !important;
+                font-size: 0.60rem !important;
                 zoom: 0.94;
             }
 
@@ -519,13 +596,11 @@ $tot_abs  = array_sum($days_absent);
 
             table.doc-table {
                 font-size: 0.52rem !important;
-                table-layout: fixed !important;
-                width: 100% !important;
             }
 
-            table.doc-table th, table.doc-table td {
-                padding: 1px 0px !important;
-                font-size: 0.52rem !important;
+            table.attendance-table th, 
+            table.attendance-table td {
+                font-size: 0.48rem !important;
             }
 
             .student-info-block, 
@@ -564,9 +639,24 @@ $tot_abs  = array_sum($days_absent);
         <main class="content">
             <!-- Screen Header Control Bar -->
             <div class="sf9-toolbar no-print">
-                <div class="toolbar-title">
+                <div class="toolbar-title" style="display: flex; align-items: center; gap: 12px;">
                     <button class="mobile-burger-btn" onclick="toggleSidebar()" title="Toggle Sidebar">☰</button>
-                    <span>Document Mode: <strong style="color: #2563eb;"><?= htmlspecialchars($student['full_name']) ?></strong> (LRN: <?= htmlspecialchars($student['lrn']) ?>)</span>
+                    
+                    <!-- Student Selector Dropdown -->
+                    <form method="GET" action="sf9-reportcard.php" id="studentSelectForm" style="margin: 0; display: flex; align-items: center; gap: 8px;">
+                        <label for="student_id" style="font-size: 0.85rem; font-weight: 600; color: #334155;">Learner:</label>
+                        <select name="student_id" id="student_id" onchange="document.getElementById('studentSelectForm').submit();" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: #ffffff; cursor: pointer; font-weight: 500;">
+                            <?php if (!empty($roster)): ?>
+                                <?php foreach ($roster as $s): ?>
+                                    <option value="<?= $s['id'] ?>" <?= intval($s['id']) === $student_id ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars(strtoupper($s['full_name'])) ?> (LRN: <?= htmlspecialchars($s['lrn'] ?: 'N/A') ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <option value="<?= $student_id ?>"><?= htmlspecialchars($student['full_name']) ?> (LRN: <?= htmlspecialchars($student['lrn']) ?>)</option>
+                            <?php endif; ?>
+                        </select>
+                    </form>
                 </div>
                 <button class="btn-print" onclick="window.print()">Print Official SF9 Document</button>
             </div>
@@ -596,7 +686,7 @@ $tot_abs  = array_sum($days_absent);
                         </div>
 
                         <div class="section-heading" style="margin-top: 2px;">LEARNER'S PERFORMANCE REPORT</div>
-                        <div style="text-align: center; font-size: 0.68rem; margin-bottom: 4px;">School Year 2026-2027</div>
+                        <div style="text-align: center; font-size: 0.85em; margin-bottom: 4px;">School Year 2026-2027</div>
 
                         <div class="student-info-block">
                             <div class="info-row">
@@ -656,12 +746,12 @@ $tot_abs  = array_sum($days_absent);
                                     <td colspan="7" class="text-left" style="font-weight: bold; font-style: italic; background: #f8fafc;">Core Subjects</td>
                                 </tr>
                                 <?php foreach ($core_subjects as $subj): ?>
-                                    <?php $res = calcFinalGrade($subj['t1'], $subj['t2'], $subj['t3']); ?>
+                                    <?php $res = calcFinalGrade($subj); ?>
                                     <tr>
                                         <td class="text-left"><?= htmlspecialchars($subj['name']) ?></td>
-                                        <td><?= $subj['t1'] ?></td>
-                                        <td><?= $subj['t2'] ?></td>
-                                        <td><?= $subj['t3'] ?></td>
+                                        <td><?= $subj['t1'] ?? '' ?></td>
+                                        <td><?= $subj['t2'] ?? '' ?></td>
+                                        <td><?= $subj['t3'] ?? '' ?></td>
                                         <td><strong><?= $subj['units'] ?></strong></td>
                                         <td><strong><?= $res['final'] ?></strong></td>
                                         <td><?= $res['remark'] ?></td>
@@ -672,12 +762,12 @@ $tot_abs  = array_sum($days_absent);
                                     <td colspan="7" class="text-left" style="font-weight: bold; font-style: italic; background: #f8fafc;">Elective Subjects</td>
                                 </tr>
                                 <?php foreach ($elective_subjects as $subj): ?>
-                                    <?php $res = calcFinalGrade($subj['t1'], $subj['t2'], $subj['t3']); ?>
+                                    <?php $res = calcFinalGrade($subj); ?>
                                     <tr>
                                         <td class="text-left"><?= htmlspecialchars($subj['name']) ?></td>
-                                        <td class="<?= $subj['dis_t1'] ? 'cell-disabled' : '' ?>"><?= $subj['t1'] ?? '' ?></td>
-                                        <td class="<?= $subj['dis_t2'] ? 'cell-disabled' : '' ?>"><?= $subj['t2'] ?? '' ?></td>
-                                        <td class="<?= $subj['dis_t3'] ? 'cell-disabled' : '' ?>"><?= $subj['t3'] ?? '' ?></td>
+                                        <td class="<?= !empty($subj['dis_t1']) ? 'cell-disabled' : '' ?>"><?= $subj['t1'] ?? '' ?></td>
+                                        <td class="<?= !empty($subj['dis_t2']) ? 'cell-disabled' : '' ?>"><?= $subj['t2'] ?? '' ?></td>
+                                        <td class="<?= !empty($subj['dis_t3']) ? 'cell-disabled' : '' ?>"><?= $subj['t3'] ?? '' ?></td>
                                         <td><strong><?= $subj['units'] ?></strong></td>
                                         <td><strong><?= $res['final'] ?></strong></td>
                                         <td><?= $res['remark'] ?></td>
@@ -691,12 +781,12 @@ $tot_abs  = array_sum($days_absent);
                                     <td><?= $gen_t3 ?></td>
                                     <td><?= $total_units ?></td>
                                     <td><?= $final_gen_avg ?></td>
-                                    <td>Passed</td>
+                                    <td><?= !empty($final_gen_avg) ? ($final_gen_avg >= 75 ? 'Passed' : 'Failed') : '' ?></td>
                                 </tr>
                             </tbody>
                         </table>
 
-                        <div class="section-heading" style="font-size: 0.68rem; margin-top: 4px;">PERFORMANCE DESCRIPTOR</div>
+                        <div class="section-heading" style="font-size: 0.85em; margin-top: 4px;">PERFORMANCE DESCRIPTOR</div>
                         <table class="descriptors-table">
                             <thead>
                                 <tr style="font-weight: bold;">
@@ -720,19 +810,19 @@ $tot_abs  = array_sum($days_absent);
                         <div class="section-heading">ATTENDANCE RECORD</div>
                         <table class="doc-table attendance-table">
                             <colgroup>
-                                <col style="width: 22%;">
-                                <col style="width: 5.8%;">
-                                <col style="width: 5.8%;">
-                                <col style="width: 5.8%;">
-                                <col style="width: 5.8%;">
-                                <col style="width: 5.8%;">
-                                <col style="width: 5.8%;">
-                                <col style="width: 5.8%;">
-                                <col style="width: 5.8%;">
-                                <col style="width: 5.8%;">
-                                <col style="width: 5.8%;">
-                                <col style="width: 5.8%;">
-                                <col style="width: 8.2%;">
+                                <col style="width: 20%;">
+                                <col style="width: 5.7%;">
+                                <col style="width: 5.7%;">
+                                <col style="width: 5.7%;">
+                                <col style="width: 5.7%;">
+                                <col style="width: 5.7%;">
+                                <col style="width: 5.7%;">
+                                <col style="width: 5.7%;">
+                                <col style="width: 5.7%;">
+                                <col style="width: 5.7%;">
+                                <col style="width: 5.7%;">
+                                <col style="width: 5.7%;">
+                                <col style="width: 11.3%;">
                             </colgroup>
                             <thead>
                                 <tr>
@@ -766,13 +856,13 @@ $tot_abs  = array_sum($days_absent);
                         </table>
 
                         <div class="section-heading">TEACHER'S COMMENTS / REMARKS</div>
-                        <div style="font-size: 0.66rem; font-weight: bold; margin-bottom: 1px;">Term 1</div>
+                        <div style="font-size: 0.82em; font-weight: bold; margin-bottom: 1px;">Term 1</div>
                         <div class="comment-area">Shows exemplary performance in mathematics and core sciences.</div>
 
-                        <div style="font-size: 0.66rem; font-weight: bold; margin-bottom: 1px;">Term 2</div>
+                        <div style="font-size: 0.82em; font-weight: bold; margin-bottom: 1px;">Term 2</div>
                         <div class="comment-area">Consistently active in class discussions and collaborative tasks.</div>
 
-                        <div style="font-size: 0.66rem; font-weight: bold; margin-bottom: 1px;">Term 3</div>
+                        <div style="font-size: 0.82em; font-weight: bold; margin-bottom: 1px;">Term 3</div>
                         <div class="comment-area">Demonstrated strong analytical skills in elective coursework.</div>
 
                         <div class="section-heading" style="margin-top: 6px;">PARENT/S GUARDIAN'S SIGNATURE</div>
@@ -796,8 +886,8 @@ $tot_abs  = array_sum($days_absent);
                             </div>
                         </div>
 
-                        <div class="section-heading" style="margin-top: 6px; font-size: 0.68rem;">CANCELLATION OF ELIGIBILITY TO TRANSFER</div>
-                        <div style="font-size: 0.68rem; margin-top: 4px;">
+                        <div class="section-heading" style="margin-top: 6px; font-size: 0.85em;">CANCELLATION OF ELIGIBILITY TO TRANSFER</div>
+                        <div style="font-size: 0.85em; margin-top: 4px;">
                             Admitted in: <span class="line-field" style="min-width: 80px;"></span> 
                             <span style="margin-left: 8px;">Date: <span class="line-field" style="min-width: 50px;"></span></span>
                         </div>
