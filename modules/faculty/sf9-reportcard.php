@@ -1,24 +1,21 @@
 <?php
 session_start();
 
-// 1. Database Connection Setup
-if (file_exists('../../config/database.php')) {
-    require_once '../../config/database.php';
-}
+// 1. Database Connection Setup (PDO or mysqli matching ecr-inputdata.php)
+require_once __DIR__ . '/../../config/database.php';
 
 if (!isset($conn) && isset($db)) {
     $conn = $db;
 }
 
-// 2. Fetch Roster / Student List for the Adviser Selector Dropdown
+// 2. Fetch Roster matching the query logic from ecr-inputdata.php
 $roster = [];
 if (isset($conn) && $conn instanceof mysqli) {
-    // Fetch all student records from users table
     $roster_sql = "
-        SELECT id, full_name, lrn 
-        FROM users 
-        WHERE LOWER(role) = 'student' OR section_id IS NOT NULL
-        ORDER BY id ASC
+        SELECT u.id, u.full_name, COALESCE(NULLIF(u.lrn, ''), u.username) AS lrn 
+        FROM users u
+        WHERE u.role = 'student' OR u.section_id IS NOT NULL
+        ORDER BY u.full_name ASC
     ";
     $roster_res = $conn->query($roster_sql);
     
@@ -26,44 +23,63 @@ if (isset($conn) && $conn instanceof mysqli) {
         while ($r = $roster_res->fetch_assoc()) {
             $roster[] = $r;
         }
-    } else {
-        // Fallback query if role filtering yields empty results
-        $fallback_sql = "SELECT id, full_name, lrn FROM users WHERE id IN (9, 11) ORDER BY id ASC";
-        $fallback_res = $conn->query($fallback_sql);
-        if ($fallback_res) {
-            while ($r = $fallback_res->fetch_assoc()) {
-                $roster[] = $r;
-            }
-        }
     }
 }
 
-// 3. Resolve Active Student ID (defaults to first student in roster or ID 9)
+// 3. Resolve Active Student ID
 if (isset($_GET['student_id']) && intval($_GET['student_id']) > 0) {
     $student_id = intval($_GET['student_id']);
 } elseif (!empty($roster)) {
     $student_id = intval($roster[0]['id']);
 } else {
-    $student_id = 9; // Direct DB fallback
+    $student_id = 0;
 }
+
+// 4. Fetch Available Academic Years dynamically from subject_assignments & ecr_term_summaries
+$available_years = [];
+if (isset($conn) && $conn instanceof mysqli) {
+    $sy_sql = "
+        SELECT DISTINCT academic_year FROM (
+            SELECT academic_year FROM subject_assignments WHERE academic_year IS NOT NULL AND academic_year != ''
+            UNION
+            SELECT academic_year FROM ecr_term_summaries WHERE academic_year IS NOT NULL AND academic_year != ''
+        ) AS combined_sy
+        ORDER BY academic_year DESC
+    ";
+    $res_sy = $conn->query($sy_sql);
+    if ($res_sy && $res_sy->num_rows > 0) {
+        while ($sy_row = $res_sy->fetch_assoc()) {
+            $available_years[] = $sy_row['academic_year'];
+        }
+    }
+}
+
+// Fallback current school year if no entries exist yet
+if (empty($available_years)) {
+    $current_month = intval(date('n'));
+    $current_year = intval(date('Y'));
+    $start_year = ($current_month >= 6) ? $current_year : $current_year - 1;
+    $available_years[] = $start_year . '-' . ($start_year + 1);
+}
+
+// Resolve Active Academic Year
+$selected_sy = isset($_GET['academic_year']) && in_array($_GET['academic_year'], $available_years) 
+    ? $_GET['academic_year'] 
+    : $available_years[0];
 
 $db_student = null;
 $core_subjects = [];
 $elective_subjects = [];
 
-if (isset($conn) && $conn instanceof mysqli) {
-    // A. Fetch Student Info (joined with student_profiles, sections, strands, and schools)
+if (isset($conn) && $conn instanceof mysqli && $student_id > 0) {
+    // A. Fetch Base Student Profile
     $stmt = $conn->prepare("
         SELECT 
-            u.id AS user_id, u.full_name, u.lrn,
+            u.id AS user_id, u.full_name, COALESCE(NULLIF(u.lrn, ''), u.username) AS lrn, u.section_id AS current_section_id,
             sp.birthdate, sp.gender,
-            s.grade_level, s.section_name,
-            st.strand_code, st.strand_name,
             sch.region, sch.division, sch.district, sch.school_name
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
-        LEFT JOIN sections s ON u.section_id = s.id
-        LEFT JOIN strands st ON s.strand_id = st.id
         LEFT JOIN schools sch ON u.school_id = sch.id
         WHERE u.id = ?
         LIMIT 1
@@ -76,74 +92,100 @@ if (isset($conn) && $conn instanceof mysqli) {
         $stmt->close();
     }
 
-    // B. Fetch Dynamic Grades using LEFT JOINs so empty grade entries don't filter out subjects
-    $grades_query = "
-        SELECT 
-            sub.subject_name AS name,
-            sub.type AS subject_type,
-            COALESCE(sub.units, 3) AS units,
-            ets.term1_transmuted AS t1,
-            ets.term2_transmuted AS t2,
-            ets.term3_transmuted AS t3,
-            ets.final_grade,
-            ets.remarks
-        FROM subjects sub
-        LEFT JOIN subject_assignments sa ON sa.subject_id = sub.id
-        LEFT JOIN ecr_term_summaries ets ON (ets.assignment_id = sa.id AND ets.student_id = ?)
-        ORDER BY sub.type ASC, sub.subject_name ASC
-    ";
+    // B. Fetch Historical Section & Grade Level for Selected Academic Year
+    $historical_section = null;
+    $sec_stmt = $conn->prepare("
+        SELECT DISTINCT s.grade_level, s.section_name, st.strand_code, st.strand_name
+        FROM subject_assignments sa
+        INNER JOIN ecr_term_summaries ets ON ets.assignment_id = sa.id
+        INNER JOIN sections s ON sa.section_id = s.id
+        LEFT JOIN strands st ON s.strand_id = st.id
+        WHERE ets.student_id = ? AND sa.academic_year = ?
+        LIMIT 1
+    ");
 
-    $stmt_grades = $conn->prepare($grades_query);
-    if ($stmt_grades) {
-        $stmt_grades->bind_param("i", $student_id);
-        $stmt_grades->execute();
-        $res_grades = $stmt_grades->get_result();
+    if ($sec_stmt) {
+        $sec_stmt->bind_param("is", $student_id, $selected_sy);
+        $sec_stmt->execute();
+        $historical_section = $sec_stmt->get_result()->fetch_assoc();
+        $sec_stmt->close();
+    }
 
-        while ($row = $res_grades->fetch_assoc()) {
-            $item = [
-                'name'        => $row['name'],
-                't1'          => $row['t1'] !== null ? round(floatval($row['t1'])) : null,
-                't2'          => $row['t2'] !== null ? round(floatval($row['t2'])) : null,
-                't3'          => $row['t3'] !== null ? round(floatval($row['t3'])) : null,
-                'units'       => intval($row['units']),
-                'final_grade' => $row['final_grade'] !== null ? round(floatval($row['final_grade'])) : null,
-                'remarks'     => $row['remarks'] ?? '',
-                'dis_t1'      => false,
-                'dis_t2'      => false,
-                'dis_t3'      => false
-            ];
-
-            if (strtolower($row['subject_type']) === 'core') {
-                $core_subjects[] = $item;
-            } else {
-                $elective_subjects[] = $item;
-            }
+    // Fallback to current section if historical record is missing
+    if (!$historical_section && !empty($db_student['current_section_id'])) {
+        $curr_sec_stmt = $conn->prepare("
+            SELECT s.grade_level, s.section_name, st.strand_code, st.strand_name
+            FROM sections s
+            LEFT JOIN strands st ON s.strand_id = st.id
+            WHERE s.id = ?
+            LIMIT 1
+        ");
+        if ($curr_sec_stmt) {
+            $curr_sec_stmt->bind_param("i", $db_student['current_section_id']);
+            $curr_sec_stmt->execute();
+            $historical_section = $curr_sec_stmt->get_result()->fetch_assoc();
+            $curr_sec_stmt->close();
         }
-        $stmt_grades->close();
+    }
+
+    if ($historical_section) {
+        $db_student['grade_level']  = $historical_section['grade_level'];
+        $db_student['section_name'] = $historical_section['section_name'];
+        $db_student['strand_code']  = $historical_section['strand_code'];
+        $db_student['strand_name']  = $historical_section['strand_name'];
+    }
+
+    // C. Fetch Dynamic Grades Filtered by Active Student & Selected Academic Year
+    if (!empty($selected_sy)) {
+        $grades_query = "
+            SELECT 
+                sub.subject_name AS name,
+                sub.type AS subject_type,
+                COALESCE(sub.units, 3) AS units,
+                ets.term1_transmuted AS t1,
+                ets.term2_transmuted AS t2,
+                ets.term3_transmuted AS t3,
+                ets.final_grade,
+                ets.remarks
+            FROM subjects sub
+            LEFT JOIN subject_assignments sa ON sa.subject_id = sub.id
+            LEFT JOIN ecr_term_summaries ets ON (ets.assignment_id = sa.id AND ets.student_id = ?)
+            WHERE sa.academic_year = ? OR sa.academic_year IS NULL
+            ORDER BY sub.type ASC, sub.subject_name ASC
+        ";
+
+        $stmt_grades = $conn->prepare($grades_query);
+        if ($stmt_grades) {
+            $stmt_grades->bind_param("is", $student_id, $selected_sy);
+            $stmt_grades->execute();
+            $res_grades = $stmt_grades->get_result();
+
+            while ($row = $res_grades->fetch_assoc()) {
+                $item = [
+                    'name'        => $row['name'],
+                    't1'          => $row['t1'] !== null ? round(floatval($row['t1'])) : null,
+                    't2'          => $row['t2'] !== null ? round(floatval($row['t2'])) : null,
+                    't3'          => $row['t3'] !== null ? round(floatval($row['t3'])) : null,
+                    'units'       => intval($row['units']),
+                    'final_grade' => $row['final_grade'] !== null ? round(floatval($row['final_grade'])) : null,
+                    'remarks'     => $row['remarks'] ?? '',
+                    'dis_t1'      => false,
+                    'dis_t2'      => false,
+                    'dis_t3'      => false
+                ];
+
+                if (strtolower($row['subject_type']) === 'core') {
+                    $core_subjects[] = $item;
+                } else {
+                    $elective_subjects[] = $item;
+                }
+            }
+            $stmt_grades->close();
+        }
     }
 }
 
-// Fallback Default Core Subjects if Database returns empty
-if (empty($core_subjects)) {
-    $core_subjects = [
-        ['name' => 'Effective Communication / Mabisang Komunikasyon', 't1' => null, 't2' => null, 't3' => null, 'units' => 6],
-        ['name' => 'General Mathematics', 't1' => null, 't2' => null, 't3' => null, 'units' => 6],
-        ['name' => 'General Science', 't1' => null, 't2' => null, 't3' => null, 'units' => 6],
-        ['name' => 'Life and Career Skills', 't1' => null, 't2' => null, 't3' => null, 'units' => 6],
-        ['name' => 'Pag-aaral ng Kasaysayan at Lipunang Pilipino', 't1' => null, 't2' => null, 't3' => null, 'units' => 6],
-    ];
-}
-
-// Fallback Default Elective Subjects if Database returns empty
-if (empty($elective_subjects)) {
-    $elective_subjects = [
-        ['name' => 'Academic Elective 1 (Pre-Calculus)', 't1' => null, 't2' => null, 't3' => null, 'units' => 3, 'dis_t1' => false, 'dis_t2' => false, 'dis_t3' => false],
-        ['name' => 'Academic Elective 2 (Basic Calculus)', 't1' => null, 't2' => null, 't3' => null, 'units' => 3, 'dis_t1' => true, 'dis_t2' => false, 'dis_t3' => true],
-        ['name' => 'Academic Elective 3 (General Physics)', 't1' => null, 't2' => null, 't3' => null, 'units' => 3, 'dis_t1' => true, 'dis_t2' => true, 'dis_t3' => false],
-    ];
-}
-
-// 4. Dynamic Age Calculation
+// Dynamic Age Calculation from birthdate
 $calculated_age = 'N/A';
 if (!empty($db_student['birthdate']) && $db_student['birthdate'] !== '0000-00-00') {
     try {
@@ -156,18 +198,18 @@ if (!empty($db_student['birthdate']) && $db_student['birthdate'] !== '0000-00-00
 }
 
 // Dynamic Track / Strand display
-$track_display = 'Academic';
+$track_display = 'N/A';
 if (!empty($db_student['strand_code']) || !empty($db_student['strand_name'])) {
     $track_display = 'Academic / ' . ($db_student['strand_code'] ?: $db_student['strand_name']);
 }
 
 $student = [
-    'full_name' => !empty($db_student['full_name']) ? strtoupper($db_student['full_name']) : 'STUDENT RECORD',
+    'full_name' => !empty($db_student['full_name']) ? strtoupper($db_student['full_name']) : 'NO STUDENT SELECTED',
     'lrn'       => !empty($db_student['lrn']) ? $db_student['lrn'] : 'N/A',
     'age'       => $calculated_age,
-    'gender'    => $db_student['gender'] ?? 'Male',
-    'grade'     => $db_student['grade_level'] ?? '11',
-    'section'   => $db_student['section_name'] ?? 'STEM-A',
+    'gender'    => $db_student['gender'] ?? 'N/A',
+    'grade'     => $db_student['grade_level'] ?? 'N/A',
+    'section'   => $db_student['section_name'] ?? 'N/A',
     'track'     => $track_display,
     'region'    => $db_student['region'] ?? 'REGION III',
     'division'  => $db_student['division'] ?? 'SCHOOLS DIVISION OF TARLAC',
@@ -200,7 +242,7 @@ $valid_gen = array_filter([$gen_t1, $gen_t2, $gen_t3], fn($v) => $v !== '');
 $final_gen_avg = !empty($valid_gen) ? round(array_sum($valid_gen) / count($valid_gen)) : '';
 $total_units = array_sum(array_column($all_subjs, 'units'));
 
-// Attendance Calculations (Static placeholders until attendance_records table is added)
+// Attendance Structure (Placeholders for missing database table)
 $school_days  = ['Jun' => 20, 'Jul' => 20, 'Aug' => 20, 'Sep' => 20, 'Oct' => 20, 'Nov' => 20, 'Dec' => 20, 'Jan' => 18, 'Feb' => 18, 'Mar' => 20, 'Apr' => 5];
 $days_present = ['Jun' => 20, 'Jul' => 19, 'Aug' => 20, 'Sep' => 18, 'Oct' => 20, 'Nov' => 20, 'Dec' => 19, 'Jan' => 18, 'Feb' => 18, 'Mar' => 20, 'Apr' => 5];
 $days_absent  = [];
@@ -642,20 +684,38 @@ $tot_abs  = array_sum($days_absent);
                 <div class="toolbar-title" style="display: flex; align-items: center; gap: 12px;">
                     <button class="mobile-burger-btn" onclick="toggleSidebar()" title="Toggle Sidebar">☰</button>
                     
-                    <!-- Student Selector Dropdown -->
-                    <form method="GET" action="sf9-reportcard.php" id="studentSelectForm" style="margin: 0; display: flex; align-items: center; gap: 8px;">
-                        <label for="student_id" style="font-size: 0.85rem; font-weight: 600; color: #334155;">Learner:</label>
-                        <select name="student_id" id="student_id" onchange="document.getElementById('studentSelectForm').submit();" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: #ffffff; cursor: pointer; font-weight: 500;">
-                            <?php if (!empty($roster)): ?>
-                                <?php foreach ($roster as $s): ?>
-                                    <option value="<?= $s['id'] ?>" <?= intval($s['id']) === $student_id ? 'selected' : '' ?>>
-                                        <?= htmlspecialchars(strtoupper($s['full_name'])) ?> (LRN: <?= htmlspecialchars($s['lrn'] ?: 'N/A') ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            <?php else: ?>
-                                <option value="<?= $student_id ?>"><?= htmlspecialchars($student['full_name']) ?> (LRN: <?= htmlspecialchars($student['lrn']) ?>)</option>
-                            <?php endif; ?>
-                        </select>
+                    <form method="GET" action="sf9-reportcard.php" id="studentSelectForm" style="margin: 0; display: flex; align-items: center; gap: 12px;">
+                        <!-- Dynamic Student Selector Dropdown -->
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <label for="student_id" style="font-size: 0.85rem; font-weight: 600; color: #334155;">Learner:</label>
+                            <select name="student_id" id="student_id" onchange="document.getElementById('studentSelectForm').submit();" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: #ffffff; cursor: pointer; font-weight: 500;">
+                                <?php if (!empty($roster)): ?>
+                                    <?php foreach ($roster as $s): ?>
+                                        <option value="<?= $s['id'] ?>" <?= intval($s['id']) === $student_id ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars(strtoupper($s['full_name'])) ?> (LRN: <?= htmlspecialchars($s['lrn'] ?: 'N/A') ?>)
+                                        </option>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <option value="">NO STUDENTS FOUND</option>
+                                <?php endif; ?>
+                            </select>
+                        </div>
+
+                        <!-- Dynamic School Year Selector Dropdown -->
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <label for="academic_year" style="font-size: 0.85rem; font-weight: 600; color: #334155;">School Year:</label>
+                            <select name="academic_year" id="academic_year" onchange="document.getElementById('studentSelectForm').submit();" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: #ffffff; cursor: pointer; font-weight: 500;">
+                                <?php if (!empty($available_years)): ?>
+                                    <?php foreach ($available_years as $sy): ?>
+                                        <option value="<?= $sy ?>" <?= $sy === $selected_sy ? 'selected' : '' ?>>
+                                            SY <?= htmlspecialchars($sy) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <option value="">N/A</option>
+                                <?php endif; ?>
+                            </select>
+                        </div>
                     </form>
                 </div>
                 <button class="btn-print" onclick="window.print()">Print Official SF9 Document</button>
@@ -686,7 +746,7 @@ $tot_abs  = array_sum($days_absent);
                         </div>
 
                         <div class="section-heading" style="margin-top: 2px;">LEARNER'S PERFORMANCE REPORT</div>
-                        <div style="text-align: center; font-size: 0.85em; margin-bottom: 4px;">School Year 2026-2027</div>
+                        <div style="text-align: center; font-size: 0.85em; margin-bottom: 4px;">School Year <?= htmlspecialchars($selected_sy ?: 'N/A') ?></div>
 
                         <div class="student-info-block">
                             <div class="info-row">
@@ -745,34 +805,46 @@ $tot_abs  = array_sum($days_absent);
                                 <tr>
                                     <td colspan="7" class="text-left" style="font-weight: bold; font-style: italic; background: #f8fafc;">Core Subjects</td>
                                 </tr>
-                                <?php foreach ($core_subjects as $subj): ?>
-                                    <?php $res = calcFinalGrade($subj); ?>
+                                <?php if (!empty($core_subjects)): ?>
+                                    <?php foreach ($core_subjects as $subj): ?>
+                                        <?php $res = calcFinalGrade($subj); ?>
+                                        <tr>
+                                            <td class="text-left"><?= htmlspecialchars($subj['name']) ?></td>
+                                            <td><?= $subj['t1'] ?? '' ?></td>
+                                            <td><?= $subj['t2'] ?? '' ?></td>
+                                            <td><?= $subj['t3'] ?? '' ?></td>
+                                            <td><strong><?= $subj['units'] ?></strong></td>
+                                            <td><strong><?= $res['final'] ?></strong></td>
+                                            <td><?= $res['remark'] ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
                                     <tr>
-                                        <td class="text-left"><?= htmlspecialchars($subj['name']) ?></td>
-                                        <td><?= $subj['t1'] ?? '' ?></td>
-                                        <td><?= $subj['t2'] ?? '' ?></td>
-                                        <td><?= $subj['t3'] ?? '' ?></td>
-                                        <td><strong><?= $subj['units'] ?></strong></td>
-                                        <td><strong><?= $res['final'] ?></strong></td>
-                                        <td><?= $res['remark'] ?></td>
+                                        <td colspan="7" style="font-style: italic; color: #64748b;">No core subjects found for this academic year.</td>
                                     </tr>
-                                <?php endforeach; ?>
+                                <?php endif; ?>
 
                                 <tr>
                                     <td colspan="7" class="text-left" style="font-weight: bold; font-style: italic; background: #f8fafc;">Elective Subjects</td>
                                 </tr>
-                                <?php foreach ($elective_subjects as $subj): ?>
-                                    <?php $res = calcFinalGrade($subj); ?>
+                                <?php if (!empty($elective_subjects)): ?>
+                                    <?php foreach ($elective_subjects as $subj): ?>
+                                        <?php $res = calcFinalGrade($subj); ?>
+                                        <tr>
+                                            <td class="text-left"><?= htmlspecialchars($subj['name']) ?></td>
+                                            <td class="<?= !empty($subj['dis_t1']) ? 'cell-disabled' : '' ?>"><?= $subj['t1'] ?? '' ?></td>
+                                            <td class="<?= !empty($subj['dis_t2']) ? 'cell-disabled' : '' ?>"><?= $subj['t2'] ?? '' ?></td>
+                                            <td class="<?= !empty($subj['dis_t3']) ? 'cell-disabled' : '' ?>"><?= $subj['t3'] ?? '' ?></td>
+                                            <td><strong><?= $subj['units'] ?></strong></td>
+                                            <td><strong><?= $res['final'] ?></strong></td>
+                                            <td><?= $res['remark'] ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
                                     <tr>
-                                        <td class="text-left"><?= htmlspecialchars($subj['name']) ?></td>
-                                        <td class="<?= !empty($subj['dis_t1']) ? 'cell-disabled' : '' ?>"><?= $subj['t1'] ?? '' ?></td>
-                                        <td class="<?= !empty($subj['dis_t2']) ? 'cell-disabled' : '' ?>"><?= $subj['t2'] ?? '' ?></td>
-                                        <td class="<?= !empty($subj['dis_t3']) ? 'cell-disabled' : '' ?>"><?= $subj['t3'] ?? '' ?></td>
-                                        <td><strong><?= $subj['units'] ?></strong></td>
-                                        <td><strong><?= $res['final'] ?></strong></td>
-                                        <td><?= $res['remark'] ?></td>
+                                        <td colspan="7" style="font-style: italic; color: #64748b;">No elective subjects found for this academic year.</td>
                                     </tr>
-                                <?php endforeach; ?>
+                                <?php endif; ?>
 
                                 <tr style="font-weight: bold; background: #f1f5f9;">
                                     <td class="text-left" style="font-style: italic;">General Average</td>
