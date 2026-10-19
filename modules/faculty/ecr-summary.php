@@ -3,6 +3,7 @@ session_start();
 
 // 1. Correct Path Resolution using __DIR__
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../core/PromotionVerification.php';
 
 // Optional helper load
 $transmutation_file = __DIR__ . '/../../core/DepEdTransmutation.php';
@@ -18,9 +19,14 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'ad
     header("Location: ../../manifest/login.php");
     exit();
 }
+ensurePromotionVerificationTable($pdo);
 
 $user_id   = $_SESSION['user_id'];
 $user_role = $_SESSION['role'];
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrf_token = $_SESSION['csrf_token'];
 
 // 3. Subject Assignment & Section Query Parameters
 $assignment_id = isset($_GET['assignment_id']) ? (int)$_GET['assignment_id'] : 0;
@@ -151,6 +157,19 @@ if ($section_id > 0) {
     ");
     $f_stmt->execute(['section_id' => $section_id, 'assignment_id' =>$assignment_id]);
     $females =$f_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $verification_stmt = $pdo->prepare("
+        SELECT student_id
+        FROM ecr_promotion_verifications_by_assignment
+        WHERE assignment_id = :assignment_id
+    ");
+    $verification_stmt->execute(['assignment_id' => $assignment_id]);
+    $verified_student_ids = array_fill_keys(
+        array_map('intval', $verification_stmt->fetchAll(PDO::FETCH_COLUMN)),
+        true
+    );
+} else {
+    $verified_student_ids = [];
 }
 ?>
 
@@ -428,6 +447,48 @@ if ($section_id > 0) {
             color: #b91c1c;
         }
 
+        .promotion-status {
+            display: inline-block;
+            margin: 0 4px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.72rem;
+            font-weight: 700;
+        }
+
+        .promotion-status.verified {
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        .promotion-status.unverified {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+        .promotion-toggle {
+            margin: 3px;
+            padding: 5px 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #334155;
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .promotion-toggle:disabled {
+            cursor: wait;
+            opacity: 0.6;
+        }
+
+        @media print {
+            .promotion-toggle {
+                display: none;
+            }
+        }
+
         .mobile-toggle {
             display: block;
             position: fixed;
@@ -581,16 +642,17 @@ if ($section_id > 0) {
                                 <th>FINAL GRADE</th>
                                 <th>DESCRIPTOR</th>
                                 <th>REMARKS</th>
+                                <th>PROMOTION VERIFICATION</th>
                             </tr>
                         </thead>
                         <tbody>
                             <!-- MALE LEARNERS -->
                             <tr class="group-header">
-                                <td colspan="7">MALE LEARNERS</td>
+                                <td colspan="8">MALE LEARNERS</td>
                             </tr>
                             <?php if (empty($males)): ?>
                                 <tr>
-                                    <td colspan="7" style="padding: 12px !important; color: #94a3b8; text-align: center;">No male students enrolled in this section.</td>
+                                    <td colspan="8" style="padding: 12px !important; color: #94a3b8; text-align: center;">No male students enrolled in this section.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($males as $index =>$student): ?>
@@ -621,17 +683,30 @@ if ($section_id > 0) {
                                                 <span style="color: #94a3b8;">-</span>
                                             <?php endif; ?>
                                         </td>
+                                        <td>
+                                            <?php $promotion_verified = isset($verified_student_ids[(int)$student['id']]); ?>
+                                            <span class="promotion-status <?= $promotion_verified ? 'verified' : 'unverified' ?>">
+                                                <?= $promotion_verified ? 'Qualified to move up / graduate' : 'Not verified' ?>
+                                            </span>
+                                            <button
+                                                type="button"
+                                                class="promotion-toggle"
+                                                data-student-id="<?= (int)$student['id'] ?>"
+                                                data-verified="<?= $promotion_verified ? '1' : '0' ?>"
+                                                onclick="togglePromotionVerification(this)"
+                                            ><?= $promotion_verified ? 'Undo verification' : 'Verify qualification' ?></button>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
 
                             <!-- FEMALE LEARNERS -->
                             <tr class="group-header">
-                                <td colspan="7">FEMALE LEARNERS</td>
+                                <td colspan="8">FEMALE LEARNERS</td>
                             </tr>
                             <?php if (empty($females)): ?>
                                 <tr>
-                                    <td colspan="7" style="padding: 12px !important; color: #94a3b8; text-align: center;">No female students enrolled in this section.</td>
+                                    <td colspan="8" style="padding: 12px !important; color: #94a3b8; text-align: center;">No female students enrolled in this section.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($females as $index =>$student): ?>
@@ -662,6 +737,19 @@ if ($section_id > 0) {
                                                 <span style="color: #94a3b8;">-</span>
                                             <?php endif; ?>
                                         </td>
+                                        <td>
+                                            <?php $promotion_verified = isset($verified_student_ids[(int)$student['id']]); ?>
+                                            <span class="promotion-status <?= $promotion_verified ? 'verified' : 'unverified' ?>">
+                                                <?= $promotion_verified ? 'Qualified to move up / graduate' : 'Not verified' ?>
+                                            </span>
+                                            <button
+                                                type="button"
+                                                class="promotion-toggle"
+                                                data-student-id="<?= (int)$student['id'] ?>"
+                                                data-verified="<?= $promotion_verified ? '1' : '0' ?>"
+                                                onclick="togglePromotionVerification(this)"
+                                            ><?= $promotion_verified ? 'Undo verification' : 'Verify qualification' ?></button>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
@@ -691,6 +779,40 @@ if ($section_id > 0) {
         function switchSubjectAssignment(assignmentId) {
             if (assignmentId > 0) {
                 window.location.href = `ecr-summary.php?assignment_id=${assignmentId}`;
+            }
+        }
+
+        async function togglePromotionVerification(button) {
+            const currentlyVerified = button.dataset.verified === '1';
+            button.disabled = true;
+
+            try {
+                const response = await fetch('../../api/faculty/verify-promotion.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        assignment_id: <?= (int)$assignment_id ?>,
+                        student_id: Number(button.dataset.studentId),
+                        verified: !currentlyVerified,
+                        csrf_token: <?= json_encode($csrf_token) ?>
+                    })
+                });
+                const result = await response.json();
+                if (!response.ok || result.status !== 'success') {
+                    throw new Error(result.message || 'Unable to save promotion verification.');
+                }
+
+                const status = button.parentElement.querySelector('.promotion-status');
+                const verified = !currentlyVerified;
+                button.dataset.verified = verified ? '1' : '0';
+                status.textContent = verified ? 'Qualified to move up / graduate' : 'Not verified';
+                status.classList.toggle('verified', verified);
+                status.classList.toggle('unverified', !verified);
+                button.textContent = verified ? 'Undo verification' : 'Verify qualification';
+            } catch (error) {
+                alert(error.message);
+            } finally {
+                button.disabled = false;
             }
         }
     </script>

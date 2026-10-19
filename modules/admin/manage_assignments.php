@@ -373,7 +373,7 @@ $assignments = $conn->query($query_str)->fetchAll(PDO::FETCH_ASSOC);
             <ul class="menu">
                 <li><a href="admin_dashboard.php">Dashboard</a></li>
                 <li><a href="manage_strands.php">Manage Strands</a></li>
-                <li><a href="curriculum_guide.php">Manage Subjects</a></li>
+                <li><a href="curriculum_guide.php">Curriculum Guide</a></li>
                 <li><a href="manage_sections.php">Manage Sections</a></li>
                 <li><a href="manage_assignments.php" class="active">Teaching Assignments</a></li>
                 <li><a href="admin_schedule.php">Manage Schedules</a></li>

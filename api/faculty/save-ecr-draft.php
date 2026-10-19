@@ -4,6 +4,7 @@ session_start();
 
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../core/EcrDraftStore.php';
+require_once __DIR__ . '/../../core/EcrTermLock.php';
 
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'adviser', 'admin'], true)) {
     http_response_code(403);
@@ -36,7 +37,6 @@ if (!$assignmentId || $assignmentId < 1 || !preg_match('/^Term ([1-3])$/', (stri
     exit();
 }
 $termName = 'Term ' . $termMatch[1];
-$termColumn = 'term' . (int)$termMatch[1] . '_transmuted';
 
 try {
     $db = getDBConnection();
@@ -61,23 +61,7 @@ try {
         exit();
     }
 
-    $savedScoresStmt = $db->prepare("
-        SELECT COUNT(*)
-        FROM ecr_student_scores scores
-        JOIN ecr_assessment_components components ON components.id = scores.component_id
-        WHERE components.assignment_id = :assignment_id AND components.term = :term
-    ");
-    $savedScoresStmt->execute(['assignment_id' => $assignmentId, 'term' => $termName]);
-    $hasSavedScores = (int)$savedScoresStmt->fetchColumn() > 0;
-
-    $savedSummaryStmt = $db->prepare("
-        SELECT COUNT(*)
-        FROM ecr_term_summaries
-        WHERE assignment_id = :assignment_id AND {$termColumn} IS NOT NULL
-    ");
-    $savedSummaryStmt->execute(['assignment_id' => $assignmentId]);
-    $hasSavedSummary = (int)$savedSummaryStmt->fetchColumn() > 0;
-    if ($hasSavedScores || $hasSavedSummary) {
+    if (isEcrTermLocked($db, $assignmentId, $termName)) {
         $db->rollBack();
         http_response_code(409);
         echo json_encode(['status' => 'error', 'message' => "{$termName} has already been saved and is read-only."]);

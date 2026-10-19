@@ -3,6 +3,7 @@ session_start();
 
 // 1. Correct Path Resolution using __DIR__
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../core/EcrTermLock.php';
 
 // Instantiate PDO connection
 $pdo = getDBConnection();
@@ -119,24 +120,7 @@ $qa_count = !empty($db_components['QA']) ? count($db_components['QA']) : 1;
 $term_is_locked = false;
 
 if ($assignment_id > 0) {
-    $term_column = "term{$term}_transmuted";
-    $saved_scores_stmt =$pdo->prepare("
-        SELECT COUNT(*)
-        FROM ecr_student_scores scores
-        JOIN ecr_assessment_components components ON components.id = scores.component_id
-        WHERE components.assignment_id = :assignment_id AND components.term = :term
-    ");
-    $saved_scores_stmt->execute([
-        'assignment_id' => $assignment_id,
-        'term' => $term_str
-    ]);
-    $saved_summary_stmt =$pdo->prepare("
-        SELECT COUNT(*)
-        FROM ecr_term_summaries
-        WHERE assignment_id = :assignment_id AND {$term_column} IS NOT NULL
-    ");
-    $saved_summary_stmt->execute(['assignment_id' => $assignment_id]);$term_is_locked = (int)$saved_scores_stmt->fetchColumn() > 0
-        || (int)$saved_summary_stmt->fetchColumn() > 0;
+    $term_is_locked = isEcrTermLocked($pdo, $assignment_id, $term_str);
 }
 ?>
 
