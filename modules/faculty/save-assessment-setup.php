@@ -3,6 +3,7 @@ session_start();
 
 // 1. Path Resolution & Database Connection
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../core/EcrTermLock.php';
 
 // Access Control Check
 if (!isset($_SESSION['user_id']) || $_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -24,7 +25,6 @@ if ($assignment_id <= 0 || !preg_match('/^Term ([1-3])$/', $term, $term_match)) 
     exit();
 }
 $term_number = (int)$term_match[1];
-$term_column = "term{$term_number}_transmuted";
 
 try {
     $pdo->beginTransaction();
@@ -39,27 +39,7 @@ try {
         exit();
     }
 
-    $saved_scores_stmt = $pdo->prepare("
-        SELECT COUNT(*)
-        FROM ecr_student_scores scores
-        JOIN ecr_assessment_components components ON components.id = scores.component_id
-        WHERE components.assignment_id = :assignment_id AND components.term = :term
-    ");
-    $saved_scores_stmt->execute([
-        'assignment_id' => $assignment_id,
-        'term' => $term
-    ]);
-    $has_saved_scores = (int)$saved_scores_stmt->fetchColumn() > 0;
-
-    $saved_summary_stmt = $pdo->prepare("
-        SELECT COUNT(*)
-        FROM ecr_term_summaries
-        WHERE assignment_id = :assignment_id AND {$term_column} IS NOT NULL
-    ");
-    $saved_summary_stmt->execute(['assignment_id' => $assignment_id]);
-    $has_saved_summary = (int)$saved_summary_stmt->fetchColumn() > 0;
-
-    if ($has_saved_scores || $has_saved_summary) {
+    if (isEcrTermLocked($pdo, $assignment_id, $term)) {
         $pdo->rollBack();
         header("Location: ecr-inputdata.php?assignment_id={$assignment_id}&term={$term_number}&error=term_locked");
         exit();

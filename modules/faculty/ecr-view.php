@@ -4,6 +4,7 @@ session_start();
 // 1. Path Resolution & Database Connection
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../core/EcrDraftStore.php';
+require_once __DIR__ . '/../../core/EcrTermLock.php';
 $pdo = getDBConnection();
 
 // 2. Access Control
@@ -167,14 +168,7 @@ if ($assignment_id > 0) {
         $saved_scores[$saved_score['student_id']][$saved_score['component_id']] = $saved_score['score'];
     }
 
-    $term_column = "term{$term}_transmuted";
-    $saved_summary_stmt = $pdo->prepare("
-        SELECT COUNT(*)
-        FROM ecr_term_summaries
-        WHERE assignment_id = :assignment_id AND {$term_column} IS NOT NULL
-    ");
-    $saved_summary_stmt->execute(['assignment_id' => $assignment_id]);
-    $term_is_locked = !empty($saved_scores) || (int)$saved_summary_stmt->fetchColumn() > 0;
+    $term_is_locked = isEcrTermLocked($pdo, $assignment_id, $term_str);
 
     if (!$term_is_locked) {
         $draft_stmt = $pdo->prepare("

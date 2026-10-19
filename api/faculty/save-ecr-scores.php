@@ -6,6 +6,7 @@ session_start();
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../core/DepEdTransmutation.php';
 require_once __DIR__ . '/../../core/EcrDraftStore.php';
+require_once __DIR__ . '/../../core/EcrTermLock.php';
 
 // Check authorization
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'adviser', 'admin'])) {
@@ -40,8 +41,16 @@ try {
 
     // Check if grades are locked
     $stmtLock = $db->prepare("
-        SELECT is_locked FROM ecr_term_summaries 
-        WHERE assignment_id = :assignment_id LIMIT 1
+        SELECT summaries.is_locked
+        FROM ecr_term_summaries summaries
+        JOIN subject_assignments assignments ON assignments.id = summaries.assignment_id
+        JOIN users students
+            ON students.id = summaries.student_id
+            AND students.section_id = assignments.section_id
+            AND students.role = 'student'
+        WHERE summaries.assignment_id = :assignment_id
+            AND summaries.is_locked = 1
+        LIMIT 1
     ");
     $stmtLock->execute(['assignment_id' => $assignmentId]);
     $isLocked = $stmtLock->fetchColumn();
@@ -67,27 +76,7 @@ try {
         exit();
     }
 
-    $stmtSavedScores = $db->prepare("
-        SELECT COUNT(*)
-        FROM ecr_student_scores scores
-        JOIN ecr_assessment_components components ON components.id = scores.component_id
-        WHERE components.assignment_id = :assignment_id AND components.term = :term
-    ");
-    $stmtSavedScores->execute([
-        'assignment_id' => $assignmentId,
-        'term' => $termName
-    ]);
-    $hasSavedScores = (int)$stmtSavedScores->fetchColumn() > 0;
-
-    $stmtSavedSummary = $db->prepare("
-        SELECT COUNT(*)
-        FROM ecr_term_summaries
-        WHERE assignment_id = :assignment_id AND {$termColumn} IS NOT NULL
-    ");
-    $stmtSavedSummary->execute(['assignment_id' => $assignmentId]);
-    $hasSavedSummary = (int)$stmtSavedSummary->fetchColumn() > 0;
-
-    if ($hasSavedScores || $hasSavedSummary) {
+    if (isEcrTermLocked($db, $assignmentId, $termName)) {
         $db->rollBack();
         http_response_code(409);
         echo json_encode([
