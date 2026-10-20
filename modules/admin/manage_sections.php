@@ -3,23 +3,37 @@ session_start();
 require_once __DIR__ . '/../../config/database.php';
 $conn = getDBConnection();
 
+// 1. Access Control
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     header("Location: ../../manifest/login.php");
     exit();
 }
 
-$strands = $conn->query("SELECT id, strand_name FROM strands")->fetchAll();
-$advisers = $conn->query("SELECT id, full_name FROM users WHERE role = 'adviser'")->fetchAll();
+// 2. Active Filter Options
+$active_ay = $_GET['academic_year'] ?? '2026-2027';
+$active_version = $_GET['curriculum_version'] ?? 'Strengthened';
 
-$sections_list = $conn->query("
+// 3. Fetch Selection Options for Modals and Filters
+$strands = $conn->query("SELECT id, strand_name FROM strands ORDER BY strand_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+$advisers = $conn->query("SELECT id, full_name FROM users WHERE role IN ('adviser', 'faculty') ORDER BY full_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+
+// 4. Fetch Filtered Active Sections List
+$query = "
     SELECT 
-        s.id, s.section_name, s.grade_level, s.strand_id, s.adviser_id,
-        st.strand_name, u.full_name as adviser_name 
+        s.id, s.section_name, s.grade_level, s.strand_id, s.adviser_id, 
+        s.academic_year, s.curriculum_version,
+        COALESCE(st.strand_name, 'General / Multi-Cluster') AS strand_name, 
+        u.full_name AS adviser_name 
     FROM sections s
-    JOIN strands st ON s.strand_id = st.id
+    LEFT JOIN strands st ON s.strand_id = st.id
     LEFT JOIN users u ON s.adviser_id = u.id
+    WHERE s.academic_year = :ay AND s.curriculum_version = :version
     ORDER BY s.grade_level ASC, s.section_name ASC
-")->fetchAll();
+";
+
+$stmt = $conn->prepare($query);
+$stmt->execute(['ay' => $active_ay, 'version' => $active_version]);
+$sections_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -30,118 +44,58 @@ $sections_list = $conn->query("
     <title>Manage Sections | STRAND-SYNC</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
-
         body { 
-            margin: 0;
-            padding: 0;
-            overflow: hidden; 
+            margin: 0; padding: 0; overflow: hidden; 
+            font-family: 'Inter', system-ui, sans-serif; background-color: #f8fafc;
         }
 
-        .dashboard-wrapper { 
-            display: flex; 
-            height: 100vh; 
-            width: 100%;
-            overflow: hidden;
-            position: relative;
-        }
+        .dashboard-wrapper { display: flex; height: 100vh; width: 100%; overflow: hidden; position: relative; }
 
         main.content { 
-            flex-grow: 1;
-            margin-left: 260px;
-            padding: 30px;
-            width: 100%;
-            max-width: 100%;
-            height: 100vh; 
-            box-sizing: border-box;
-            display: flex; 
-            flex-direction: column; 
-            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            overflow: hidden;
+            flex-grow: 1; margin-left: 260px; padding: 25px 30px; width: 100%; 
+            height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; 
+            transition: margin-left 0.3s ease; overflow: hidden; 
         }
 
         .table-container { 
-            flex: 1; 
-            min-height: 0; 
-            overflow-y: auto; 
-            overflow-x: auto; 
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            flex: 1; min-height: 0; overflow-y: auto; overflow-x: auto; 
+            background: white; padding: 25px; border-radius: 12px; 
+            border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); 
         }
 
-        .mobile-toggle {
-            transition: opacity 0.2s ease, visibility 0.2s ease;
-            z-index: 999;
+        .version-badge {
+            display: inline-block; font-size: 0.72rem; font-weight: 700;
+            padding: 3px 8px; border-radius: 6px; text-transform: uppercase;
         }
+        .ver-matatag { background: #eff6ff; color: #2563eb; }
+        .ver-legacy { background: #fff7ed; color: #ea580c; }
 
-        .mobile-toggle.hidden {
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-        }
+        .btn-action { padding: 6px 12px; border-radius: 6px; border: none; font-weight: 600; font-size: 0.8rem; cursor: pointer; text-decoration: none; display: inline-block; }
+        .btn-edit { background: #f1f5f9; color: #334155; }
+        .btn-subjects { background: #6366f1; color: white; }
+        .btn-delete { background: #fef2f2; color: #ef4444; }
 
-        .sidebar-close {
-            display: none;
-            background: none;
-            border: none;
-            color: white;
-            font-size: 1.5rem;
-            cursor: pointer;
-            padding: 0 5px;
-            line-height: 1;
-        }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(30, 41, 59, 0.6); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+        .modal-overlay.hidden { display: none; }
+        .modal-content { background: white; padding: 25px; border-radius: 12px; width: 440px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+        .input-group { margin-bottom: 14px; }
+        .input-group label { display: block; font-size: 0.82rem; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+        .input-group input, .input-group select { width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; outline: none; box-sizing: border-box; font-size: 0.85rem; }
 
-        .sidebar {
-            height: 100vh;
-            overflow-y: auto;
-            overflow-x: hidden;
-            box-sizing: border-box;
-        }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+        .modal-actions button { padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; border: none; }
 
-        .sidebar::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .sidebar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .sidebar::-webkit-scrollbar-thumb {
-            background-color: rgba(255, 255, 255, 0.25);
-            border-radius: 10px;
-        }
-
-        .sidebar::-webkit-scrollbar-thumb:hover {
-            background-color: rgba(255, 255, 255, 0.4);
-        }
+        .mobile-toggle { display: none; z-index: 999; }
+        .sidebar-close { display: none; background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; }
+        .sidebar { height: 100vh; overflow-y: auto; box-sizing: border-box; }
 
         @media (max-width: 1024px) {
             body { overflow: auto; }
-            
-            main.content { 
-                margin-left: 0 !important; 
-                width: 100%; 
-                height: auto; 
-                overflow: visible;
-                padding: 15px; 
-            }
-
-            .table-container { 
-                overflow-y: visible; 
-                max-height: none; 
-            }
-
-            #sidebar.active .sidebar-close {
-                display: block;
-            }
+            main.content { margin-left: 0 !important; width: 100%; height: auto; overflow: visible; padding: 15px; }
+            .table-container { overflow-y: visible; max-height: none; }
         }
 
-        #sidebar:not(.active) ~ main.content { 
-            margin-left: 0; 
-            width: 100%; 
-        }
+        #sidebar:not(.active) ~ main.content { margin-left: 0; width: 100%; }
     </style>
 </head>
 <body>
@@ -170,96 +124,148 @@ $sections_list = $conn->query("
 
         <main class="content">
             <header class="content-header">
-                <h1>Manage Sections</h1>
-                <p>Assign Strands and Advisers to Classes</p>
+                <h1 style="margin: 0; font-size: 1.4rem;">Manage Sections</h1>
+                <p style="margin: 4px 0 0 0; color: #64748b; font-size: 0.85rem;">Organize class sections, strands, and advisers per Academic Year.</p>
             </header>
 
             <?php if (isset($_GET['msg'])): ?>
-                <div class="alert alert-success">
+                <div style="background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; padding: 10px; border-radius: 8px; margin: 15px 0 0 0; font-size: 0.85rem; font-weight: 600;">
                     <?php 
-                        if($_GET['msg'] == 'assigned') echo "Subject teachers updated successfully.";
-                        if($_GET['msg'] == 'deleted') echo "Section deleted successfully.";
+                        if($_GET['msg'] == 'assigned') echo "✔ Section assignments updated successfully.";
+                        if($_GET['msg'] == 'saved') echo "✔ Section created successfully.";
+                        if($_GET['msg'] == 'deleted') echo "✔ Section deleted successfully.";
                     ?>
                 </div>
             <?php endif; ?>
 
-            <div class="table-container">
-                <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h2>Active Sections</h2>
-                    <button class="btn-primary" onclick="prepareNewSection()">+ Section</button>
+            <div class="table-container" style="margin-top: 15px;">
+                <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+                    <form method="GET" style="display: flex; gap: 10px; align-items: center;">
+                        <label style="font-size: 0.85rem; font-weight: 600; color: #475569;">Filter:</label>
+                        <select name="academic_year" onchange="this.form.submit()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem;">
+                            <option value="2026-2027" <?= $active_ay === '2026-2027' ? 'selected' : '' ?>>SY 2026-2027</option>
+                            <option value="2025-2026" <?= $active_ay === '2025-2026' ? 'selected' : '' ?>>SY 2025-2026</option>
+                        </select>
+
+                        <select name="curriculum_version" onchange="this.form.submit()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem;">
+                            <option value="Strengthened" <?= $active_version === 'Strengthened' ? 'selected' : '' ?>>Strengthened MATATAG</option>
+                            <option value="Legacy" <?= $active_version === 'Legacy' ? 'selected' : '' ?>>Legacy Curriculum</option>
+                        </select>
+                    </form>
+
+                    <button class="btn-primary" onclick="prepareNewSection()" style="background: #2563eb; color: white; padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer;">
+                        + New Section
+                    </button>
                 </div>
-                <table>
+
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
                     <thead>
-                        <tr>
-                            <th>Grade</th>
-                            <th>Section Name</th>
-                            <th>Strand</th>
-                            <th>Class Adviser</th>
-                            <th style="width: 250px; text-align: center;">Actions</th>
+                        <tr style="border-bottom: 2px solid #e2e8f0; text-align: left; background: #f8fafc;">
+                            <th style="padding: 10px;">Grade</th>
+                            <th style="padding: 10px;">Section Name</th>
+                            <th style="padding: 10px;">Strand / Cluster</th>
+                            <th style="padding: 10px;">Class Adviser</th>
+                            <th style="padding: 10px;">Framework</th>
+                            <th style="width: 240px; text-align: center; padding: 10px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($sections_list as $row): ?>
-                        <tr>
-                            <td>Grade <?php echo $row['grade_level']; ?></td>
-                            <td><strong><?php echo htmlspecialchars($row['section_name']); ?></strong></td>
-                            <td><?php echo htmlspecialchars($row['strand_name']); ?></td>
-                            <td><?php echo $row['adviser_name'] ? htmlspecialchars($row['adviser_name']) : '<em>Not Assigned</em>'; ?></td>
-                            <td style="text-align: center;">
-                                <button class="btn-edit" onclick='openEditModal(<?php echo json_encode($row); ?>)'>Edit</button>
-                                
-                                <a href="manage_assignments.php?section_id=<?php echo $row['id']; ?>" class="btn-primary" 
-                                   style="text-decoration:none; padding: 6px 12px; font-size: 0.8rem; background-color: #6366f1;">
-                                   Subjects
-                                </a>
+                        <?php if (!empty($sections_list)): ?>
+                            <?php foreach ($sections_list as $row): ?>
+                            <tr style="border-bottom: 1px solid #f1f5f9;">
+                                <td style="padding: 10px;">Grade <?php echo $row['grade_level']; ?></td>
+                                <td style="padding: 10px;"><strong><?php echo htmlspecialchars($row['section_name']); ?></strong></td>
+                                <td style="padding: 10px;"><?php echo htmlspecialchars($row['strand_name']); ?></td>
+                                <td style="padding: 10px;"><?php echo $row['adviser_name'] ? htmlspecialchars($row['adviser_name']) : '<em style="color:#94a3b8;">Not Assigned</em>'; ?></td>
+                                <td style="padding: 10px;">
+                                    <span class="version-badge <?= $row['curriculum_version'] === 'Strengthened' ? 'ver-matatag' : 'ver-legacy' ?>">
+                                        <?= htmlspecialchars($row['curriculum_version']) ?>
+                                    </span>
+                                </td>
+                                <td style="text-align: center; padding: 10px;">
+                                    <button class="btn-action btn-edit" onclick='openEditModal(<?php echo json_encode($row); ?>)'>Edit</button>
+                                    
+                                    <a href="manage_assignments.php?filter_section=<?php echo $row['id']; ?>&academic_year=<?= urlencode($row['academic_year']) ?>" class="btn-action btn-subjects">
+                                        Subjects
+                                    </a>
 
-                                <button class="btn-delete" onclick="confirmDelete(<?php echo $row['id']; ?>, '<?php echo addslashes($row['section_name']); ?>')">Delete</button>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
+                                    <button class="btn-action btn-delete" onclick="confirmDelete(<?php echo $row['id']; ?>, '<?php echo addslashes($row['section_name']); ?>')">Delete</button>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <tr>
+                                <td colspan="6" style="text-align: center; padding: 30px; color: #94a3b8;">
+                                    No sections found for SY <?= htmlspecialchars($active_ay) ?> (<?= htmlspecialchars($active_version) ?> Framework).
+                                </td>
+                            </tr>
+                        <?php endif; ?>
                     </tbody>
                 </table>
             </div>
         </main>
     </div>
 
+    <!-- Section Create/Edit Modal -->
     <div id="sectionModal" class="modal-overlay hidden">
         <div class="modal-content">
-            <h3 id="modalTitle">New Section Details</h3>
+            <h3 id="modalTitle" style="margin-top:0; color:#1e293b;">New Section Details</h3>
             <form id="sectionForm" action="save_section.php" method="POST">
                 <input type="hidden" name="section_id" id="section_id">
                 
                 <div class="input-group">
+                    <label>Academic Year</label>
+                    <select name="academic_year" id="academic_year" required>
+                        <option value="2026-2027">SY 2026-2027</option>
+                        <option value="2025-2026">SY 2025-2026</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>Curriculum Framework</label>
+                    <select name="curriculum_version" id="curriculum_version" required>
+                        <option value="Strengthened">Strengthened MATATAG Curriculum</option>
+                        <option value="Legacy">Legacy Curriculum</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
                     <label>Section Name</label>
                     <input type="text" name="section_name" id="section_name" placeholder="e.g. 11-Newton" required>
                 </div>
-                <div class="input-group">
-                    <label>Grade Level</label>
-                    <select name="grade_level" id="grade_level">
-                        <option value="11">Grade 11</option>
-                        <option value="12">Grade 12</option>
-                    </select>
+
+                <div style="display: flex; gap: 10px;">
+                    <div class="input-group" style="flex:1;">
+                        <label>Grade Level</label>
+                        <select name="grade_level" id="grade_level">
+                            <option value="11">Grade 11</option>
+                            <option value="12">Grade 12</option>
+                        </select>
+                    </div>
+                    <div class="input-group" style="flex:1;">
+                        <label>Strand / Cluster</label>
+                        <select name="strand_id" id="strand_id">
+                            <option value="">General / Multi-Cluster</option>
+                            <?php foreach ($strands as $s): ?>
+                                <option value="<?php echo $s['id']; ?>"><?php echo htmlspecialchars($s['strand_name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
                 </div>
+
                 <div class="input-group">
-                    <label>Strand</label>
-                    <select name="strand_id" id="strand_id" required>
-                        <?php foreach ($strands as $s): ?>
-                            <option value="<?php echo $s['id']; ?>"><?php echo htmlspecialchars($s['strand_name']); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label>Adviser</label>
+                    <label>Class Adviser</label>
                     <select name="adviser_id" id="adviser_id">
-                        <option value="">-- No Adviser Yet --</option>
+                        <option value="">-- No Adviser Assigned --</option>
                         <?php foreach ($advisers as $a): ?>
                             <option value="<?php echo $a['id']; ?>"><?php echo htmlspecialchars($a['full_name']); ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
+
                 <div class="modal-actions">
-                    <button type="button" onclick="closeModal('sectionModal')">Cancel</button>
-                    <button type="submit" class="btn-primary">Save Section</button>
+                    <button type="button" onclick="closeModal('sectionModal')" style="background:#f1f5f9; color:#64748b;">Cancel</button>
+                    <button type="submit" style="background:#2563eb; color:white;">Save Section</button>
                 </div>
             </form>
         </div>
@@ -272,9 +278,7 @@ $sections_list = $conn->query("
         function toggleSidebar() { 
             const sidebar = document.getElementById('sidebar');
             const burger = document.getElementById('mobileBurger');
-            
             sidebar.classList.toggle('active'); 
-            
             if (sidebar.classList.contains('active')) {
                 burger.classList.add('hidden');
             } else {
@@ -287,6 +291,8 @@ $sections_list = $conn->query("
             document.getElementById('sectionForm').action = "save_section.php";
             document.getElementById('modalTitle').innerText = "New Section Details";
             document.getElementById('section_id').value = "";
+            document.getElementById('academic_year').value = "<?= $active_ay ?>";
+            document.getElementById('curriculum_version').value = "<?= $active_version ?>";
             openModal('sectionModal');
         }
 
@@ -295,17 +301,19 @@ $sections_list = $conn->query("
             document.getElementById('modalTitle').innerText = "Edit Section: " + data.section_name;
             
             document.getElementById('section_id').value = data.id;
+            document.getElementById('academic_year').value = data.academic_year || "2026-2027";
+            document.getElementById('curriculum_version').value = data.curriculum_version || "Strengthened";
             document.getElementById('section_name').value = data.section_name;
             document.getElementById('grade_level').value = data.grade_level;
-            document.getElementById('strand_id').value = data.strand_id;
+            document.getElementById('strand_id').value = data.strand_id || "";
             document.getElementById('adviser_id').value = data.adviser_id || "";
             
             openModal('sectionModal');
         }
 
         function confirmDelete(id, name) {
-            if (confirm("Are you sure you want to delete section '" + name + "'? Students in this section will be unassigned.")) {
-                window.location.href = "delete_section.php?id=" + id;
+            if (confirm("Are you sure you want to delete section '" + name + "'? Associated student enrollments will be affected.")) {
+                window.location.href = "delete_section.php?id=" + id + "&academic_year=<?= urlencode($active_ay) ?>&curriculum_version=<?= urlencode($active_version) ?>";
             }
         }
     </script>
