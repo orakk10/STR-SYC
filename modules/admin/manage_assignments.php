@@ -25,47 +25,131 @@ function getComponentWeights(?string $type): array {
     }
 }
 
+function getSubjectTermsForAssignment(string $semester): array {
+    switch ($semester) {
+        case '1st Term':
+        case '1st Sem':
+            return ['1st', '1st Sem'];
+        case '2nd Term':
+        case '2nd Sem':
+            return ['2nd', '2nd Sem'];
+        case '3rd Term':
+            return ['3rd', '3rd Term'];
+        case 'Full Year':
+            return ['Full Year'];
+        default:
+            return [];
+    }
+}
+
 // Active Academic Year & Term selections
-$active_ay = $_GET['academic_year'] ?? '2026-2027';
-$active_sem = $_GET['semester'] ?? '1st Term';
+$allowed_years = ['2026-2027', '2025-2026'];
+$allowed_semesters = ['1st Term', '2nd Term', '3rd Term', '1st Sem', '2nd Sem', 'Full Year', 'All'];
+$requested_ay = $_SERVER['REQUEST_METHOD'] === 'POST'
+    ? ($_POST['academic_year'] ?? '')
+    : ($_GET['academic_year'] ?? '');
+$requested_semester = $_SERVER['REQUEST_METHOD'] === 'POST'
+    ? ($_POST['semester'] ?? '')
+    : ($_GET['semester'] ?? '');
+$active_ay = in_array($requested_ay, $allowed_years, true) ? $requested_ay : '2026-2027';
+$active_sem = in_array($requested_semester, $allowed_semesters, true) ? $requested_semester : '1st Term';
 
 // 2. Handle Form Submission (Save or Update Assignment)
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['save_assignment'])) {
     $faculty_id    = $_POST['faculty_id'] ?? null;
     $section_id    = $_POST['section_id'] ?? null;
     $subject_id    = $_POST['subject_id'] ?? null;
-    $academic_year = $_POST['academic_year'] ?? '2026-2027';
-    $semester      = $_POST['semester'] ?? '1st Term';
+    $subject_strand_id = isset($_POST['subject_strand_id']) && $_POST['subject_strand_id'] !== ''
+        ? (int) $_POST['subject_strand_id']
+        : null;
+    $academic_year = $active_ay;
+    $semester      = $active_sem;
 
     if (!$faculty_id || !$section_id || !$subject_id) {
         $message = "missing_fields";
     } else {
-        try {
-            // Check if subject is already assigned to this section for the given AY and Term
-            $check_stmt = $conn->prepare("
-                SELECT id, faculty_id 
-                FROM subject_assignments 
-                WHERE section_id = ? AND subject_id = ? AND academic_year = ? AND (semester = ? OR semester = 'Full Year')
-            ");
-            $check_stmt->execute([$section_id, $subject_id, $academic_year, $semester]);
-            $existing = $check_stmt->fetch(PDO::FETCH_ASSOC);
+        $section_stmt = $conn->prepare('
+            SELECT id, grade_level, strand_id, academic_year, curriculum_version
+            FROM sections
+            WHERE id = ?
+            LIMIT 1
+        ');
+        $section_stmt->execute([(int) $section_id]);
+        $target_section = $section_stmt->fetch(PDO::FETCH_ASSOC);
 
-            if ($existing) {
-                // Update assigned faculty
-                $update_stmt = $conn->prepare("UPDATE subject_assignments SET faculty_id = ? WHERE id = ?");
-                $update_stmt->execute([$faculty_id, $existing['id']]);
-                $message = "updated";
-            } else {
-                // Create new teaching load entry
-                $insert_stmt = $conn->prepare("
-                    INSERT INTO subject_assignments (faculty_id, section_id, subject_id, academic_year, semester) 
-                    VALUES (?, ?, ?, ?, ?)
-                ");
-                $insert_stmt->execute([$faculty_id, $section_id, $subject_id, $academic_year, $semester]);
-                $message = "success";
+        if (!$target_section || $target_section['academic_year'] !== $academic_year) {
+            $message = "invalid_section";
+        } elseif ($subject_strand_id !== null && $subject_strand_id <= 0) {
+            $message = "invalid_strand";
+        } else {
+            if ($subject_strand_id !== null) {
+                $strand_stmt = $conn->prepare('SELECT id FROM strands WHERE id = ? LIMIT 1');
+                $strand_stmt->execute([$subject_strand_id]);
+                if (!$strand_stmt->fetchColumn()) {
+                    $message = "invalid_strand";
+                }
             }
-        } catch (PDOException $e) {
-            $message = "error";
+
+            $subject_terms = getSubjectTermsForAssignment($semester);
+            $subject_sql = '
+                SELECT id
+                FROM subjects
+                WHERE id = ?
+                    AND curriculum_version = ?
+                    AND (grade_level = ? OR grade_level IS NULL)
+                    AND ' . ($subject_strand_id === null
+                        ? 'strand_id IS NULL'
+                        : '(strand_id = ? OR strand_id IS NULL)') . '
+                    AND `term` IN (' . implode(', ', array_fill(0, count($subject_terms), '?')) . ')';
+            $subject_params = [
+                (int) $subject_id,
+                $target_section['curriculum_version'],
+                (int) $target_section['grade_level'],
+            ];
+            if ($subject_strand_id !== null) {
+                $subject_params[] = $subject_strand_id;
+            }
+            if ($message !== "invalid_strand") {
+                if (!$subject_terms) {
+                    $message = "invalid_term";
+                } else {
+                    $subject_params = array_merge($subject_params, $subject_terms);
+                    $subject_stmt = $conn->prepare($subject_sql);
+                    $subject_stmt->execute($subject_params);
+
+                    if (!$subject_stmt->fetchColumn()) {
+                        $message = "invalid_subject";
+                    } else {
+                        try {
+                            // Check if the subject is already assigned to this section for the selected term.
+                            $check_stmt = $conn->prepare("
+                                SELECT id, faculty_id
+                                FROM subject_assignments
+                                WHERE section_id = ? AND subject_id = ? AND academic_year = ? AND (semester = ? OR semester = 'Full Year')
+                            ");
+                            $check_stmt->execute([$section_id, $subject_id, $academic_year, $semester]);
+                            $existing = $check_stmt->fetch(PDO::FETCH_ASSOC);
+
+                            if ($existing) {
+                                // Update assigned faculty
+                                $update_stmt = $conn->prepare("UPDATE subject_assignments SET faculty_id = ? WHERE id = ?");
+                                $update_stmt->execute([$faculty_id, $existing['id']]);
+                                $message = "updated";
+                            } else {
+                                // Create new teaching load entry
+                                $insert_stmt = $conn->prepare("
+                                    INSERT INTO subject_assignments (faculty_id, section_id, subject_id, academic_year, semester)
+                                    VALUES (?, ?, ?, ?, ?)
+                                ");
+                                $insert_stmt->execute([$faculty_id, $section_id, $subject_id, $academic_year, $semester]);
+                                $message = "success";
+                            }
+                        } catch (PDOException $e) {
+                            $message = "error";
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -75,17 +159,52 @@ if (isset($_GET['delete'])) {
     $id = intval($_GET['delete']);
     $del_stmt = $conn->prepare("DELETE FROM subject_assignments WHERE id = ?");
     $del_stmt->execute([$id]);
-    header("Location: manage_assignments.php?academic_year=" . urlencode($active_ay) . "&semester=" . urlencode($active_sem) . "&msg=deleted");
+    header("Location: manage_assignments.php?academic_year=" . urlencode($active_ay) . "&semester=" . urlencode($active_sem) . "&filter_section=" . urlencode($_GET['filter_section'] ?? '') . "&msg=deleted");
     exit();
 }
 
 // 4. Fetch Dropdown Selection Options
 $faculty_members = $conn->query("SELECT id, full_name FROM users WHERE role IN ('faculty', 'adviser') ORDER BY full_name ASC")->fetchAll(PDO::FETCH_ASSOC);
-$sections        = $conn->query("SELECT id, section_name, grade_level FROM sections ORDER BY grade_level ASC, section_name ASC")->fetchAll(PDO::FETCH_ASSOC);
-$subjects        = $conn->query("SELECT id, subject_name, subject_code, type, curriculum_version FROM subjects ORDER BY curriculum_version DESC, subject_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+$strands = $conn->query("SELECT id, strand_name, strand_code FROM strands ORDER BY strand_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+$filter_sections_stmt = $conn->prepare("
+    SELECT id, section_name, grade_level, strand_id, academic_year, curriculum_version
+    FROM sections
+    WHERE academic_year = ?
+    ORDER BY grade_level ASC, section_name ASC
+");
+$filter_sections_stmt->execute([$active_ay]);
+$filter_sections = $filter_sections_stmt->fetchAll(PDO::FETCH_ASSOC);
+$subjects = $conn->query("
+    SELECT id, subject_name, subject_code, type, curriculum_version, strand_id, grade_level, `term`
+    FROM subjects
+    ORDER BY curriculum_version DESC, subject_name ASC
+")->fetchAll(PDO::FETCH_ASSOC);
 
 // 5. Fetch Active Assignments Table Data
-$filter_section = $_GET['filter_section'] ?? null;
+$requested_section = $_SERVER['REQUEST_METHOD'] === 'POST'
+    ? ($_POST['section_id'] ?? '')
+    : ($_GET['filter_section'] ?? '');
+$filter_section = null;
+foreach ($filter_sections as $section) {
+    if ((string) $section['id'] === (string) $requested_section) {
+        $filter_section = (int) $section['id'];
+        break;
+    }
+}
+$assignment_section_id = $_SERVER['REQUEST_METHOD'] === 'POST'
+    ? (int) ($_POST['section_id'] ?? 0)
+    : (int) ($_GET['filter_section'] ?? 0);
+$assignment_strand_id = 0;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && array_key_exists('subject_strand_id', $_POST)) {
+    $assignment_strand_id = $_POST['subject_strand_id'] === '' ? 0 : (int) $_POST['subject_strand_id'];
+} elseif ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    foreach ($filter_sections as $section) {
+        if ((int) $section['id'] === $assignment_section_id) {
+            $assignment_strand_id = (int) ($section['strand_id'] ?? 0);
+            break;
+        }
+    }
+}
 $query_str = "
     SELECT sa.id, sa.academic_year, sa.semester,
            u.full_name AS teacher_name,
@@ -108,6 +227,8 @@ if ($active_sem && $active_sem !== 'All') {
 if ($filter_section) {
     $query_str .= " AND sa.section_id = :sec_id";
     $params['sec_id'] = intval($filter_section);
+} else {
+    $query_str .= " AND 1 = 0";
 }
 
 $query_str .= " ORDER BY sec.grade_level ASC, sec.section_name ASC, sub.subject_name ASC";
@@ -235,6 +356,10 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <?php if($message == "success"): ?><div class="status-msg msg-success">✔ Subject assignment saved!</div><?php endif; ?>
                     <?php if($message == "updated"): ?><div class="status-msg msg-warning">⚡ Subject reassigned to new teacher!</div><?php endif; ?>
                     <?php if($message == "missing_fields"): ?><div class="status-msg msg-warning">⚠ Please select all required fields.</div><?php endif; ?>
+                    <?php if($message == "invalid_section"): ?><div class="status-msg msg-warning">⚠ Select a section that belongs to the chosen academic year.</div><?php endif; ?>
+                    <?php if($message == "invalid_strand"): ?><div class="status-msg msg-warning">⚠ Select a valid subject strand.</div><?php endif; ?>
+                    <?php if($message == "invalid_term"): ?><div class="status-msg msg-warning">⚠ Select a valid academic term.</div><?php endif; ?>
+                    <?php if($message == "invalid_subject"): ?><div class="status-msg msg-warning">⚠ Select a subject that matches the target section's curriculum, grade, strand, and term.</div><?php endif; ?>
                     <?php if(isset($_GET['msg']) && $_GET['msg'] == 'deleted'): ?><div class="status-msg msg-success">✔ Assignment removed successfully.</div><?php endif; ?>
 
                     <form method="POST">
@@ -248,7 +373,7 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                         <div class="form-group">
                             <label>Academic Term / Semester</label>
-                            <select name="semester" required>
+                            <select name="semester" id="assignmentSemester" required>
                                 <optgroup label="Strengthened MATATAG (3-Term)">
                                     <option value="1st Term" <?= $active_sem === '1st Term' ? 'selected' : '' ?>>1st Term</option>
                                     <option value="2nd Term" <?= $active_sem === '2nd Term' ? 'selected' : '' ?>>2nd Term</option>
@@ -274,24 +399,60 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                         <div class="form-group">
                             <label>Target Section</label>
-                            <select name="section_id" required>
+                            <select name="section_id" id="targetSection" required>
                                 <option value="">Select Section</option>
-                                <?php foreach ($sections as $sec): ?>
-                                    <option value="<?= $sec['id']; ?>">Grade <?= htmlspecialchars($sec['grade_level'] . ' - ' . $sec['section_name']); ?></option>
+                                <?php foreach ($filter_sections as $sec): ?>
+                                    <option
+                                        value="<?= $sec['id']; ?>"
+                                        data-grade="<?= htmlspecialchars((string) $sec['grade_level']); ?>"
+                                        data-strand-id="<?= htmlspecialchars((string) ($sec['strand_id'] ?? '')); ?>"
+                                        data-curriculum="<?= htmlspecialchars($sec['curriculum_version']); ?>"
+                                        <?= $assignment_section_id === (int) $sec['id'] ? 'selected' : ''; ?>
+                                    >
+                                        Grade <?= htmlspecialchars($sec['grade_level'] . ' - ' . $sec['section_name']); ?>
+                                    </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
 
                         <div class="form-group">
+                            <label>Subject Strand</label>
+                            <select name="subject_strand_id" id="subjectStrand">
+                                <option value="" <?= $assignment_strand_id === 0 ? 'selected' : ''; ?>>General / Shared Subjects</option>
+                                <?php foreach ($strands as $strand): ?>
+                                    <option
+                                        value="<?= $strand['id']; ?>"
+                                        <?= $assignment_strand_id === (int) $strand['id'] ? 'selected' : ''; ?>
+                                    >
+                                        <?= htmlspecialchars($strand['strand_name'] . ' (' . $strand['strand_code'] . ')'); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <small style="display: block; margin-top: 5px; color: #64748b;">
+                                Choose a strand to include its subjects plus shared subjects. This does not change the section’s configured strand.
+                            </small>
+                        </div>
+
+                        <div class="form-group">
                             <label>Subject</label>
-                            <select name="subject_id" required>
+                            <select name="subject_id" id="targetSubject" required>
                                 <option value="">Select Subject</option>
                                 <?php foreach ($subjects as $sub): ?>
-                                    <option value="<?= $sub['id']; ?>">
+                                    <option
+                                        value="<?= $sub['id']; ?>"
+                                        data-grade="<?= htmlspecialchars((string) ($sub['grade_level'] ?? '')); ?>"
+                                        data-strand-id="<?= htmlspecialchars((string) ($sub['strand_id'] ?? '')); ?>"
+                                        data-curriculum="<?= htmlspecialchars($sub['curriculum_version']); ?>"
+                                        data-term="<?= htmlspecialchars($sub['term']); ?>"
+                                        hidden
+                                    >
                                         <?= htmlspecialchars($sub['subject_name'] . ' (' . $sub['subject_code'] . ')') ?> [<?= $sub['curriculum_version'] ?>]
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                            <small id="subjectFilterHint" style="display: block; margin-top: 5px; color: #64748b;">
+                                Select a target section, subject strand, and term to see applicable subjects.
+                            </small>
                         </div>
 
                         <button type="submit" name="save_assignment" class="btn-primary">Assign Teaching Load</button>
@@ -319,8 +480,8 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             </select>
 
                             <select name="filter_section" onchange="this.form.submit()" style="padding: 6px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.82rem;">
-                                <option value="">All Sections</option>
-                                <?php foreach ($sections as $sec): ?>
+                                <option value="">Select a section</option>
+                                <?php foreach ($filter_sections as $sec): ?>
                                     <option value="<?= $sec['id']; ?>" <?= ($filter_section == $sec['id']) ? 'selected' : ''; ?>>
                                         Grade <?= htmlspecialchars($sec['grade_level'] . ' - ' . $sec['section_name']); ?>
                                     </option>
@@ -361,14 +522,18 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                             <?= htmlspecialchars($row['semester']) ?>
                                         </td>
                                         <td style="padding: 10px; text-align: center;">
-                                            <a href="?delete=<?= $row['id']; ?>&academic_year=<?= urlencode($active_ay) ?>&semester=<?= urlencode($active_sem) ?>" class="delete-btn" onclick="return confirm('Remove this subject assignment?')">Remove</a>
+                                            <a href="?delete=<?= $row['id']; ?>&academic_year=<?= urlencode($active_ay) ?>&semester=<?= urlencode($active_sem) ?>&filter_section=<?= urlencode((string) $filter_section) ?>" class="delete-btn" onclick="return confirm('Remove this subject assignment?')">Remove</a>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php else: ?>
                                 <tr>
                                     <td colspan="5" style="text-align: center; padding: 25px; color: #94a3b8;">
-                                        No faculty loads assigned for SY <?= htmlspecialchars($active_ay) ?> (<?= htmlspecialchars($active_sem) ?>).
+                                        <?php if (!$filter_section): ?>
+                                            Select a section to view its faculty assignments for SY <?= htmlspecialchars($active_ay) ?>.
+                                        <?php else: ?>
+                                            No faculty loads assigned to this section for SY <?= htmlspecialchars($active_ay) ?> (<?= htmlspecialchars($active_sem) ?>).
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                             <?php endif; ?>
@@ -380,6 +545,75 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 
     <script>
+        const sectionSelect = document.getElementById('targetSection');
+        const strandSelect = document.getElementById('subjectStrand');
+        const semesterSelect = document.getElementById('assignmentSemester');
+        const subjectSelect = document.getElementById('targetSubject');
+        const subjectFilterHint = document.getElementById('subjectFilterHint');
+
+        function getSubjectTermsForAssignment(semester) {
+            if (semester === '1st Term' || semester === '1st Sem') return ['1st', '1st Sem'];
+            if (semester === '2nd Term' || semester === '2nd Sem') return ['2nd', '2nd Sem'];
+            if (semester === '3rd Term') return ['3rd', '3rd Term'];
+            if (semester === 'Full Year') return ['Full Year'];
+            return [];
+        }
+
+        function filterSubjectsForSection() {
+            const sectionOption = sectionSelect.options[sectionSelect.selectedIndex];
+            const hasSection = Boolean(sectionSelect.value);
+            const grade = sectionOption?.dataset.grade || '';
+            const strandId = strandSelect.value;
+            const curriculum = (sectionOption?.dataset.curriculum || '').toLowerCase();
+            const allowedTerms = getSubjectTermsForAssignment(semesterSelect.value);
+            let visibleSubjectCount = 0;
+            let selectedSubjectStillValid = false;
+
+            Array.from(subjectSelect.options).forEach(option => {
+                if (!option.value) {
+                    option.hidden = false;
+                    return;
+                }
+
+                const subjectGrade = option.dataset.grade || '';
+                const subjectStrandId = option.dataset.strandId || '';
+                const subjectCurriculum = (option.dataset.curriculum || '').toLowerCase();
+                const subjectTerm = option.dataset.term || '';
+                const matches = hasSection
+                    && subjectCurriculum === curriculum
+                    && (!subjectGrade || subjectGrade === grade)
+                    && (subjectStrandId === strandId || subjectStrandId === '')
+                    && allowedTerms.includes(subjectTerm);
+
+                option.hidden = !matches;
+                if (matches) {
+                    visibleSubjectCount++;
+                    if (option.value === subjectSelect.value) {
+                        selectedSubjectStillValid = true;
+                    }
+                }
+            });
+
+            if (!selectedSubjectStillValid) {
+                subjectSelect.value = '';
+            }
+            subjectSelect.disabled = !hasSection || visibleSubjectCount === 0;
+            subjectFilterHint.textContent = !hasSection
+                ? 'Select a target section to see applicable subjects.'
+                : visibleSubjectCount === 0
+                    ? 'No subjects match this section, selected strand, and academic term.'
+                    : `${visibleSubjectCount} applicable subject${visibleSubjectCount === 1 ? '' : 's'} available.`;
+        }
+
+        sectionSelect.addEventListener('change', function () {
+            const sectionOption = sectionSelect.options[sectionSelect.selectedIndex];
+            strandSelect.value = sectionOption?.dataset.strandId || '';
+            filterSubjectsForSection();
+        });
+        strandSelect.addEventListener('change', filterSubjectsForSection);
+        semesterSelect.addEventListener('change', filterSubjectsForSection);
+        filterSubjectsForSection();
+
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const burger = document.getElementById('mobileBurger');

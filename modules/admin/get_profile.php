@@ -16,7 +16,28 @@ if ($id <= 0) {
     exit();
 }
 
-$stmt = $conn->prepare('SELECT u.*, sp.birthdate, sp.gender, sp.address, sp.contact_no, sp.guardian_name, sp.guardian_contact, sp.specialization FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id WHERE u.id = ? LIMIT 1');
+$stmt = $conn->prepare("
+    SELECT
+        u.*,
+        sp.birthdate,
+        sp.gender,
+        sp.address,
+        sp.contact_no,
+        sp.guardian_name,
+        sp.guardian_contact,
+        sp.specialization,
+        (
+            SELECT s.id
+            FROM sections s
+            WHERE s.adviser_id = u.id
+            ORDER BY s.academic_year DESC, s.id DESC
+            LIMIT 1
+        ) AS advisory_section_id
+    FROM users u
+    LEFT JOIN student_profiles sp ON sp.user_id = u.id
+    WHERE u.id = ?
+    LIMIT 1
+");
 $stmt->execute([$id]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 

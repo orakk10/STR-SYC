@@ -9,13 +9,31 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit();
 }
 
-// 1. Pull Sections for the filter dropdown
-$sections_dropdown = $conn->query("SELECT id, section_name FROM sections ORDER BY section_name ASC")->fetchAll();
+// 1. Pull section and strand options for the filter dropdowns
+$sections_dropdown = $conn->query("
+    SELECT id, section_name, grade_level, academic_year, curriculum_version
+    FROM sections
+    ORDER BY academic_year DESC, grade_level ASC, section_name ASC
+")->fetchAll();
+$strands_dropdown = $conn->query("SELECT id, strand_name FROM strands ORDER BY strand_name ASC")->fetchAll();
 
 // 2. Fetch all student records for dynamic client-side filtering
-$query_str = "SELECT u.id, u.full_name, s.id AS section_id, s.section_name, s.grade_level 
+$query_str = "SELECT
+                  u.id,
+                  u.full_name,
+                  s.id AS section_id,
+                  s.section_name,
+                  s.grade_level,
+                  s.academic_year,
+                  s.curriculum_version,
+                  s.strand_id,
+                  CASE
+                      WHEN s.id IS NULL THEN ''
+                      ELSE COALESCE(st.strand_name, 'General / Multi-Cluster')
+                  END AS strand_name
               FROM users u 
               LEFT JOIN sections s ON u.section_id = s.id 
+              LEFT JOIN strands st ON s.strand_id = st.id
               WHERE u.role = 'student'
               ORDER BY s.grade_level ASC, s.section_name ASC, u.full_name ASC";
 
@@ -236,22 +254,37 @@ $students = $conn->query($query_str)->fetchAll();
 
         th:nth-child(1),
         td:nth-child(1) {
-            width: 40%;
+            width: 24%;
         }
 
         th:nth-child(2),
         td:nth-child(2) {
-            width: 15%;
+            width: 8%;
         }
 
         th:nth-child(3),
         td:nth-child(3) {
-            width: 25%;
+            width: 18%;
         }
 
         th:nth-child(4),
         td:nth-child(4) {
-            width: 20%;
+            width: 16%;
+        }
+
+        th:nth-child(5),
+        td:nth-child(5) {
+            width: 14%;
+        }
+
+        th:nth-child(6),
+        td:nth-child(6) {
+            width: 10%;
+        }
+
+        th:nth-child(7),
+        td:nth-child(7) {
+            width: 10%;
             text-align: right;
         }
 
@@ -388,7 +421,7 @@ $students = $conn->query($query_str)->fetchAll();
             }
 
             table {
-                min-width: 680px;
+                min-width: 1000px;
             }
 
             #sidebar.active .sidebar-close {
@@ -490,8 +523,36 @@ $students = $conn->query($query_str)->fetchAll();
                             <option value="">All Sections</option>
                             <?php foreach ($sections_dropdown as $s): ?>
                                 <option value="<?php echo $s['id']; ?>">
-                                    <?php echo htmlspecialchars($s['section_name']); ?>
+                                    <?php echo htmlspecialchars($s['academic_year'] . ' - G' . $s['grade_level'] . ' ' . $s['section_name'] . ' (' . $s['curriculum_version'] . ')'); ?>
                                 </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="strandFilterRealTime">Strand</label>
+                        <select id="strandFilterRealTime" onchange="filterMasterList()">
+                            <option value="">All Strands</option>
+                            <option value="general">General / Multi-Cluster</option>
+                            <?php foreach ($strands_dropdown as $strand): ?>
+                                <option value="<?php echo $strand['id']; ?>"><?php echo htmlspecialchars($strand['strand_name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="academicYearFilterRealTime">Academic Year</label>
+                        <select id="academicYearFilterRealTime" onchange="filterMasterList()">
+                            <option value="">All Academic Years</option>
+                            <?php foreach (array_unique(array_column($sections_dropdown, 'academic_year')) as $year): ?>
+                                <option value="<?php echo htmlspecialchars($year); ?>"><?php echo htmlspecialchars($year); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="curriculumFilterRealTime">Curriculum</label>
+                        <select id="curriculumFilterRealTime" onchange="filterMasterList()">
+                            <option value="">All Curricula</option>
+                            <?php foreach (array_unique(array_column($sections_dropdown, 'curriculum_version')) as $version): ?>
+                                <option value="<?php echo htmlspecialchars($version); ?>"><?php echo htmlspecialchars($version); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -503,7 +564,10 @@ $students = $conn->query($query_str)->fetchAll();
                             <tr>
                                 <th>Student Name</th>
                                 <th>Grade</th>
+                                <th>Strand</th>
                                 <th>Section Name</th>
+                                <th>Academic Year</th>
+                                <th>Curriculum</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
@@ -514,21 +578,27 @@ $students = $conn->query($query_str)->fetchAll();
                                     data-student-id="<?php echo htmlspecialchars($row['id']); ?>"
                                     data-name="<?php echo htmlspecialchars(strtolower($row['full_name'])); ?>"
                                     data-grade="<?php echo htmlspecialchars($row['grade_level']); ?>"
-                                    data-section="<?php echo htmlspecialchars($row['section_id']); ?>">
+                                    data-section="<?php echo htmlspecialchars($row['section_id']); ?>"
+                                    data-strand="<?php echo htmlspecialchars($row['section_id'] ? ($row['strand_id'] ?? 'general') : ''); ?>"
+                                    data-academic-year="<?php echo htmlspecialchars($row['academic_year'] ?? ''); ?>"
+                                    data-curriculum="<?php echo htmlspecialchars($row['curriculum_version'] ?? ''); ?>">
                                     <td><span class="student-name"><?php echo htmlspecialchars($row['full_name']); ?></span></td>
                                     <td><span class="grade-badge"><?php echo htmlspecialchars($row['grade_level'] ?? ''); ?></span></td>
+                                    <td><?php echo htmlspecialchars($row['strand_name'] ?? ''); ?></td>
                                     <td><?php echo htmlspecialchars($row['section_name'] ?: 'Unassigned'); ?></td>
+                                    <td><?php echo htmlspecialchars($row['academic_year'] ?? ''); ?></td>
+                                    <td><?php echo htmlspecialchars($row['curriculum_version'] ?? ''); ?></td>
                                     <td>
                                         <a href="print_report_card.php?student_id=<?php echo $row['id']; ?>" class="btn-print" target="_blank">Print SF9</a>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
                             <?php else: ?>
-                                <tr id="initialEmptyRow"><td colspan="4" class="empty-state">No student records found in database.</td></tr>
+                                <tr id="initialEmptyRow"><td colspan="7" class="empty-state">No student records found in database.</td></tr>
                         <?php endif; ?>
                             
                             <tr id="noResultsFallbackRow" style="display: none;">
-                                <td colspan="4" class="empty-state">
+                                <td colspan="7" class="empty-state">
                                     No student records found matching your criteria.
                                 </td>
                             </tr>
@@ -580,6 +650,9 @@ $students = $conn->query($query_str)->fetchAll();
             const searchVal = document.getElementById('searchRealTime').value.toLowerCase().trim();
             const gradeVal = document.getElementById('gradeFilterRealTime').value;
             const sectionVal = document.getElementById('sectionFilterRealTime').value;
+            const strandVal = document.getElementById('strandFilterRealTime').value;
+            const academicYearVal = document.getElementById('academicYearFilterRealTime').value;
+            const curriculumVal = document.getElementById('curriculumFilterRealTime').value;
 
             const rows = document.querySelectorAll('.student-row');
             const fallbackRow = document.getElementById('noResultsFallbackRow');
@@ -589,13 +662,19 @@ $students = $conn->query($query_str)->fetchAll();
                 const studentName = row.getAttribute('data-name');
                 const studentGrade = row.getAttribute('data-grade');
                 const studentSection = row.getAttribute('data-section');
+                const studentStrand = row.getAttribute('data-strand');
+                const studentAcademicYear = row.getAttribute('data-academic-year');
+                const studentCurriculum = row.getAttribute('data-curriculum');
 
                 // Evaluate parameters concurrently
                 const matchSearch = studentName.includes(searchVal);
                 const matchGrade = (gradeVal === "") || (studentGrade === gradeVal);
                 const matchSection = (sectionVal === "") || (studentSection === sectionVal);
+                const matchStrand = (strandVal === "") || (studentStrand === strandVal);
+                const matchAcademicYear = (academicYearVal === "") || (studentAcademicYear === academicYearVal);
+                const matchCurriculum = (curriculumVal === "") || (studentCurriculum === curriculumVal);
 
-                if (matchSearch && matchGrade && matchSection) {
+                if (matchSearch && matchGrade && matchSection && matchStrand && matchAcademicYear && matchCurriculum) {
                     row.style.display = "";
                     visibleCounts++;
                 } else {
@@ -613,7 +692,7 @@ $students = $conn->query($query_str)->fetchAll();
             const formData = new FormData();
             formData.append('import_file', input.files[0]);
 
-            if(!confirm('Import students? The CSV must include LRN, student name, grade level, strand, and section. Birthdate, gender, address, contact, guardian, and specialization details are optional; blank details will be imported as N/A. Rows with missing required fields or a mismatched grade or strand will be skipped.')) {
+            if(!confirm('Import students? The CSV must include LRN, student name, academic year, curriculum version, grade level, strand, and section. Birthdate, gender, address, contact, guardian, and specialization details are optional; blank details will be imported as N/A. Rows with missing required fields or a mismatched section, year, curriculum, grade, or strand will be skipped.')) {
                 input.value = '';
                 return;
             }

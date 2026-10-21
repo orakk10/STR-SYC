@@ -42,13 +42,29 @@ $normalizeHeader = static function ($value) {
     $value = preg_replace('/^\xEF\xBB\xBF/', '', (string) $value);
     return strtolower(trim(preg_replace('/[^a-z0-9]+/i', ' ', $value)));
 };
+$normalizeValue = static function ($value) {
+    return trim(preg_replace('/\s+/', ' ', strtolower(preg_replace('/[^a-z0-9]+/i', ' ', (string) $value))));
+};
+$normalizeCurriculum = static function ($value) use ($normalizeValue) {
+    $normalized = $normalizeValue($value);
+    if (strpos($normalized, 'strengthened') !== false || strpos($normalized, 'matatag') !== false) {
+        return 'strengthened';
+    }
+    if (strpos($normalized, 'legacy') !== false) {
+        return 'legacy';
+    }
+    return $normalized;
+};
 
 $headerAliases = [
     'lrn' => ['lrn', 'username', 'student id'],
     'full_name' => ['full name', 'student name', 'name'],
     'section' => ['section', 'section name', 'section id'],
+    'academic_year' => ['academic year', 'school year', 'sy'],
+    'curriculum_version' => ['curriculum', 'curriculum version', 'curriculum framework', 'framework'],
     'grade_level' => ['grade', 'grade level'],
     'strand' => ['strand', 'strand name'],
+    'strand_code' => ['strand code', 'strand abbreviation'],
     'birthdate' => ['birthdate', 'birth date', 'date of birth', 'dob'],
     'gender' => ['gender', 'sex'],
     'address' => ['address'],
@@ -69,13 +85,14 @@ foreach ($headers as $index => $header) {
 
 if (
     !isset($columnIndexes['lrn'], $columnIndexes['full_name'], $columnIndexes['section'])
+    || !isset($columnIndexes['academic_year'], $columnIndexes['curriculum_version'])
     || !isset($columnIndexes['grade_level'], $columnIndexes['strand'])
 ) {
     fclose($handle);
     http_response_code(400);
     echo json_encode([
         'status' => 'error',
-        'message' => 'The CSV must include LRN, student name, grade level, strand, and section columns. Profile detail columns are optional.'
+        'message' => 'The CSV must include LRN, student name, academic year, curriculum version, grade level, strand, and section columns. Profile detail columns are optional.'
     ]);
     exit();
 }
@@ -130,22 +147,13 @@ try {
             specialization = VALUES(specialization)
     ");
 
-    $sectionLookupStmt = $conn->prepare("
-        SELECT sec.id, sec.grade_level, st.strand_name
+    $sectionsStmt = $conn->query("
+        SELECT sec.id, sec.section_name, sec.grade_level, sec.academic_year,
+               sec.curriculum_version, st.strand_name, st.strand_code
         FROM sections sec
         LEFT JOIN strands st ON st.id = sec.strand_id
-        WHERE sec.id = :id
-        LIMIT 1
     ");
-
-    $sectionNameLookupStmt = $conn->prepare("
-        SELECT sec.id, sec.grade_level, st.strand_name
-        FROM sections sec
-        LEFT JOIN strands st ON st.id = sec.strand_id
-        WHERE LOWER(TRIM(sec.section_name)) = LOWER(TRIM(:section_name))
-        OR LOWER(TRIM(CONCAT(CAST(sec.grade_level AS CHAR), ' - ', sec.section_name))) = LOWER(TRIM(:grade_section_name))
-        OR LOWER(TRIM(CONCAT(st.strand_name, ' - ', sec.section_name))) = LOWER(TRIM(:strand_section_name))
-    ");
+    $availableSections = $sectionsStmt->fetchAll(PDO::FETCH_ASSOC);
 
     $importedCount = 0;
     $skippedInvalidSections = 0;
@@ -168,7 +176,23 @@ try {
         $sectionValue = $getValue('section');
         $gradeValue = $getValue('grade_level');
         $strandValue = $getValue('strand');
-        if ($lrn === '' || $name === '' || $gradeValue === '' || $strandValue === '') {
+        $academicYearValue = $getValue('academic_year');
+        $curriculumVersionValue = $getValue('curriculum_version');
+        $isUnassignedSection = $sectionValue === ''
+            || strcasecmp($sectionValue, 'unassigned') === 0;
+        if ($lrn === '' || $name === '') {
+            $skippedMissingRequired++;
+            continue;
+        }
+        if (
+            !$isUnassignedSection
+            && (
+                $gradeValue === ''
+                || $strandValue === ''
+                || $academicYearValue === ''
+                || $curriculumVersionValue === ''
+            )
+        ) {
             $skippedMissingRequired++;
             continue;
         }
@@ -221,32 +245,55 @@ try {
             return $value === '' ? 'N/A' : $value;
         };
 
-        if (strcasecmp($sectionValue, 'unassigned') === 0) {
-            $sectionValue = '';
-        }
         $sectionId = null;
 
-        if ($sectionValue !== '') {
-            if (ctype_digit($sectionValue)) {
-                $sectionLookupStmt->execute([':id' => (int) $sectionValue]);
-                $sections = $sectionLookupStmt->fetchAll(PDO::FETCH_ASSOC);
-            } else {
-                $sectionNameLookupStmt->execute([
-                    ':section_name' => $sectionValue,
-                    ':grade_section_name' => $sectionValue,
-                    ':strand_section_name' => $sectionValue
-                ]);
-                $sections = $sectionNameLookupStmt->fetchAll(PDO::FETCH_ASSOC);
-            }
-
-            $matchingSections = array_filter($sections, static function ($section) use ($gradeValue, $strandValue) {
+        if (!$isUnassignedSection) {
+            $sectionValueWithoutYear = preg_replace(
+                '/^(sy\s*)?\d{4}\s*[-\/]\s*\d{4}\s*[-:|]\s*/i',
+                '',
+                trim($sectionValue)
+            );
+            $normalizedSectionValue = $normalizeValue($sectionValueWithoutYear);
+            $matchingSections = array_filter($availableSections, static function ($section) use (
+                $gradeValue,
+                $strandValue,
+                $academicYearValue,
+                $curriculumVersionValue,
+                $normalizedSectionValue,
+                $normalizeValue,
+                $normalizeCurriculum
+            ) {
                 $sectionGrade = preg_replace('/^grade\s*/i', '', trim((string) $section['grade_level']));
-                $expectedGrade = preg_replace('/^grade\s*/i', '', $gradeValue);
-                $gradeMatches = $gradeValue === '' || strcasecmp($sectionGrade, $expectedGrade) === 0;
-                $strandMatches = $strandValue === ''
-                    || strcasecmp(trim((string) $section['strand_name']), $strandValue) === 0;
+                $sectionGrade = preg_replace('/^g\s*/i', '', $sectionGrade);
+                $expectedGrade = preg_replace('/^(grade|g)\s*/i', '', trim($gradeValue));
+                $gradeMatches = $expectedGrade === '' || $normalizeValue($sectionGrade) === $normalizeValue($expectedGrade);
+                $sectionStrand = trim((string) ($section['strand_name'] ?? ''));
+                if ($sectionStrand === '') {
+                    $sectionStrand = 'General / Multi-Cluster';
+                }
+                $strandMatches = $normalizeValue($strandValue) === $normalizeValue($sectionStrand)
+                    || ($section['strand_code'] !== null && $normalizeValue($strandValue) === $normalizeValue($section['strand_code']))
+                    || ($normalizeValue($strandValue) === 'general' && $normalizeValue($sectionStrand) === 'general multi cluster');
+                $yearMatches = $normalizeValue($section['academic_year']) === $normalizeValue(preg_replace('/^(sy|school year)\s*/i', '', $academicYearValue));
+                $curriculumMatches = $normalizeCurriculum($section['curriculum_version'])
+                    === $normalizeCurriculum($curriculumVersionValue);
 
-                return $gradeMatches && $strandMatches;
+                $sectionName = $normalizeValue($section['section_name']);
+                $sectionLabels = [
+                    $sectionName,
+                    $normalizeValue($sectionGrade . ' ' . $section['section_name']),
+                    $normalizeValue('Grade ' . $sectionGrade . ' ' . $section['section_name']),
+                    $normalizeValue('G' . $sectionGrade . ' ' . $section['section_name']),
+                    $normalizeValue($sectionStrand . ' ' . $section['section_name']),
+                ];
+                if (!empty($section['strand_code'])) {
+                    $sectionLabels[] = $normalizeValue($section['strand_code'] . ' ' . $section['section_name']);
+                }
+                $sectionNameMatches = ctype_digit($normalizedSectionValue)
+                    ? (int) $section['id'] === (int) $normalizedSectionValue
+                    : in_array($normalizedSectionValue, $sectionLabels, true);
+
+                return $sectionNameMatches && $gradeMatches && $strandMatches && $yearMatches && $curriculumMatches;
             });
 
             if (count($matchingSections) === 1) {
@@ -256,10 +303,6 @@ try {
                 $skippedInvalidSections++;
                 continue;
             }
-        } elseif ($gradeValue !== '' || $strandValue !== '') {
-            // Grade and strand cannot be validated without an assigned section.
-            $skippedInvalidSections++;
-            continue;
         }
 
         $stmt->execute([
@@ -300,10 +343,10 @@ try {
 
     $message = "Successfully imported/updated {$importedCount} student records!";
     if ($skippedInvalidSections > 0) {
-        $message .= " Skipped {$skippedInvalidSections} rows with invalid or mismatched section, grade level, or strand.";
+        $message .= " Skipped {$skippedInvalidSections} rows with invalid or mismatched section, academic year, curriculum, grade level, or strand.";
     }
     if ($skippedMissingRequired > 0) {
-        $message .= " Skipped {$skippedMissingRequired} rows missing LRN, student name, grade level, or strand.";
+        $message .= " Skipped {$skippedMissingRequired} rows missing LRN or student name, or missing section details for an assigned section.";
     }
     if ($defaultedOptionalDetails > 0) {
         $message .= " Imported {$defaultedOptionalDetails} rows with missing or invalid optional details using N/A defaults.";

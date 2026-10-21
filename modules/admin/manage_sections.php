@@ -128,13 +128,30 @@ $sections_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <p style="margin: 4px 0 0 0; color: #64748b; font-size: 0.85rem;">Organize class sections, strands, and advisers per Academic Year.</p>
             </header>
 
-            <?php if (isset($_GET['msg'])): ?>
+            <?php
+                $success_messages = [
+                    'assigned' => 'Section assignments updated successfully.',
+                    'saved' => 'Section created successfully.',
+                    'updated' => 'Section updated successfully.',
+                    'deleted' => 'Section deleted successfully.',
+                ];
+                $error_messages = [
+                    'invalid_request' => 'Invalid request. Please submit the section form again.',
+                    'missing_required_fields' => 'Please complete all required section fields.',
+                    'missing_data' => 'The section details are invalid. Please review and try again.',
+                    'invalid_id' => 'The section could not be found.',
+                ];
+                $success_message = $success_messages[$_GET['msg'] ?? ''] ?? null;
+                $error_message = $error_messages[$_GET['error'] ?? ''] ?? null;
+            ?>
+            <?php if ($success_message !== null): ?>
                 <div style="background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; padding: 10px; border-radius: 8px; margin: 15px 0 0 0; font-size: 0.85rem; font-weight: 600;">
-                    <?php 
-                        if($_GET['msg'] == 'assigned') echo "✔ Section assignments updated successfully.";
-                        if($_GET['msg'] == 'saved') echo "✔ Section created successfully.";
-                        if($_GET['msg'] == 'deleted') echo "✔ Section deleted successfully.";
-                    ?>
+                    ✔ <?= htmlspecialchars($success_message) ?>
+                </div>
+            <?php endif; ?>
+            <?php if ($error_message !== null): ?>
+                <div role="alert" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; padding: 10px; border-radius: 8px; margin: 15px 0 0 0; font-size: 0.85rem; font-weight: 600;">
+                    <?= htmlspecialchars($error_message) ?>
                 </div>
             <?php endif; ?>
 

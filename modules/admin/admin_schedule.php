@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../config/database.php';
 $conn = getDBConnection();
 
 // 1. Access Control
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'admin') {
     header("Location: ../../manifest/login.php");
     exit();
 }
@@ -13,47 +13,110 @@ $message = "";
 
 // 2. Handle Form Submission with Room & Section Conflict Check
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_schedule'])) {
-    $section_id = $_POST['section_id'] ?? null;
-    $subject_id = $_POST['subject_id'] ?? null;
-    $day        = $_POST['day_of_week'] ?? null;
-    $start      = $_POST['start_time'] ?? null;
-    $end        = $_POST['end_time'] ?? null;
-    $room       = isset($_POST['room_number']) ? trim($_POST['room_number']) : null;
+    $section_id = filter_input(INPUT_POST, 'section_id', FILTER_VALIDATE_INT) ?: 0;
+    $subject_id = filter_input(INPUT_POST, 'subject_id', FILTER_VALIDATE_INT) ?: 0;
+    $day        = $_POST['day_of_week'] ?? '';
+    $start      = $_POST['start_time'] ?? '';
+    $end        = $_POST['end_time'] ?? '';
+    $room       = trim($_POST['room_number'] ?? '');
+    $valid_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    if (!$section_id || !$subject_id || !$day || !$start || !$end || !$room) {
+    if (!$section_id || !$subject_id || $room === '') {
         $message = "missing_fields";
+    } elseif (!in_array($day, $valid_days, true)) {
+        $message = "invalid_day";
+    } elseif (
+        !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $start)
+        || !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $end)
+        || $end <= $start
+    ) {
+        $message = "invalid_time";
+    } elseif (strlen($room) > 50) {
+        $message = "invalid_room";
     } else {
-        $check_query = "SELECT section_id, room_number FROM schedules 
-                        WHERE day_of_week = :day
-                        AND (section_id = :section_id OR room_number = :room)
-                        AND (start_time < :end_time AND end_time > :start_time)";
-
-        $check_stmt = $conn->prepare($check_query);
-        $check_stmt->execute([
-            ':day' => $day,
+        $assignment_stmt = $conn->prepare("
+            SELECT sa.faculty_id
+            FROM sections sec
+            INNER JOIN subject_assignments sa
+                ON sa.section_id = sec.id
+                AND sa.academic_year = sec.academic_year
+            WHERE sec.id = :section_id AND sa.subject_id = :subject_id
+            LIMIT 1
+        ");
+        $assignment_stmt->execute([
             ':section_id' => $section_id,
-            ':room' => $room,
-            ':end_time' => $end,
-            ':start_time' => $start,
+            ':subject_id' => $subject_id,
         ]);
-        $conflict = $check_stmt->fetch(PDO::FETCH_ASSOC);
+        $faculty_id = $assignment_stmt->fetchColumn();
 
-        if ($conflict) {
-            $message = ($conflict['room_number'] === $room && (int)$conflict['section_id'] != (int)$section_id)
-                ? "room_conflict"
-                : "section_conflict";
+        if ($faculty_id === false) {
+            $message = "invalid_subject";
         } else {
-            $insert_query = "INSERT INTO schedules (section_id, subject_id, day_of_week, start_time, end_time, room_number) VALUES (:section_id, :subject_id, :day, :start_time, :end_time, :room)";
-            $stmt = $conn->prepare($insert_query);
-            $result = $stmt->execute([
-                ':section_id' => $section_id,
-                ':subject_id' => $subject_id,
+            $check_query = "
+                SELECT sch.section_id, sch.room_number,
+                    EXISTS (
+                        SELECT 1
+                        FROM sections scheduled_section
+                        INNER JOIN subject_assignments scheduled_assignment
+                            ON scheduled_assignment.section_id = scheduled_section.id
+                            AND scheduled_assignment.academic_year = scheduled_section.academic_year
+                        WHERE scheduled_section.id = sch.section_id
+                            AND scheduled_assignment.subject_id = sch.subject_id
+                            AND scheduled_assignment.faculty_id = :faculty_id_select
+                    ) AS faculty_conflict
+                FROM schedules sch
+                WHERE sch.day_of_week = :day
+                    AND (
+                        sch.section_id = :section_id
+                        OR sch.room_number = :room
+                        OR EXISTS (
+                            SELECT 1
+                            FROM sections scheduled_section
+                            INNER JOIN subject_assignments scheduled_assignment
+                                ON scheduled_assignment.section_id = scheduled_section.id
+                                AND scheduled_assignment.academic_year = scheduled_section.academic_year
+                            WHERE scheduled_section.id = sch.section_id
+                                AND scheduled_assignment.subject_id = sch.subject_id
+                                AND scheduled_assignment.faculty_id = :faculty_id_match
+                        )
+                    )
+                    AND sch.start_time < :end_time AND sch.end_time > :start_time
+                LIMIT 1
+            ";
+
+            $check_stmt = $conn->prepare($check_query);
+            $check_stmt->execute([
                 ':day' => $day,
-                ':start_time' => $start,
-                ':end_time' => $end,
+                ':section_id' => $section_id,
                 ':room' => $room,
+                ':end_time' => $end,
+                ':start_time' => $start,
+                ':faculty_id_select' => $faculty_id,
+                ':faculty_id_match' => $faculty_id,
             ]);
-            $message = $result ? 'success' : 'error';
+            $conflict = $check_stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($conflict) {
+                if ((int) $conflict['section_id'] === $section_id) {
+                    $message = "section_conflict";
+                } elseif (strcasecmp($conflict['room_number'], $room) === 0) {
+                    $message = "room_conflict";
+                } elseif ((int) $conflict['faculty_conflict'] === 1) {
+                    $message = "faculty_conflict";
+                }
+            } else {
+                $insert_query = "INSERT INTO schedules (section_id, subject_id, day_of_week, start_time, end_time, room_number) VALUES (:section_id, :subject_id, :day, :start_time, :end_time, :room)";
+                $stmt = $conn->prepare($insert_query);
+                $stmt->execute([
+                    ':section_id' => $section_id,
+                    ':subject_id' => $subject_id,
+                    ':day' => $day,
+                    ':start_time' => $start,
+                    ':end_time' => $end,
+                    ':room' => $room,
+                ]);
+                $message = 'success';
+            }
         }
     }
 }
@@ -85,7 +148,7 @@ if ($filter_section > 0) {
     $sched_query .= " WHERE sch.section_id = :section_id";
     $params[':section_id'] = $filter_section;
 }
-$sched_query .= " ORDER BY FIELD(day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'), start_time ASC";
+$sched_query .= " ORDER BY FIELD(day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), start_time ASC";
 $sched_stmt = $conn->prepare($sched_query);
 $sched_stmt->execute($params);
 $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -377,6 +440,12 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
                     <?php if($message == "success"): ?><div class="status-msg msg-success">✔ Schedule saved successfully!</div><?php endif; ?>
                     <?php if($message == "section_conflict"): ?><div class="status-msg msg-conflict">⚠ Section is already busy during this time!</div><?php endif; ?>
                     <?php if($message == "room_conflict"): ?><div class="status-msg msg-conflict">⚠ Room is already occupied by another class!</div><?php endif; ?>
+                    <?php if($message == "faculty_conflict"): ?><div class="status-msg msg-conflict">⚠ The assigned teacher already has a class during this time!</div><?php endif; ?>
+                    <?php if($message == "invalid_subject"): ?><div class="status-msg msg-conflict">⚠ Assign this subject to the selected section for its academic year before scheduling it.</div><?php endif; ?>
+                    <?php if($message == "invalid_time"): ?><div class="status-msg msg-conflict">⚠ End time must be later than start time.</div><?php endif; ?>
+                    <?php if($message == "invalid_day"): ?><div class="status-msg msg-conflict">⚠ Select a valid day for the schedule.</div><?php endif; ?>
+                    <?php if($message == "invalid_room"): ?><div class="status-msg msg-conflict">⚠ Room number must be 50 characters or fewer.</div><?php endif; ?>
+                    <?php if($message == "missing_fields"): ?><div class="status-msg msg-conflict">⚠ Complete all required schedule fields.</div><?php endif; ?>
                     
                     <form method="POST">
                         <div class="form-group">
@@ -402,6 +471,7 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <option value="Wednesday">Wednesday</option>
                                 <option value="Thursday">Thursday</option>
                                 <option value="Friday">Friday</option>
+                                <option value="Saturday">Saturday</option>
                             </select>
                         </div>
                         <div style="display:flex; gap:10px;">
@@ -461,12 +531,19 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
                 subjectSelect.disabled = true;
                 return;
             }
+            subjectSelect.innerHTML = '<option value="">Loading subjects...</option>';
+            subjectSelect.disabled = true;
             fetch(`get_filtered_subjects.php?section_id=${sectionId}`)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Could not load the assigned subjects.');
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     subjectSelect.innerHTML = '<option value="">Select Subject</option>';
                     if (data.length === 0) {
-                        subjectSelect.innerHTML = '<option value="">No subjects found</option>';
+                        subjectSelect.innerHTML = '<option value="">No assigned subjects for this section/year</option>';
                         subjectSelect.disabled = true;
                     } else {
                         data.forEach(sub => {
@@ -477,6 +554,11 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
                         });
                         subjectSelect.disabled = false;
                     }
+                })
+                .catch(error => {
+                    subjectSelect.innerHTML = '<option value="">Unable to load subjects</option>';
+                    subjectSelect.disabled = true;
+                    console.error(error);
                 });
         }
     </script>

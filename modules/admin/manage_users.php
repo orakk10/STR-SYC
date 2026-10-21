@@ -15,10 +15,27 @@ if (isset($_GET['filter']) && $_GET['filter'] === 'reset_requests') {
     $where_clause = "WHERE u.reset_requested = 1";
 }
 
-$query = "SELECT u.*, s.section_name, s.grade_level, st.strand_name 
+$query = "SELECT
+              u.*,
+              s.section_name,
+              s.grade_level,
+              COALESCE(st.strand_name, 'General / Multi-Cluster') AS strand_name,
+              advisory_section.id AS advisory_section_id,
+              advisory_section.section_name AS advisory_section_name,
+              advisory_section.grade_level AS advisory_grade_level,
+              COALESCE(advisory_strand.strand_name, 'General / Multi-Cluster') AS advisory_strand_name
           FROM users u 
           LEFT JOIN sections s ON u.section_id = s.id 
           LEFT JOIN strands st ON s.strand_id = st.id
+          LEFT JOIN sections advisory_section
+              ON advisory_section.id = (
+                  SELECT assigned_section.id
+                  FROM sections assigned_section
+                  WHERE assigned_section.adviser_id = u.id
+                  ORDER BY assigned_section.academic_year DESC, assigned_section.id DESC
+                  LIMIT 1
+              )
+          LEFT JOIN strands advisory_strand ON advisory_section.strand_id = advisory_strand.id
           $where_clause
           ORDER BY u.reset_requested DESC, u.role DESC, u.full_name ASC";
 $users_list = $conn->query($query)->fetchAll();
@@ -261,8 +278,14 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
                             <td><?php echo htmlspecialchars($row['username']); ?></td>
                             <td><span class="role-badge <?php echo strtolower($row['role']); ?>"><?php echo ucfirst($row['role']); ?></span></td>
                             <td>
-                                <?php if($row['section_name']): ?>
-                                    G<?php echo $row['grade_level']; ?> - <?php echo htmlspecialchars($row['strand_name']); ?> (<?php echo htmlspecialchars($row['section_name']); ?>)
+                                <?php if (in_array(strtolower($row['role']), ['adviser', 'faculty'], true)): ?>
+                                    <?php if ($row['advisory_section_id']): ?>
+                                        Advisory: G<?php echo htmlspecialchars($row['advisory_grade_level']); ?> - <?php echo htmlspecialchars($row['advisory_strand_name']); ?> (<?php echo htmlspecialchars($row['advisory_section_name']); ?>)
+                                    <?php else: ?>
+                                        <span style="color: #94a3b8;">No advisory section</span>
+                                    <?php endif; ?>
+                                <?php elseif($row['section_name']): ?>
+                                    G<?php echo htmlspecialchars($row['grade_level']); ?> - <?php echo htmlspecialchars($row['strand_name']); ?> (<?php echo htmlspecialchars($row['section_name']); ?>)
                                 <?php else: ?>
                                     <span style="color: #94a3b8;">Unassigned</span>
                                 <?php endif; ?>
@@ -296,7 +319,7 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
                         </select>
                     </div>
                     <div class="full-width" id="addSectionGroup">
-                        <label>Initial Section Assignment</label>
+                        <label id="addSectionLabel">Initial Section Assignment</label>
                         <select name="section_id">
                             <option value="">-- No Section --</option>
                             <?php foreach ($sections_dropdown as $sec): ?>
@@ -321,7 +344,7 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
                 <input type="hidden" name="user_id" id="prof_user_id">
                 <div class="profile-grid">
                     <div class="full-width" id="editSectionGroup" style="background: #f1f5f9; padding: 10px; border-radius: 8px;">
-                        <label>Academic Placement (Transfer Section)</label>
+                        <label id="editSectionLabel">Academic Placement (Transfer Section)</label>
                         <select name="section_id" id="prof_section">
                             <option value="">Unassigned</option>
                             <?php foreach ($sections_dropdown as $sec): ?>
@@ -371,7 +394,13 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
 
         function toggleSectionField(roleId, targetId) {
             const role = document.getElementById(roleId).value;
-            document.getElementById(targetId).style.display = (role === 'admin' || role === 'faculty') ? 'none' : 'block';
+            document.getElementById(targetId).style.display = role === 'admin' ? 'none' : 'block';
+            const sectionLabel = document.getElementById('addSectionLabel');
+            if (sectionLabel) {
+                sectionLabel.innerText = ['faculty', 'adviser'].includes(role)
+                    ? 'Initial Advisory Section Assignment'
+                    : 'Initial Student Section Assignment';
+            }
             
             const addSpec = document.getElementById('addSpecGroup');
             if(addSpec) {
@@ -400,8 +429,14 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
                     document.getElementById('prof_user_id').value = userId;
                     document.getElementById('prof_name_title').innerText = "Edit: " + data.full_name;
 
-                    document.getElementById('prof_section').value = data.section_id || "";
-                    document.getElementById('editSectionGroup').style.display = (data.role === 'admin' || data.role === 'faculty') ? 'none' : 'block';
+                    const isTeacher = ['faculty', 'adviser'].includes(data.role);
+                    document.getElementById('prof_section').value = isTeacher
+                        ? (data.advisory_section_id || "")
+                        : (data.section_id || "");
+                    document.getElementById('editSectionGroup').style.display = data.role === 'admin' ? 'none' : 'block';
+                    document.getElementById('editSectionLabel').innerText = isTeacher
+                        ? 'Advisory Section Assignment'
+                        : 'Academic Placement (Transfer Section)';
 
                     const specGroup = document.getElementById('specGroup');
                     if (specGroup) {

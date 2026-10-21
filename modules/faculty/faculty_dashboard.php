@@ -11,8 +11,8 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['adviser', 'fa
     exit();
 }
 
-$user_id   = $_SESSION['user_id'];
-$user_role = $_SESSION['role'];
+$user_id   = (int) $_SESSION['user_id'];
+$user_role = strtolower($_SESSION['role']);
 $is_adviser_or_admin = in_array($user_role, ['adviser', 'admin']);
 $success_msg = "";
 
@@ -50,14 +50,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['post_announcement']))
     }
 }
 
-// 2. Fetch Advisory Section (if role is Adviser)
+// 2. Fetch the section assigned to this teacher as an adviser.
 $section_data = null;
-if ($user_role === 'adviser') {
+if (in_array($user_role, ['adviser', 'faculty'], true)) {
     $section_query = $pdo->prepare("
-        SELECT s.id, s.section_name, s.grade_level, st.strand_name 
+        SELECT
+            s.id,
+            s.section_name,
+            s.grade_level,
+            COALESCE(st.strand_name, 'General / Multi-Cluster') AS strand_name
         FROM sections s
-        JOIN strands st ON s.strand_id = st.id
+        LEFT JOIN strands st ON s.strand_id = st.id
         WHERE s.adviser_id = :adviser_id
+        ORDER BY s.academic_year DESC, s.id DESC
         LIMIT 1
     ");
     $section_query->execute(['adviser_id' => $user_id]);

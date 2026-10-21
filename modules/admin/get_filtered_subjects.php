@@ -3,7 +3,9 @@ session_start();
 require_once __DIR__ . '/../../config/database.php';
 $conn = getDBConnection();
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+header('Content-Type: application/json');
+
+if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'admin') {
     http_response_code(403);
     echo json_encode([]);
     exit();
@@ -15,10 +17,18 @@ if ($section_id <= 0) {
     exit();
 }
 
-$stmt = $conn->prepare('SELECT s.id, s.subject_name, s.subject_code FROM subjects s JOIN sections sec ON sec.strand_id = s.strand_id WHERE sec.id = ? ORDER BY s.subject_name ASC');
+$stmt = $conn->prepare("
+    SELECT DISTINCT sub.id, sub.subject_name, sub.subject_code
+    FROM sections sec
+    INNER JOIN subject_assignments sa
+        ON sa.section_id = sec.id
+        AND sa.academic_year = sec.academic_year
+    INNER JOIN subjects sub ON sub.id = sa.subject_id
+    WHERE sec.id = ?
+    ORDER BY sub.subject_name ASC
+");
 $stmt->execute([$section_id]);
 $subjects = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-header('Content-Type: application/json');
 echo json_encode($subjects);
 exit();

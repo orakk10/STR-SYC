@@ -16,23 +16,44 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $section_id = isset($_POST['section_id']) ? (int) $_POST['section_id'] : 0;
 $section_name = trim($_POST['section_name'] ?? '');
 $grade_level = isset($_POST['grade_level']) ? (int) $_POST['grade_level'] : 0;
-$strand_id = isset($_POST['strand_id']) ? (int) $_POST['strand_id'] : 0;
+$strand_id = isset($_POST['strand_id']) && $_POST['strand_id'] !== '' ? (int) $_POST['strand_id'] : null;
 $adviser_id = isset($_POST['adviser_id']) && $_POST['adviser_id'] !== '' ? (int) $_POST['adviser_id'] : null;
+$academic_year = trim($_POST['academic_year'] ?? '');
+$curriculum_version = trim($_POST['curriculum_version'] ?? '');
 
-if ($section_name === '' || $grade_level === 0 || $strand_id === 0) {
+if (
+    $section_name === ''
+    || !in_array($grade_level, [11, 12], true)
+    || !preg_match('/^\d{4}-\d{4}$/', $academic_year)
+    || !in_array($curriculum_version, ['Strengthened', 'Legacy'], true)
+    || ($strand_id !== null && $strand_id <= 0)
+    || ($adviser_id !== null && $adviser_id <= 0)
+) {
     header('Location: manage_sections.php?error=missing_required_fields');
     exit();
 }
 
 if ($section_id > 0) {
-    $stmt = $conn->prepare('UPDATE sections SET section_name = ?, grade_level = ?, strand_id = ?, adviser_id = ? WHERE id = ?');
-    $stmt->execute([$section_name, $grade_level, $strand_id, $adviser_id, $section_id]);
+    $stmt = $conn->prepare('
+        UPDATE sections
+        SET section_name = ?, grade_level = ?, strand_id = ?, adviser_id = ?, academic_year = ?, curriculum_version = ?
+        WHERE id = ?
+    ');
+    $stmt->execute([$section_name, $grade_level, $strand_id, $adviser_id, $academic_year, $curriculum_version, $section_id]);
     $msg = 'updated';
 } else {
-    $stmt = $conn->prepare('INSERT INTO sections (section_name, grade_level, strand_id, adviser_id) VALUES (?, ?, ?, ?)');
-    $stmt->execute([$section_name, $grade_level, $strand_id, $adviser_id]);
-    $msg = 'created';
+    $stmt = $conn->prepare('
+        INSERT INTO sections (section_name, grade_level, strand_id, adviser_id, academic_year, curriculum_version)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ');
+    $stmt->execute([$section_name, $grade_level, $strand_id, $adviser_id, $academic_year, $curriculum_version]);
+    $msg = 'saved';
 }
 
-header('Location: manage_sections.php?success=' . urlencode($msg));
+$query = http_build_query([
+    'academic_year' => $academic_year,
+    'curriculum_version' => $curriculum_version,
+    'msg' => $msg,
+]);
+header('Location: manage_sections.php?' . $query);
 exit();

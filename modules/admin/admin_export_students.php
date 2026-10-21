@@ -31,7 +31,9 @@ $students = [];
 
 if ($studentIds) {
     $placeholders = implode(',', array_fill(0, count($studentIds), '?'));
-    $query = "SELECT u.id, u.lrn, u.full_name, s.grade_level, s.section_name, st.strand_name,
+    $query = "SELECT u.id, u.lrn, u.full_name, s.grade_level, s.academic_year, s.curriculum_version, s.section_name,
+                     CASE WHEN s.id IS NULL THEN '' ELSE COALESCE(st.strand_name, 'General / Multi-Cluster') END AS strand_name,
+                     st.strand_code,
                      sp.birthdate, sp.gender, sp.address, sp.contact_no, sp.guardian_name,
                      sp.guardian_contact, sp.specialization
               FROM users u
@@ -52,7 +54,7 @@ header('Content-Disposition: attachment; filename="Master_Student_List.csv"');
 
 $output = fopen('php://output', 'w');
 fputcsv($output, [
-    'LRN', 'Student Name', 'Grade Level', 'Strand', 'Section Name',
+    'LRN', 'Student Name', 'Academic Year', 'Curriculum Version', 'Grade Level', 'Strand', 'Strand Code', 'Section Name',
     'Birthdate', 'Gender', 'Address', 'Contact No', 'Guardian Name',
     'Guardian Contact', 'Specialization'
 ]);
@@ -66,8 +68,11 @@ foreach ($studentIds as $studentId) {
     fputcsv($output, [
         $student['lrn'],
         $student['full_name'],
+        $student['academic_year'] ?? '',
+        $student['curriculum_version'] ?? '',
         $student['grade_level'] ?? '',
         $student['strand_name'] ?? '',
+        $student['strand_code'] ?? '',
         $student['section_name'] ?? 'Unassigned',
         $student['birthdate'] ?: 'N/A',
         $student['gender'] ?: 'N/A',

@@ -18,8 +18,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $section_id = !empty($_POST['section_id']) ? (int)$_POST['section_id'] : null;
     $raw_pass   = $_POST['password'] ?? 'strand1234';
 
-    // Faculty and Admin roles do not assign to a student section
-    if ($role === 'admin' || $role === 'faculty') {
+    if (!in_array($role, ['student', 'adviser', 'faculty', 'admin'], true)) {
+        header("Location: manage_users.php?msg=error_fields");
+        exit();
+    }
+
+    $is_teacher = in_array($role, ['adviser', 'faculty'], true);
+    if ($role === 'admin' || $is_teacher) {
         $section_id = null;
     }
 
@@ -58,6 +63,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
 
         $new_user_id = $conn->lastInsertId();
+
+        if ($is_teacher && !empty($_POST['section_id'])) {
+            $sectionStmt = $conn->prepare('UPDATE sections SET adviser_id = ? WHERE id = ?');
+            $sectionStmt->execute([$new_user_id, (int) $_POST['section_id']]);
+            if ($sectionStmt->rowCount() === 0) {
+                $existsStmt = $conn->prepare('SELECT id FROM sections WHERE id = ?');
+                $existsStmt->execute([(int) $_POST['section_id']]);
+                if (!$existsStmt->fetch()) {
+                    throw new PDOException('Selected advisory section does not exist.');
+                }
+            }
+        }
 
         // 3. Initialize Default Profile Entry
         $profileStmt = $conn->prepare("
