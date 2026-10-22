@@ -6,6 +6,8 @@ require_once __DIR__ . '/../config/constants.php';
 // Helper function to get role dashboard URL
 function getDashboardUrl($role) {
     switch ($role) {
+        case 'super_admin':
+            return "../modules/super admin/super_admin_dashboard.php";
         case 'admin':
             return "../modules/admin/admin_dashboard.php";
         case 'faculty':

@@ -10,7 +10,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 }
 
 // --- FETCH RESET REQUESTS WITH ERROR CHECKING ---
-$reset_count = (int) $conn->query("SELECT COUNT(*) FROM users WHERE reset_requested = 1")->fetchColumn();
+$reset_count = (int) $conn->query("SELECT COUNT(*) FROM users WHERE reset_requested = 1 AND role <> 'super_admin'")->fetchColumn();
 // ------------------------------------------------
 
 // 2. Pagination Logic
@@ -19,7 +19,7 @@ $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 if ($page < 1) $page = 1;
 $start = ($page - 1) * $limit;
 
-$total_results = (int) $conn->query("SELECT COUNT(*) FROM users")->fetchColumn();
+$total_results = (int) $conn->query("SELECT COUNT(*) FROM users WHERE role <> 'super_admin'")->fetchColumn();
 $total_pages = ceil($total_results / $limit);
 
 // 3. Fetch Data for Stat Cards
@@ -29,7 +29,7 @@ $total_advisers = (int) $conn->query("SELECT COUNT(*) FROM users WHERE role = 'a
 $total_sections = (int) $conn->query("SELECT COUNT(*) FROM sections")->fetchColumn();
 
 // 4. Fetch Paginated User List
-$users_list = $conn->query("SELECT id, username, full_name, role FROM users ORDER BY id DESC LIMIT $start, $limit");
+$users_list = $conn->query("SELECT id, username, full_name, role FROM users WHERE role <> 'super_admin' ORDER BY id DESC LIMIT $start, $limit");
 ?>
 
 <!DOCTYPE html>

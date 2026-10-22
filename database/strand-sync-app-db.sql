@@ -20,7 +20,8 @@ SET time_zone = "+00:00";
 --
 -- Database: `strand-sync-app-db`
 --
-
+CREATE DATABASE IF NOT EXISTS `strand-sync-app-db` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+USE `strand-sync-app-db`;
 -- --------------------------------------------------------
 
 --
@@ -662,7 +663,7 @@ CREATE TABLE `users` (
   `full_name` varchar(100) NOT NULL,
   `profile_image` varchar(255) DEFAULT NULL,
   `email` varchar(100) DEFAULT NULL,
-  `role` enum('admin','adviser','student','faculty','alumni') NOT NULL,
+  `role` enum('super_admin','admin','adviser','student','faculty','alumni') NOT NULL,
   `section_id` int(11) DEFAULT NULL,
   `reset_requested` tinyint(1) DEFAULT 0,
   `require_reset` tinyint(1) DEFAULT 0
@@ -673,6 +674,7 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `lrn`, `username`, `password`, `full_name`, `profile_image`, `email`, `role`, `section_id`, `reset_requested`, `require_reset`) VALUES
+(0, NULL, 'super_admin', '$2y$10$ZDnB/.cczTQZU7fqxmNRyOWo.mdcuof.liPBgDiQO4tD62XX/8yDe', 'Super System Administrator', NULL, 'superadmin@strandsync.edu.ph', 'super_admin', NULL, 0, 0),
 (1, NULL, 'admin_root', '$2y$10$ZDnB/.cczTQZU7fqxmNRyOWo.mdcuof.liPBgDiQO4tD62XX/8yDe', 'System Administrator', NULL, 'admin@strandsync.edu.ph', 'admin', NULL, 0, 0),
 (7, NULL, 'teacher.maria', '$2y$10$ZDnB/.cczTQZU7fqxmNRyOWo.mdcuof.liPBgDiQO4tD62XX/8yDe', 'Maria Santos', NULL, 'maria.santos@str-syc.edu.ph', 'faculty', NULL, 0, 0),
 (8, NULL, 'adviser.juan', '$2y$10$ZDnB/.cczTQZU7fqxmNRyOWo.mdcuof.liPBgDiQO4tD62XX/8yDe', 'Juan Dela Cruz', NULL, 'juan.delacruz@str-syc.edu.ph', 'adviser', NULL, 0, 0),

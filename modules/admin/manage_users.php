@@ -10,9 +10,9 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 
 $min_age_date = date('Y-m-d', strtotime('-16 years'));
 
-$where_clause = "WHERE 1=1"; 
+$where_clause = "WHERE u.role <> 'super_admin'";
 if (isset($_GET['filter']) && $_GET['filter'] === 'reset_requests') {
-    $where_clause = "WHERE u.reset_requested = 1";
+    $where_clause = "WHERE u.reset_requested = 1 AND u.role <> 'super_admin'";
 }
 
 $query = "SELECT
