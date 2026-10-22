@@ -1,29 +1,21 @@
 <?php
 session_start();
 
-// 1. Database Connection Setup (PDO or mysqli matching ecr-inputdata.php)
+// 1. Database Connection Setup (PDO)
 require_once __DIR__ . '/../../config/database.php';
+$conn = getDBConnection();
 
-if (!isset($conn) && isset($db)) {
-    $conn = $db;
-}
-
-// 2. Fetch Roster matching the query logic from ecr-inputdata.php
+// 2. Fetch Roster matching active students (PDO)
 $roster = [];
-if (isset($conn) && $conn instanceof mysqli) {
-    $roster_sql = "
-        SELECT u.id, u.full_name, COALESCE(NULLIF(u.lrn, ''), u.username) AS lrn 
-        FROM users u
-        WHERE u.role = 'student' OR u.section_id IS NOT NULL
-        ORDER BY u.full_name ASC
-    ";
-    $roster_res = $conn->query($roster_sql);
-    
-    if ($roster_res && $roster_res->num_rows > 0) {
-        while ($r = $roster_res->fetch_assoc()) {
-            $roster[] = $r;
-        }
-    }
+$roster_sql = "
+    SELECT u.id, u.full_name, COALESCE(NULLIF(u.lrn, ''), u.username) AS lrn 
+    FROM users u
+    WHERE u.role = 'student'
+    ORDER BY u.full_name ASC
+";
+$roster_stmt = $conn->query($roster_sql);
+if ($roster_stmt) {
+    $roster = $roster_stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // 3. Resolve Active Student ID
@@ -35,31 +27,25 @@ if (isset($_GET['student_id']) && intval($_GET['student_id']) > 0) {
     $student_id = 0;
 }
 
-// 4. Fetch Available Academic Years dynamically from subject_assignments & ecr_term_summaries
+// 4. Fetch Available Academic Years dynamically
 $available_years = [];
-if (isset($conn) && $conn instanceof mysqli) {
-    $sy_sql = "
-        SELECT DISTINCT academic_year FROM (
-            SELECT academic_year FROM subject_assignments WHERE academic_year IS NOT NULL AND academic_year != ''
-            UNION
-            SELECT academic_year FROM ecr_term_summaries WHERE academic_year IS NOT NULL AND academic_year != ''
-        ) AS combined_sy
-        ORDER BY academic_year DESC
-    ";
-    $res_sy = $conn->query($sy_sql);
-    if ($res_sy && $res_sy->num_rows > 0) {
-        while ($sy_row = $res_sy->fetch_assoc()) {
-            $available_years[] = $sy_row['academic_year'];
-        }
-    }
+$sy_sql = "
+    SELECT DISTINCT academic_year FROM (
+        SELECT academic_year FROM subject_assignments WHERE academic_year IS NOT NULL AND academic_year != ''
+        UNION
+        SELECT academic_year FROM sections WHERE academic_year IS NOT NULL AND academic_year != ''
+    ) AS combined_sy
+    ORDER BY academic_year DESC
+";
+$sy_stmt = $conn->query($sy_sql);
+if ($sy_stmt) {
+    $available_years = $sy_stmt->fetchAll(PDO::FETCH_COLUMN);
 }
 
-// Fallback current school year if no entries exist yet
+// Fallback school years if no entries exist yet
 if (empty($available_years)) {
-    $current_month = intval(date('n'));
-    $current_year = intval(date('Y'));
-    $start_year = ($current_month >= 6) ? $current_year : $current_year - 1;
-    $available_years[] = $start_year . '-' . ($start_year + 1);
+    $available_years[] = '2026-2027';
+    $available_years[] = '2025-2026';
 }
 
 // Resolve Active Academic Year
@@ -70,62 +56,55 @@ $selected_sy = isset($_GET['academic_year']) && in_array($_GET['academic_year'],
 $db_student = null;
 $core_subjects = [];
 $elective_subjects = [];
+$adviser_comments = [
+    'Term 1' => '',
+    'Term 2' => '',
+    'Term 3' => ''
+];
 
-if (isset($conn) && $conn instanceof mysqli && $student_id > 0) {
+if ($student_id > 0) {
     // A. Fetch Base Student Profile
     $stmt = $conn->prepare("
         SELECT 
             u.id AS user_id, u.full_name, COALESCE(NULLIF(u.lrn, ''), u.username) AS lrn, u.section_id AS current_section_id,
-            sp.birthdate, sp.gender,
-            sch.region, sch.division, sch.district, sch.school_name
+            sp.birthdate, sp.gender
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
-        LEFT JOIN schools sch ON u.school_id = sch.id
-        WHERE u.id = ?
+        WHERE u.id = :student_id
         LIMIT 1
     ");
+    $stmt->execute(['student_id' => $student_id]);
+    $db_student = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($stmt) {
-        $stmt->bind_param("i", $student_id);
-        $stmt->execute();
-        $db_student = $stmt->get_result()->fetch_assoc();
-        $stmt->close();
-    }
-
-    // B. Fetch Historical Section & Grade Level for Selected Academic Year
+    // B. Fetch Section, Grade Level & Adviser Name
     $historical_section = null;
+    
+    // Check historical summaries first
     $sec_stmt = $conn->prepare("
-        SELECT DISTINCT s.grade_level, s.section_name, st.strand_code, st.strand_name
+        SELECT DISTINCT s.grade_level, s.section_name, st.strand_code, st.strand_name, adv.full_name AS adviser_name
         FROM subject_assignments sa
         INNER JOIN ecr_term_summaries ets ON ets.assignment_id = sa.id
         INNER JOIN sections s ON sa.section_id = s.id
         LEFT JOIN strands st ON s.strand_id = st.id
-        WHERE ets.student_id = ? AND sa.academic_year = ?
+        LEFT JOIN users adv ON s.adviser_id = adv.id
+        WHERE ets.student_id = :student_id AND sa.academic_year = :sy
         LIMIT 1
     ");
+    $sec_stmt->execute(['student_id' => $student_id, 'sy' => $selected_sy]);
+    $historical_section = $sec_stmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($sec_stmt) {
-        $sec_stmt->bind_param("is", $student_id, $selected_sy);
-        $sec_stmt->execute();
-        $historical_section = $sec_stmt->get_result()->fetch_assoc();
-        $sec_stmt->close();
-    }
-
-    // Fallback to current section if historical record is missing
+    // Fallback to student's current assigned section if no historical grades exist yet
     if (!$historical_section && !empty($db_student['current_section_id'])) {
         $curr_sec_stmt = $conn->prepare("
-            SELECT s.grade_level, s.section_name, st.strand_code, st.strand_name
+            SELECT s.grade_level, s.section_name, st.strand_code, st.strand_name, adv.full_name AS adviser_name
             FROM sections s
             LEFT JOIN strands st ON s.strand_id = st.id
-            WHERE s.id = ?
+            LEFT JOIN users adv ON s.adviser_id = adv.id
+            WHERE s.id = :sec_id
             LIMIT 1
         ");
-        if ($curr_sec_stmt) {
-            $curr_sec_stmt->bind_param("i", $db_student['current_section_id']);
-            $curr_sec_stmt->execute();
-            $historical_section = $curr_sec_stmt->get_result()->fetch_assoc();
-            $curr_sec_stmt->close();
-        }
+        $curr_sec_stmt->execute(['sec_id' => $db_student['current_section_id']]);
+        $historical_section = $curr_sec_stmt->fetch(PDO::FETCH_ASSOC);
     }
 
     if ($historical_section) {
@@ -133,54 +112,67 @@ if (isset($conn) && $conn instanceof mysqli && $student_id > 0) {
         $db_student['section_name'] = $historical_section['section_name'];
         $db_student['strand_code']  = $historical_section['strand_code'];
         $db_student['strand_name']  = $historical_section['strand_name'];
+        $db_student['adviser_name']  = $historical_section['adviser_name'] ?? '';
     }
 
-    // C. Fetch Dynamic Grades Filtered by Active Student & Selected Academic Year
-    if (!empty($selected_sy)) {
-        $grades_query = "
-            SELECT 
-                sub.subject_name AS name,
-                sub.type AS subject_type,
-                COALESCE(sub.units, 3) AS units,
-                ets.term1_transmuted AS t1,
-                ets.term2_transmuted AS t2,
-                ets.term3_transmuted AS t3,
-                ets.final_grade,
-                ets.remarks
-            FROM subjects sub
-            LEFT JOIN subject_assignments sa ON sa.subject_id = sub.id
-            LEFT JOIN ecr_term_summaries ets ON (ets.assignment_id = sa.id AND ets.student_id = ?)
-            WHERE sa.academic_year = ? OR sa.academic_year IS NULL
-            ORDER BY sub.type ASC, sub.subject_name ASC
-        ";
+    // C. Fetch Dynamic Subjects and Transmuted Grades (Grouped to prevent duplicates)
+    $grades_query = "
+        SELECT 
+            sub.id AS subject_id,
+            sub.subject_name AS name,
+            sub.type AS subject_type,
+            COALESCE(sub.units, 3) AS units,
+            MAX(ets.term1_transmuted) AS t1,
+            MAX(ets.term2_transmuted) AS t2,
+            MAX(ets.term3_transmuted) AS t3,
+            MAX(ets.final_grade) AS final_grade,
+            MAX(ets.remarks) AS remarks
+        FROM users u
+        INNER JOIN subject_assignments sa ON sa.section_id = u.section_id
+        INNER JOIN subjects sub ON sa.subject_id = sub.id
+        LEFT JOIN ecr_term_summaries ets ON (ets.assignment_id = sa.id AND ets.student_id = u.id)
+        WHERE u.id = :student_id AND sa.academic_year = :sy
+        GROUP BY sub.id, sub.subject_name, sub.type, sub.units
+        ORDER BY sub.type ASC, sub.subject_name ASC
+    ";
 
-        $stmt_grades = $conn->prepare($grades_query);
-        if ($stmt_grades) {
-            $stmt_grades->bind_param("is", $student_id, $selected_sy);
-            $stmt_grades->execute();
-            $res_grades = $stmt_grades->get_result();
+    $stmt_grades = $conn->prepare($grades_query);
+    $stmt_grades->execute(['student_id' => $student_id, 'sy' => $selected_sy]);
+    $res_grades = $stmt_grades->fetchAll(PDO::FETCH_ASSOC);
 
-            while ($row = $res_grades->fetch_assoc()) {
-                $item = [
-                    'name'        => $row['name'],
-                    't1'          => $row['t1'] !== null ? round(floatval($row['t1'])) : null,
-                    't2'          => $row['t2'] !== null ? round(floatval($row['t2'])) : null,
-                    't3'          => $row['t3'] !== null ? round(floatval($row['t3'])) : null,
-                    'units'       => intval($row['units']),
-                    'final_grade' => $row['final_grade'] !== null ? round(floatval($row['final_grade'])) : null,
-                    'remarks'     => $row['remarks'] ?? '',
-                    'dis_t1'      => false,
-                    'dis_t2'      => false,
-                    'dis_t3'      => false
-                ];
+    foreach ($res_grades as $row) {
+        $item = [
+            'name'        => $row['name'],
+            't1'          => $row['t1'] !== null ? round(floatval($row['t1'])) : null,
+            't2'          => $row['t2'] !== null ? round(floatval($row['t2'])) : null,
+            't3'          => $row['t3'] !== null ? round(floatval($row['t3'])) : null,
+            'units'       => intval($row['units']),
+            'final_grade' => $row['final_grade'] !== null ? round(floatval($row['final_grade'])) : null,
+            'remarks'     => $row['remarks'] ?? '',
+            'dis_t1'      => false,
+            'dis_t2'      => false,
+            'dis_t3'      => false
+        ];
 
-                if (strtolower($row['subject_type']) === 'core') {
-                    $core_subjects[] = $item;
-                } else {
-                    $elective_subjects[] = $item;
-                }
-            }
-            $stmt_grades->close();
+        if (strtolower($row['subject_type']) === 'core') {
+            $core_subjects[] = $item;
+        } else {
+            $elective_subjects[] = $item;
+        }
+    }
+
+    // D. Fetch Dynamic Teacher's Comments / Remarks from Database
+    $stmt_remarks = $conn->prepare("
+        SELECT term, comment 
+        FROM sf9_adviser_remarks 
+        WHERE student_id = :student_id AND academic_year = :sy
+    ");
+    $stmt_remarks->execute(['student_id' => $student_id, 'sy' => $selected_sy]);
+    $remarks_rows = $stmt_remarks->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($remarks_rows as $row) {
+        if (array_key_exists($row['term'], $adviser_comments)) {
+            $adviser_comments[$row['term']] = $row['comment'];
         }
     }
 }
@@ -198,7 +190,7 @@ if (!empty($db_student['birthdate']) && $db_student['birthdate'] !== '0000-00-00
 }
 
 // Dynamic Track / Strand display
-$track_display = 'N/A';
+$track_display = 'Academic Track';
 if (!empty($db_student['strand_code']) || !empty($db_student['strand_name'])) {
     $track_display = 'Academic / ' . ($db_student['strand_code'] ?: $db_student['strand_name']);
 }
@@ -211,11 +203,13 @@ $student = [
     'grade'     => $db_student['grade_level'] ?? 'N/A',
     'section'   => $db_student['section_name'] ?? 'N/A',
     'track'     => $track_display,
-    'region'    => $db_student['region'] ?? 'REGION III',
-    'division'  => $db_student['division'] ?? 'SCHOOLS DIVISION OF TARLAC',
-    'district'  => $db_student['district'] ?? 'District I',
-    'school'    => $db_student['school_name'] ?? 'ABC NATIONAL HIGH SCHOOL'
+    'region'    => 'REGION III',
+    'division'  => 'SCHOOLS DIVISION OF TARLAC',
+    'district'  => 'District I',
+    'school'    => 'SAN JUAN DE VALDEZ INTEGRATED SCHOOL'
 ];
+
+$adviser_display = !empty($db_student['adviser_name']) ? strtoupper($db_student['adviser_name']) : 'JUAN DELA CRUZ';
 
 // Helper Function for Final Grade & Remark
 function calcFinalGrade($subj) {
@@ -242,7 +236,7 @@ $valid_gen = array_filter([$gen_t1, $gen_t2, $gen_t3], fn($v) => $v !== '');
 $final_gen_avg = !empty($valid_gen) ? round(array_sum($valid_gen) / count($valid_gen)) : '';
 $total_units = array_sum(array_column($all_subjs, 'units'));
 
-// Attendance Structure (Placeholders for missing database table)
+// Attendance Structure
 $school_days  = ['Jun' => 20, 'Jul' => 20, 'Aug' => 20, 'Sep' => 20, 'Oct' => 20, 'Nov' => 20, 'Dec' => 20, 'Jan' => 18, 'Feb' => 18, 'Mar' => 20, 'Apr' => 5];
 $days_present = ['Jun' => 20, 'Jul' => 19, 'Aug' => 20, 'Sep' => 18, 'Oct' => 20, 'Nov' => 20, 'Dec' => 19, 'Jan' => 18, 'Feb' => 18, 'Mar' => 20, 'Apr' => 5];
 $days_absent  = [];
@@ -261,7 +255,7 @@ $tot_abs  = array_sum($days_absent);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SF9 Learner's Performance Report Card</title>
+    <title>SF9 Learner's Performance Report Card | San Juan De Valdez IS</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <link rel="stylesheet" href="../../assets/css/style.css">
     <style>
@@ -460,7 +454,6 @@ $tot_abs  = array_sum($days_absent);
 
         .header-signatures .sig-col {
             width: 42%;
-            border-top: 1px solid #000000;
             padding-top: 2px;
         }
 
@@ -771,8 +764,14 @@ $tot_abs  = array_sum($days_absent);
                         </div>
 
                         <div class="header-signatures">
-                            <div class="sig-col">School Head</div>
-                            <div class="sig-col">Adviser</div>
+                            <div class="sig-col">
+                                <div style="border-bottom: 1px solid #000; font-weight: bold; margin-bottom: 2px;">SCHOOL HEAD NAME</div>
+                                <div>School Head</div>
+                            </div>
+                            <div class="sig-col">
+                                <div style="border-bottom: 1px solid #000; font-weight: bold; margin-bottom: 2px;"><?= htmlspecialchars($adviser_display) ?></div>
+                                <div>Class Adviser</div>
+                            </div>
                         </div>
 
                         <div class="section-heading">LEARNING PROGRESS AND ACHIEVEMENT</div>
@@ -929,13 +928,13 @@ $tot_abs  = array_sum($days_absent);
 
                         <div class="section-heading">TEACHER'S COMMENTS / REMARKS</div>
                         <div style="font-size: 0.82em; font-weight: bold; margin-bottom: 1px;">Term 1</div>
-                        <div class="comment-area">Shows exemplary performance in mathematics and core sciences.</div>
+                        <div class="comment-area"><?= htmlspecialchars($adviser_comments['Term 1'] ?? '') ?></div>
 
                         <div style="font-size: 0.82em; font-weight: bold; margin-bottom: 1px;">Term 2</div>
-                        <div class="comment-area">Consistently active in class discussions and collaborative tasks.</div>
+                        <div class="comment-area"><?= htmlspecialchars($adviser_comments['Term 2'] ?? '') ?></div>
 
                         <div style="font-size: 0.82em; font-weight: bold; margin-bottom: 1px;">Term 3</div>
-                        <div class="comment-area">Demonstrated strong analytical skills in elective coursework.</div>
+                        <div class="comment-area"><?= htmlspecialchars($adviser_comments['Term 3'] ?? '') ?></div>
 
                         <div class="section-heading" style="margin-top: 6px;">PARENT/S GUARDIAN'S SIGNATURE</div>
                         <div class="signature-row">Term 1 <span class="line-field" style="width: 80%;"></span></div>
@@ -951,10 +950,12 @@ $tot_abs  = array_sum($days_absent);
 
                         <div class="footer-signatures">
                             <div class="field">
-                                <div class="line">School Head</div>
+                                <div class="line" style="font-weight: bold;">SCHOOL HEAD NAME</div>
+                                <div>School Head</div>
                             </div>
                             <div class="field">
-                                <div class="line">Adviser</div>
+                                <div class="line" style="font-weight: bold;"><?= htmlspecialchars($adviser_display) ?></div>
+                                <div>Class Adviser</div>
                             </div>
                         </div>
 
@@ -965,7 +966,8 @@ $tot_abs  = array_sum($days_absent);
                         </div>
                         <div class="footer-signatures" style="margin-top: 4px;">
                             <div class="field">
-                                <div class="line">School Head</div>
+                                <div class="line" style="font-weight: bold;">SCHOOL HEAD NAME</div>
+                                <div>School Head</div>
                             </div>
                         </div>
                     </div>
