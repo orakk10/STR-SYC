@@ -339,6 +339,23 @@ $tot_abs  = array_sum($days_absent);
             background-color: #1d4ed8;
         }
 
+        .btn-remarks {
+            background-color: #0d9488;
+            color: #ffffff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.82rem;
+            margin-right: 8px;
+            transition: background 0.2s ease;
+        }
+
+        .btn-remarks:hover {
+            background-color: #0f766e;
+        }
+
         .report-document-wrapper {
             display: flex;
             justify-content: center;
@@ -557,6 +574,165 @@ $tot_abs  = array_sum($days_absent);
             padding-top: 2px;
         }
 
+        /* Optimized Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(6px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.2s ease;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-box {
+            background: #ffffff;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 540px;
+            padding: 24px 28px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8f0;
+            animation: modalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes modalSlideUp {
+            from { opacity: 0; transform: translateY(12px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 14px;
+            margin-bottom: 18px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .modal-header h4 {
+            margin: 0;
+            font-size: 1.05rem;
+            color: #0f172a;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+
+        .modal-header .student-name-highlight {
+            color: #2563eb;
+        }
+
+        .modal-close {
+            background: #f1f5f9;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            cursor: pointer;
+            color: #64748b;
+            transition: all 0.2s ease;
+        }
+
+        .modal-close:hover {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group .term-badge {
+            display: inline-block;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #3b82f6;
+            background: #eff6ff;
+            padding: 3px 8px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+        }
+
+        .form-group textarea {
+            width: 100%;
+            min-height: 64px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
+            font-family: inherit;
+            font-size: 0.85rem;
+            color: #1e293b;
+            resize: vertical;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            box-sizing: border-box;
+        }
+
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 12px;
+            margin-top: 22px;
+            padding-top: 14px;
+            border-top: 1px solid #f1f5f9;
+        }
+
+        .btn-cancel {
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+            padding: 9px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-cancel:hover {
+            background: #e2e8f0;
+            color: #1e293b;
+        }
+
+        .btn-save {
+            background: #2563eb;
+            color: #ffffff;
+            border: none;
+            padding: 9px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+            transition: all 0.2s ease;
+        }
+
+        .btn-save:hover {
+            background: #1d4ed8;
+            box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3);
+        }
+
         @media screen and (max-width: 600px) {
             .report-document {
                 flex-direction: column !important;
@@ -584,7 +760,7 @@ $tot_abs  = array_sum($days_absent);
                 print-color-adjust: exact !important;
             }
 
-            .sidebar, .mobile-toggle, .sf9-toolbar, .no-print {
+            .sidebar, .mobile-toggle, .sf9-toolbar, .no-print, .modal-overlay {
                 display: none !important;
             }
 
@@ -711,7 +887,11 @@ $tot_abs  = array_sum($days_absent);
                         </div>
                     </form>
                 </div>
-                <button class="btn-print" onclick="window.print()">Print Official SF9 Document</button>
+                
+                <div>
+                    <button class="btn-remarks" onclick="openRemarksModal()">Edit Adviser Remarks</button>
+                    <button class="btn-print" onclick="window.print()">Print Official SF9 Document</button>
+                </div>
             </div>
 
             <!-- DOCUMENT DISPLAY CONTAINER -->
@@ -977,11 +1157,77 @@ $tot_abs  = array_sum($days_absent);
         </main>
     </div>
 
+    <!-- MODAL EDIT ADVISER REMARKS -->
+    <div class="modal-overlay" id="remarksModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h4>Adviser Remarks: <span class="student-name-highlight"><?= htmlspecialchars($student['full_name']) ?></span></h4>
+                <button class="modal-close" onclick="closeRemarksModal()" title="Close">✕</button>
+            </div>
+            <form id="saveRemarksForm" onsubmit="submitRemarksForm(event)">
+                <input type="hidden" name="student_id" value="<?= $student_id ?>">
+                <input type="hidden" name="academic_year" value="<?= htmlspecialchars($selected_sy) ?>">
+                
+                <div class="form-group">
+                    <span class="term-badge">Term 1 Remark / Comment</span>
+                    <textarea name="term1_comment" id="term1_comment" placeholder="Enter Term 1 remark..."><?= htmlspecialchars($adviser_comments['Term 1'] ?? '') ?></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <span class="term-badge">Term 2 Remark / Comment</span>
+                    <textarea name="term2_comment" id="term2_comment" placeholder="Enter Term 2 remark..."><?= htmlspecialchars($adviser_comments['Term 2'] ?? '') ?></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <span class="term-badge">Term 3 Remark / Comment</span>
+                    <textarea name="term3_comment" id="term3_comment" placeholder="Enter Term 3 remark..."><?= htmlspecialchars($adviser_comments['Term 3'] ?? '') ?></textarea>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeRemarksModal()">Cancel</button>
+                    <button type="submit" class="btn-save">Save Remarks</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="../../assets/js/app.js"></script>
     <script>
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             sidebar.classList.toggle('active');
+        }
+
+        function openRemarksModal() {
+            document.getElementById('remarksModal').classList.add('active');
+        }
+
+        function closeRemarksModal() {
+            document.getElementById('remarksModal').classList.remove('active');
+        }
+
+        function submitRemarksForm(e) {
+            e.preventDefault();
+            const form = document.getElementById('saveRemarksForm');
+            const formData = new FormData(form);
+
+            fetch('save-sf9-remarks.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    closeRemarksModal();
+                    window.location.reload();
+                } else {
+                    alert(data.message || 'Error saving remarks.');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('An error occurred while attempting to save remarks.');
+            });
         }
     </script>
 </body>
