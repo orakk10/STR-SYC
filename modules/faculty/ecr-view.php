@@ -5,6 +5,7 @@ session_start();
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../core/EcrDraftStore.php';
 require_once __DIR__ . '/../../core/EcrTermLock.php';
+require_once __DIR__ . '/../../core/EcrSubjectTerm.php';
 $pdo = getDBConnection();
 
 // 2. Access Control
@@ -51,10 +52,17 @@ function getComponentWeights(?string $type): array {
 
 // 4. Fetch Active Faculty Subject Load
 $assignments_stmt = $pdo->prepare("
-    SELECT sa.id AS assignment_id, sub.subject_name, sub.subject_code, sec.section_name, sec.grade_level
+    SELECT sa.id AS assignment_id, sub.subject_name, sub.subject_code,
+           sub.curriculum_version, sub.`term` AS subject_curriculum_term,
+           subject_strand.strand_code AS subject_strand_code,
+           subject_strand.strand_name AS subject_strand_name,
+           sec.section_name, sec.grade_level,
+           section_strand.strand_code, section_strand.strand_name
     FROM subject_assignments sa
     JOIN subjects sub ON sa.subject_id = sub.id
     JOIN sections sec ON sa.section_id = sec.id
+    LEFT JOIN strands section_strand ON sec.strand_id = section_strand.id
+    LEFT JOIN strands subject_strand ON sub.strand_id = subject_strand.id
     WHERE sa.faculty_id = :faculty_id
     ORDER BY sec.grade_level ASC, sec.section_name ASC, sub.subject_name ASC
 ");
@@ -72,13 +80,27 @@ $qa_weight    = 0.25;
 $subject_name = "";
 $section_id   = 0;
 $section_name = "";
+$strand_code = "";
+$strand_name = "";
+$subject_strand_code = "";
+$subject_strand_name = "";
+$curriculum_version = "";
+$subject_curriculum_term = "";
+$track_display = "ACADEMIC TRACK";
 
 if ($assignment_id > 0) {
     $weight_stmt = $pdo->prepare("
-        SELECT sub.subject_name, sub.type AS subject_type, sa.section_id, sec.section_name, sec.grade_level
+        SELECT sub.subject_name, sub.type AS subject_type, sub.curriculum_version,
+               sub.`term` AS subject_curriculum_term,
+               subject_strand.strand_code AS subject_strand_code,
+               subject_strand.strand_name AS subject_strand_name,
+               sa.section_id, sec.section_name, sec.grade_level,
+               section_strand.strand_code, section_strand.strand_name
         FROM subject_assignments sa
         JOIN subjects sub ON sa.subject_id = sub.id
         JOIN sections sec ON sa.section_id = sec.id
+        LEFT JOIN strands section_strand ON sec.strand_id = section_strand.id
+        LEFT JOIN strands subject_strand ON sub.strand_id = subject_strand.id
         WHERE sa.id = :assignment_id
     ");
     $weight_stmt->execute(['assignment_id' => $assignment_id]);
@@ -92,11 +114,33 @@ if ($assignment_id > 0) {
         $subject_name = $subject_weight_data['subject_name'] ?? "";
         $section_id   = (int)$subject_weight_data['section_id'];
         $section_name = "Grade " . $subject_weight_data['grade_level'] . " - " . $subject_weight_data['section_name'];
+        $strand_code = trim((string)($subject_weight_data['strand_code'] ?? ''));
+        $strand_name = trim((string)($subject_weight_data['strand_name'] ?? ''));
+        $subject_strand_code = trim((string)($subject_weight_data['subject_strand_code'] ?? ''));
+        $subject_strand_name = trim((string)($subject_weight_data['subject_strand_name'] ?? ''));
+        $curriculum_version = trim((string)($subject_weight_data['curriculum_version'] ?? ''));
+        $subject_curriculum_term = trim((string)($subject_weight_data['subject_curriculum_term'] ?? ''));
+
+        $strand_identifier = $strand_code . ' ' . $strand_name;
+        if (stripos($strand_identifier, 'TVL') !== false || stripos($strand_identifier, 'ICT') !== false) {
+            $track_display = 'TVL / ICT TRACK';
+        }
     }
+}
+$section_strand_display = trim($strand_code . ' ' . $strand_name);
+$subject_strand_display = trim($subject_strand_code . ' ' . $subject_strand_name);
+if ($subject_strand_display === '') {
+    $subject_strand_display = 'Universal Core / All Tracks';
 }
 
 // 6. Dynamic Assessment Components Query (Driven by ecr_assessment_components)
 $term_str = "Term " . $term;
+$term_is_available = isCurriculumSubjectAvailableForEcrTerm(
+    $curriculum_version,
+    $subject_curriculum_term,
+    $term_str
+);
+$term_is_read_only = true;
 $db_components = ['WW' => [], 'PT' => [], 'QA' => []];
 $term_is_locked = false;
 $saved_scores = [];
@@ -121,18 +165,20 @@ if ($assignment_id > 0) {
             (assignment_id, term, category, task_number, highest_possible_score)
         VALUES (:assignment_id, :term, :category, :task_number, 100.00)
     ");
-    foreach ($default_component_counts as $category => $default_count) {
-        if (in_array($category, $existing_categories, true)) {
-            continue;
-        }
+    if ($term_is_available) {
+        foreach ($default_component_counts as $category => $default_count) {
+            if (in_array($category, $existing_categories, true)) {
+                continue;
+            }
 
-        for ($task_number = 1; $task_number <= $default_count; $task_number++) {
-            $insert_component_stmt->execute([
-                'assignment_id' => $assignment_id,
-                'term' => $term_str,
-                'category' => $category,
-                'task_number' => $task_number
-            ]);
+            for ($task_number = 1; $task_number <= $default_count; $task_number++) {
+                $insert_component_stmt->execute([
+                    'assignment_id' => $assignment_id,
+                    'term' => $term_str,
+                    'category' => $category,
+                    'task_number' => $task_number
+                ]);
+            }
         }
     }
 
@@ -169,8 +215,9 @@ if ($assignment_id > 0) {
     }
 
     $term_is_locked = isEcrTermLocked($pdo, $assignment_id, $term_str);
+    $term_is_read_only = $term_is_locked || !$term_is_available;
 
-    if (!$term_is_locked) {
+    if (!$term_is_read_only) {
         $draft_stmt = $pdo->prepare("
             SELECT draft_data, updated_at
             FROM ecr_score_drafts
@@ -421,6 +468,19 @@ if ($section_id > 0) {
         }
 
         .roster-info-pill span {
+            color: #0f172a;
+        }
+
+        .assignment-context {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 18px;
+            width: 100%;
+            color: #64748b;
+            font-size: 0.8rem;
+        }
+
+        .assignment-context strong {
             color: #0f172a;
         }
 
@@ -723,8 +783,23 @@ if ($section_id > 0) {
                                 <option value="0">No teaching subjects assigned</option>
                             <?php else: ?>
                                 <?php foreach ($my_assignments as $assign): ?>
+                                    <?php
+                                    $assignment_available_terms = [];
+                                    foreach ([1, 2, 3] as $assignment_term) {
+                                        if (isCurriculumSubjectAvailableForEcrTerm(
+                                            $assign['curriculum_version'] ?? null,
+                                            $assign['subject_curriculum_term'] ?? null,
+                                            'Term ' . $assignment_term
+                                        )) {
+                                            $assignment_available_terms[] = 'Term ' . $assignment_term;
+                                        }
+                                    }
+                                    $assignment_term_label = $assignment_available_terms
+                                        ? implode(', ', $assignment_available_terms)
+                                        : 'No ECR grade-entry terms';
+                                    ?>
                                     <option value="<?= $assign['assignment_id'] ?>" <?= $assign['assignment_id'] == $assignment_id ? 'selected' : '' ?>>
-                                        Grade <?= htmlspecialchars($assign['grade_level'] . ' - ' . $assign['section_name']) ?> | <?= htmlspecialchars($assign['subject_name'] . ' (' . $assign['subject_code'] . ')') ?>
+                                        Grade <?= htmlspecialchars($assign['grade_level'] . ' - ' . $assign['section_name']) ?> | <?= htmlspecialchars($assign['subject_name'] . ' (' . $assign['subject_code'] . ')') ?> — <?= htmlspecialchars($assignment_term_label) ?>
                                     </option>
                                 <?php endforeach; ?>
                             <?php endif; ?>
@@ -732,9 +807,9 @@ if ($section_id > 0) {
 
                         <!-- Action Buttons Beside Assigned Subject Select -->
                         <div class="control-action-buttons">
-                            <button id="saveConfigBtn" class="btn-action btn-secondary" <?= $term_is_locked ? 'disabled' : '' ?>>Save HPS Setup</button>
-                            <button type="button" id="saveDraftBtn" class="btn-action btn-secondary" <?= ($term_is_locked || $assignment_id <= 0) ? 'disabled' : '' ?>>Save Draft</button>
-                            <button id="saveScoresBtn" class="btn-action" <?= $term_is_locked ? 'disabled' : '' ?>><?= $term_is_locked ? 'Term Already Saved' : 'Save ECR Scores' ?></button>
+                            <button id="saveConfigBtn" class="btn-action btn-secondary" <?= $term_is_read_only ? 'disabled' : '' ?>>Save HPS Setup</button>
+                            <button type="button" id="saveDraftBtn" class="btn-action btn-secondary" <?= ($term_is_read_only || $assignment_id <= 0) ? 'disabled' : '' ?>>Save Draft</button>
+                            <button id="saveScoresBtn" class="btn-action" <?= $term_is_read_only ? 'disabled' : '' ?>><?= $term_is_locked ? 'Term Already Saved' : (!$term_is_available ? 'View Only' : 'Save ECR Scores') ?></button>
                         </div>
                     </div>
                     <span id="draftStatus" role="status" aria-live="polite">
@@ -743,19 +818,39 @@ if ($section_id > 0) {
                         <?php endif; ?>
                     </span>
 
-                    <!-- Active Roster Indicator -->
+                    <!-- Active Class and Curriculum Information -->
                     <?php if ($section_name): ?>
-                        <div class="roster-info-pill">
-                            Active Roster: <span><?= htmlspecialchars($section_name) ?></span>
+                        <div class="assignment-context">
+                            <span>Active Roster: <strong><?= htmlspecialchars($section_name) ?></strong></span>
+                            <span>
+                                Track / Strand: <strong><?= htmlspecialchars($track_display) ?></strong>
+                                <?php if ($section_strand_display !== ''): ?>
+                                    (<?= htmlspecialchars($section_strand_display) ?>)
+                                <?php endif; ?>
+                            </span>
+                            <span>
+                                Curriculum: <strong><?= htmlspecialchars($curriculum_version !== '' ? $curriculum_version : 'Not specified') ?></strong>
+                                &middot; Curriculum Guide strand:
+                                <strong><?= htmlspecialchars($subject_strand_display) ?></strong>
+                            </span>
                         </div>
                     <?php endif; ?>
                 </div>
 
                 <nav class="ecr-tab-bar">
                     <a href="ecr-inputdata.php" class="tab-link">INPUT DATA</a>
-                    <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=1" class="tab-link <?= $term === 1 ? 'active' : '' ?>">TERM 1</a>
-                    <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=2" class="tab-link <?= $term === 2 ? 'active' : '' ?>">TERM 2</a>
-                    <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=3" class="tab-link <?= $term === 3 ? 'active' : '' ?>">TERM 3</a>
+                    <?php foreach ([1, 2, 3] as $tab_term): ?>
+                        <?php
+                        $tab_available = isCurriculumSubjectAvailableForEcrTerm(
+                            $curriculum_version,
+                            $subject_curriculum_term,
+                            'Term ' . $tab_term
+                        );
+                        ?>
+                        <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=<?= $tab_term ?>" class="tab-link <?= $term === $tab_term ? 'active' : '' ?>">
+                            TERM <?= $tab_term ?><?= $tab_available ? '' : ' (VIEW ONLY)' ?>
+                        </a>
+                    <?php endforeach; ?>
                     <a href="ecr-summary.php?assignment_id=<?= $assignment_id ?>" class="tab-link">SUMMARY</a>
                 </nav>
 
@@ -763,6 +858,10 @@ if ($section_id > 0) {
                     <?php if ($term_is_locked): ?>
                         <div role="status" style="padding: 10px 20px; color: #92400e; background: #fffbeb; border-bottom: 1px solid #fde68a; font-weight: 600;">
                             <?= htmlspecialchars($term_str) ?> has already been saved. This term is read-only and cannot be entered again.
+                        </div>
+                    <?php elseif (!$term_is_available && $assignment_id > 0): ?>
+                        <div role="status" style="padding: 10px 20px; color: #1e40af; background: #eff6ff; border-bottom: 1px solid #bfdbfe; font-weight: 600;">
+                            <?= htmlspecialchars($term_str) ?> is not listed for this subject in the <?= htmlspecialchars($curriculum_version ?: 'selected') ?> curriculum. This ECR is view-only for <?= htmlspecialchars($term_str) ?>.
                         </div>
                     <?php endif; ?>
                     <table class="ecr-grid">
@@ -804,7 +903,7 @@ if ($section_id > 0) {
                                                data-task-number="<?= $task_num ?>" 
                                                data-component-id="<?= $comp['id'] ?? $task_num ?>"
                                                value="<?= (float)($comp['highest_possible_score'] ?? 100) ?>" 
-                                               placeholder="WW<?= $task_num ?>" <?= $term_is_locked ? 'readonly' : '' ?>>
+                                               placeholder="WW<?= $task_num ?>" <?= $term_is_read_only ? 'readonly' : '' ?>>
                                     </th>
                                 <?php endforeach; ?>
                                 <th class="th-calc" style="width: 26px;">PS</th>
@@ -818,7 +917,7 @@ if ($section_id > 0) {
                                                data-task-number="<?= $task_num ?>" 
                                                data-component-id="<?= $comp['id'] ?? ($task_num + 8) ?>"
                                                value="<?= (float)($comp['highest_possible_score'] ?? 100) ?>" 
-                                               placeholder="PT<?= $task_num ?>" <?= $term_is_locked ? 'readonly' : '' ?>>
+                                               placeholder="PT<?= $task_num ?>" <?= $term_is_read_only ? 'readonly' : '' ?>>
                                     </th>
                                 <?php endforeach; ?>
                                 <th class="th-calc" style="width: 26px;">PS</th>
@@ -832,7 +931,7 @@ if ($section_id > 0) {
                                                data-task-number="<?= $task_num ?>" 
                                                data-component-id="<?= $comp['id'] ?? ($task_num + 14) ?>"
                                                value="<?= (float)($comp['highest_possible_score'] ?? 100) ?>" 
-                                               placeholder="QA<?= $task_num ?>" <?= $term_is_locked ? 'readonly' : '' ?>>
+                                               placeholder="QA<?= $task_num ?>" <?= $term_is_read_only ? 'readonly' : '' ?>>
                                     </th>
                                 <?php endforeach; ?>
                                 <th class="th-calc" style="width: 26px;">PS</th>
@@ -864,7 +963,7 @@ if ($section_id > 0) {
                                                        data-component-id="<?= $comp['id'] ?? $task_num ?>" 
                                                        data-student-id="<?= $student['id'] ?>"
                                                        value="<?= htmlspecialchars((string)($draft_scores[$student['id']][$comp['id'] ?? ''] ?? $saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                       <?= $term_is_locked ? 'readonly' : '' ?>>
+                                                       <?= $term_is_read_only ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="WW">0.00</td>
@@ -879,7 +978,7 @@ if ($section_id > 0) {
                                                        data-component-id="<?= $comp['id'] ?? ($task_num + 8) ?>" 
                                                        data-student-id="<?= $student['id'] ?>"
                                                        value="<?= htmlspecialchars((string)($draft_scores[$student['id']][$comp['id'] ?? ''] ?? $saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                       <?= $term_is_locked ? 'readonly' : '' ?>>
+                                                       <?= $term_is_read_only ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="PT">0.00</td>
@@ -894,7 +993,7 @@ if ($section_id > 0) {
                                                        data-component-id="<?= $comp['id'] ?? ($task_num + 14) ?>" 
                                                        data-student-id="<?= $student['id'] ?>"
                                                        value="<?= htmlspecialchars((string)($draft_scores[$student['id']][$comp['id'] ?? ''] ?? $saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                       <?= $term_is_locked ? 'readonly' : '' ?>>
+                                                       <?= $term_is_read_only ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="QA">0.00</td>
@@ -935,7 +1034,7 @@ if ($section_id > 0) {
                                                        data-component-id="<?= $comp['id'] ?? $task_num ?>" 
                                                        data-student-id="<?= $student['id'] ?>"
                                                        value="<?= htmlspecialchars((string)($draft_scores[$student['id']][$comp['id'] ?? ''] ?? $saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                       <?= $term_is_locked ? 'readonly' : '' ?>>
+                                                       <?= $term_is_read_only ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="WW">0.00</td>
@@ -950,7 +1049,7 @@ if ($section_id > 0) {
                                                        data-component-id="<?= $comp['id'] ?? ($task_num + 8) ?>" 
                                                        data-student-id="<?= $student['id'] ?>"
                                                        value="<?= htmlspecialchars((string)($draft_scores[$student['id']][$comp['id'] ?? ''] ?? $saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                       <?= $term_is_locked ? 'readonly' : '' ?>>
+                                                       <?= $term_is_read_only ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="PT">0.00</td>
@@ -965,7 +1064,7 @@ if ($section_id > 0) {
                                                        data-component-id="<?= $comp['id'] ?? ($task_num + 14) ?>" 
                                                        data-student-id="<?= $student['id'] ?>"
                                                        value="<?= htmlspecialchars((string)($draft_scores[$student['id']][$comp['id'] ?? ''] ?? $saved_scores[$student['id']][$comp['id'] ?? ''] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                       <?= $term_is_locked ? 'readonly' : '' ?>>
+                                                       <?= $term_is_read_only ? 'readonly' : '' ?>>
                                             </td>
                                         <?php endforeach; ?>
                                         <td class="ps-cell cell-calc" data-category="QA">0.00</td>

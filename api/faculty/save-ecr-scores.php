@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../core/DepEdTransmutation.php';
 require_once __DIR__ . '/../../core/EcrDraftStore.php';
 require_once __DIR__ . '/../../core/EcrTermLock.php';
+require_once __DIR__ . '/../../core/EcrSubjectTerm.php';
 
 // Check authorization
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'adviser', 'admin'])) {
@@ -73,6 +74,16 @@ try {
         $db->rollBack();
         http_response_code(404);
         echo json_encode(['status' => 'error', 'message' => 'Subject assignment was not found.']);
+        exit();
+    }
+
+    if (!isEcrAssignmentAvailableForTerm($db, $assignmentId, $termName)) {
+        $db->rollBack();
+        http_response_code(409);
+        echo json_encode([
+            'status' => 'error',
+            'message' => "{$termName} is not configured for this subject in the curriculum and cannot accept grades."
+        ]);
         exit();
     }
 
