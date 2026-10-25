@@ -258,6 +258,8 @@ $tot_abs  = array_sum($days_absent);
     <title>SF9 Learner's Performance Report Card | San Juan De Valdez IS</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <link rel="stylesheet" href="../../assets/css/style.css">
+    <link rel="stylesheet" href="../../assets/css/security-lock.css">
+    <script src="../../assets/js/security-lock.js" defer></script>
     <style>
         *, *::before, *::after {
             box-sizing: border-box !important;

@@ -1,0 +1,162 @@
+/* ==========================================================================
+   1. SECURITY SETTINGS PANEL (modules/auth/settings.php)
+   ========================================================================== */
+
+.security-settings-container {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 500px;
+    margin: 20px auto;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    font-family: inherit;
+}
+
+.security-settings-container h3 {
+    margin-top: 0;
+    margin-bottom: 8px;
+    font-size: 1.25rem;
+    color: #2c3e50;
+}
+
+.security-settings-container p {
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+.security-form-group {
+    margin-bottom: 16px;
+}
+
+.security-form-group label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #333333;
+    margin-bottom: 6px;
+}
+
+.security-select,
+.security-input {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 0.95rem;
+    border: 1px solid #cccccc;
+    border-radius: 6px;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.security-select:focus,
+.security-input:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+    outline: none;
+}
+
+.btn-save-security {
+    background-color: #0d6efd;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    width: 100%;
+}
+
+.btn-save-security:hover {
+    background-color: #0b5ed7;
+}
+
+/* ==========================================================================
+   2. APP LOCK OVERLAY (Rendered via security-lock.js)
+   ========================================================================== */
+
+.security-lock-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.security-lock-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.security-lock-box {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 30px;
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+}
+
+.security-lock-box .lock-icon {
+    font-size: 3rem;
+    margin-bottom: 10px;
+}
+
+.security-lock-box h3 {
+    margin: 0 0 10px 0;
+    color: #333333;
+}
+
+.security-lock-box p {
+    color: #666666;
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+}
+
+.btn-unlock-biometric,
+.btn-unlock-submit {
+    width: 100%;
+    padding: 12px;
+    background-color: #0d6efd;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: background-color 0.2s ease;
+}
+
+.btn-unlock-biometric:hover,
+.btn-unlock-submit:hover {
+    background-color: #0b5ed7;
+}
+
+/* Mobile Responsive Overrides */
+@media screen and (max-width: 576px) {
+    .security-settings-container {
+        width: 92%;
+        margin: 15px auto;
+        padding: 18px;
+        border-radius: 10px;
+    }
+
+    .security-select,
+    .security-input,
+    .btn-save-security {
+        font-size: 1rem;
+        padding: 12px;
+    }
+}

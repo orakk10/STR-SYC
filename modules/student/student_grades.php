@@ -338,6 +338,7 @@ foreach ($raw_grades as $row) {
                 <li><a href="student_grades.php" class="active">My Grades</a></li>
                 <li><a href="student_schedule.php">Class Schedule</a></li>
                 <li><a href="student_profile.php">Account Settings</a></li>
+                <li><a href="../auth/settings.php" class="nav-link">Security Settings</a></li>
                 <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>

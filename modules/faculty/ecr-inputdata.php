@@ -434,6 +434,9 @@ if ($assignment_id > 0) {
                         </a>
                     </li>
                 <?php endif; ?>
+                <li><a href="../auth/settings.php" class="nav-link">
+                    <i class="icon-shield"></i> Security Settings
+                        </a></li>
 
                 <li>
                     <a href="../../manifest/logout.php" class="logout">Logout</a>

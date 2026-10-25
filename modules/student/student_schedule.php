@@ -281,6 +281,7 @@ $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
                 <li><a href="student_grades.php">My Grades</a></li>
                 <li><a href="student_schedule.php" class="active">Class Schedule</a></li>
                 <li><a href="student_profile.php">Account Settings</a></li>
+                <li><a href="../auth/settings.php" class="nav-link">Security Settings</a></li>
                 <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>

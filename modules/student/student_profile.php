@@ -176,6 +176,8 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Profile | STRAND-SYNC</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
+        <link rel="stylesheet" href="../../assets/css/security-lock.css">
+    <script src="../../assets/js/security-lock.js" defer></script>
     <style>
         /* Base Viewport Layout Setup */
         body { 
@@ -471,6 +473,7 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
                 <li><a href="student_grades.php">My Grades</a></li>
                 <li><a href="student_schedule.php">Class Schedule</a></li>
                 <li><a href="student_profile.php" class="active">Account Settings</a></li>
+                <li><a href="../auth/settings.php" class="nav-link">Security Settings</a></li>
                 <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
         </nav>

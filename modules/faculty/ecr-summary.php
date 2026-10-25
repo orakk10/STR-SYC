@@ -628,6 +628,7 @@ if ($section_id > 0) {
                     <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=2" class="tab-link">TERM 2</a>
                     <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=3" class="tab-link">TERM 3</a>
                     <a href="ecr-summary.php?assignment_id=<?= $assignment_id ?>" class="tab-link active">SUMMARY</a>
+                    <a href="../auth/settings.php" class="nav-link">Security Settings</a>
                 </nav>
 
                 <!-- Summary Grid Matrix -->
