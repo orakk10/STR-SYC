@@ -354,9 +354,6 @@ foreach ($raw_grades as $row) {
                         </p>
                     </div>
                 </div>
-                <a href="print_report_card.php?student_id=<?php echo $user_id; ?>" target="_blank" class="btn-download">
-                    <span>📥</span> Print SF9 Copy
-                </a>
             </header>
 
             <?php if (!empty($grades_matrix)): ?>

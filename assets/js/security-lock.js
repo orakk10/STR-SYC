@@ -5,8 +5,14 @@ const BASE_AUTH_URL = window.location.pathname.includes('/modules/auth/')
     ? '' 
     : '/str-syc/modules/auth/';
 
+// Idle Timeout Configuration (5 minutes = 300,000 milliseconds)
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
+let idleTimer = null;
+let isAppLocked = false;
+
 document.addEventListener("DOMContentLoaded", () => {
     checkAppLockStatus();
+    initIdleTimer();
 });
 
 document.addEventListener("visibilitychange", () => {
@@ -33,7 +39,37 @@ function base64ToUint8Array(base64String) {
     return outputArray;
 }
 
-// 1. Check User Security Preference
+// -------------------------------------------------------------
+// IDLE TIMEOUT LOGIC
+// -------------------------------------------------------------
+function initIdleTimer() {
+    // List of events that signal user activity
+    const activityEvents = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
+
+    const resetTimer = () => {
+        // Only reset timer if app is not currently locked
+        if (isAppLocked) return;
+
+        if (idleTimer) clearTimeout(idleTimer);
+        
+        idleTimer = setTimeout(() => {
+            console.log("Inactivity limit reached. Locking application...");
+            checkAppLockStatus();
+        }, IDLE_TIMEOUT_MS);
+    };
+
+    // Attach passive activity listeners to window
+    activityEvents.forEach(eventType => {
+        window.addEventListener(eventType, resetTimer, { passive: true });
+    });
+
+    // Start initial timer
+    resetTimer();
+}
+
+// -------------------------------------------------------------
+// 1. Check User Security Preference & Display Lock
+// -------------------------------------------------------------
 async function checkAppLockStatus(isUserResume = false) {
     try {
         const response = await fetch(`${BASE_AUTH_URL}get-user-security-preference.php`);
@@ -49,7 +85,6 @@ async function checkAppLockStatus(isUserResume = false) {
         switch (data.security_preference) {
             case 'biometric':
                 showAppLockOverlay('biometric');
-                // Auto-trigger native fingerprint scanner directly
                 triggerFingerprintScan(true);
                 break;
             case 'pin':
@@ -67,7 +102,9 @@ async function checkAppLockStatus(isUserResume = false) {
     }
 }
 
+// -------------------------------------------------------------
 // 2. WebAuthn Fingerprint Registration (Called from settings.php)
+// -------------------------------------------------------------
 async function registerFingerprint() {
     if (!window.PublicKeyCredential) {
         alert("WebAuthn API is not enabled on this connection. Please verify your connection context or HTTPS connection.");
@@ -89,18 +126,16 @@ async function registerFingerprint() {
         const credential = await navigator.credentials.create({
             publicKey: {
                 challenge: challengeBuffer,
-                rp: { 
-                    name: "Strand-Sync App"
-                },
+                rp: { name: "Strand-Sync App" },
                 user: {
                     id: userIdBuffer,
                     name: options.user.name,
                     displayName: options.user.displayName
                 },
                 pubKeyCredParams: [
-                    { alg: -7, type: "public-key" },   // ES256
-                    { alg: -257, type: "public-key" }, // RS256
-                    { alg: -37, type: "public-key" }   // PS256
+                    { alg: -7, type: "public-key" },
+                    { alg: -257, type: "public-key" },
+                    { alg: -37, type: "public-key" }
                 ],
                 authenticatorSelection: {
                     authenticatorAttachment: "platform",
@@ -137,7 +172,9 @@ async function registerFingerprint() {
     }
 }
 
+// -------------------------------------------------------------
 // 3. WebAuthn Fingerprint Authentication (Unlocking App)
+// -------------------------------------------------------------
 async function triggerFingerprintScan(isAutoPrompt = false) {
     if (!window.PublicKeyCredential) {
         if (!isAutoPrompt) alert("Fingerprint biometrics not supported on this device.");
@@ -161,7 +198,6 @@ async function triggerFingerprintScan(isAutoPrompt = false) {
             allowCredentials.push({ id: rawCredId, type: 'public-key' });
         }
 
-        // Trigger native Android fingerprint scanner modal directly
         const credential = await navigator.credentials.get({
             publicKey: {
                 challenge: challengeBuffer,
@@ -197,14 +233,15 @@ async function triggerFingerprintScan(isAutoPrompt = false) {
         }
     } catch (err) {
         console.error("Biometric authentication error:", err);
-        // Silently catch auto-prompt rejections (e.g. strict user gesture policies) so user can fall back to manual tap
         if (!isAutoPrompt && err.name !== "NotAllowedError") {
             alert("Biometric Error: " + err.message);
         }
     }
 }
 
+// -------------------------------------------------------------
 // 4. Verify PIN or Pattern Credentials via Backend
+// -------------------------------------------------------------
 async function verifyPinOrPattern(inputVal, type = 'pin') {
     if (!inputVal || inputVal.trim() === '') {
         alert(`Please enter your ${type.toUpperCase()}.`);
@@ -243,7 +280,9 @@ async function verifyPinOrPattern(inputVal, type = 'pin') {
     }
 }
 
-// 5. Interactive 3x3 Canvas Pattern Logic for Lock Overlay (Pointer Events)
+// -------------------------------------------------------------
+// 5. Interactive 3x3 Canvas Pattern Logic for Lock Overlay
+// -------------------------------------------------------------
 let unlockPatternSequence = [];
 let isUnlockDrawing = false;
 const unlockDots = [];
@@ -361,8 +400,12 @@ function resetUnlockPatternCanvas() {
     drawUnlockPatternGrid();
 }
 
+// -------------------------------------------------------------
 // 6. UI Helper Functions
+// -------------------------------------------------------------
 function showAppLockOverlay(mode = 'pin') {
+    isAppLocked = true; // Set lock flag
+
     let overlay = document.getElementById('securityLockOverlay');
     if (!overlay) {
         overlay = createLockOverlayElement();
@@ -381,10 +424,14 @@ function showAppLockOverlay(mode = 'pin') {
 }
 
 function unlockAppScreen() {
+    isAppLocked = false; // Reset lock flag
     const overlay = document.getElementById('securityLockOverlay');
     if (overlay) {
         overlay.classList.remove('active');
     }
+    // Reset inactivity timer after unlocking
+    if (idleTimer) clearTimeout(idleTimer);
+    initIdleTimer();
 }
 
 function arrayBufferToBase64(buffer) {
@@ -396,7 +443,9 @@ function arrayBufferToBase64(buffer) {
     return window.btoa(binary);
 }
 
+// -------------------------------------------------------------
 // 7. DOM Generator for Security Lock Overlay
+// -------------------------------------------------------------
 function createLockOverlayElement() {
     const div = document.createElement('div');
     div.id = 'securityLockOverlay';
