@@ -589,7 +589,7 @@ $students = $conn->query($query_str)->fetchAll();
                                     <td><?php echo htmlspecialchars($row['academic_year'] ?? ''); ?></td>
                                     <td><?php echo htmlspecialchars($row['curriculum_version'] ?? ''); ?></td>
                                     <td>
-                                        <a href="print_report_card.php?student_id=<?php echo $row['id']; ?>" class="btn-print" target="_blank">Print SF9</a>
+                                        <a href="print_report_card.php?student_id=<?php echo (int) $row['id']; ?>&amp;academic_year=<?php echo rawurlencode($row['academic_year'] ?? ''); ?>&amp;print=1" class="btn-print" target="_blank">Print SF9</a>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>

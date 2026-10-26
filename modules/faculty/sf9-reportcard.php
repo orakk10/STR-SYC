@@ -1,5 +1,16 @@
 <?php
-session_start();
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+
+if (!isset($_SESSION['user_id']) || !in_array(strtolower($_SESSION['role'] ?? ''), ['adviser', 'faculty', 'admin'], true)) {
+    header("Location: ../../manifest/login.php");
+    exit();
+}
+
+$user_id = (int) $_SESSION['user_id'];
+$user_role = strtolower($_SESSION['role']);
+$is_admin = $user_role === 'admin';
 
 // 1. Database Connection Setup (PDO)
 require_once __DIR__ . '/../../config/database.php';
@@ -8,24 +19,43 @@ $conn = getDBConnection();
 // 2. Fetch Roster matching active students (PDO)
 $roster = [];
 $roster_sql = "
-    SELECT u.id, u.full_name, COALESCE(NULLIF(u.lrn, ''), u.username) AS lrn 
+    SELECT u.id, u.full_name, COALESCE(NULLIF(u.lrn, ''), u.username) AS lrn
     FROM users u
-    WHERE u.role = 'student'
-    ORDER BY u.full_name ASC
 ";
-$roster_stmt = $conn->query($roster_sql);
-if ($roster_stmt) {
-    $roster = $roster_stmt->fetchAll(PDO::FETCH_ASSOC);
+if (!$is_admin) {
+    $roster_sql .= "
+        INNER JOIN sections s ON s.id = u.section_id
+        WHERE u.role = 'student' AND s.adviser_id = :adviser_id
+    ";
+} else {
+    $roster_sql .= " WHERE u.role = 'student'";
 }
+$roster_sql .= " ORDER BY u.full_name ASC";
+$roster_stmt = $conn->prepare($roster_sql);
+if (!$is_admin) {
+    $roster_stmt->execute(['adviser_id' => $user_id]);
+} else {
+    $roster_stmt->execute();
+}
+$roster = $roster_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // 3. Resolve Active Student ID
-if (isset($_GET['student_id']) && intval($_GET['student_id']) > 0) {
-    $student_id = intval($_GET['student_id']);
+$roster_ids = array_map('intval', array_column($roster, 'id'));
+$requested_student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : 0;
+if ($requested_student_id > 0 && in_array($requested_student_id, $roster_ids, true)) {
+    $student_id = $requested_student_id;
+} elseif ($is_admin) {
+    $student_id = 0;
 } elseif (!empty($roster)) {
     $student_id = intval($roster[0]['id']);
 } else {
     $student_id = 0;
 }
+
+$sf9_page = $is_admin
+    ? (basename($_SERVER['PHP_SELF']) === 'print_report_card.php' ? 'print_report_card.php' : '../admin/print_report_card.php')
+    : 'sf9-reportcard.php';
+$remarks_save_url = $is_admin ? '../faculty/save-sf9-remarks.php' : 'save-sf9-remarks.php';
 
 // 4. Fetch Available Academic Years dynamically
 $available_years = [];
@@ -64,6 +94,14 @@ $adviser_comments = [
 
 if ($student_id > 0) {
     // A. Fetch Base Student Profile
+    $student_scope_sql = $is_admin
+        ? ''
+        : " AND EXISTS (
+                SELECT 1
+                FROM sections owned_section
+                WHERE owned_section.id = u.section_id
+                  AND owned_section.adviser_id = :adviser_id
+            )";
     $stmt = $conn->prepare("
         SELECT 
             u.id AS user_id, u.full_name, COALESCE(NULLIF(u.lrn, ''), u.username) AS lrn, u.section_id AS current_section_id,
@@ -71,15 +109,21 @@ if ($student_id > 0) {
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
         WHERE u.id = :student_id
+        $student_scope_sql
         LIMIT 1
     ");
-    $stmt->execute(['student_id' => $student_id]);
+    $student_params = ['student_id' => $student_id];
+    if (!$is_admin) {
+        $student_params['adviser_id'] = $user_id;
+    }
+    $stmt->execute($student_params);
     $db_student = $stmt->fetch(PDO::FETCH_ASSOC);
 
     // B. Fetch Section, Grade Level & Adviser Name
     $historical_section = null;
     
     // Check historical summaries first
+    $section_scope_sql = $is_admin ? '' : ' AND s.adviser_id = :adviser_id';
     $sec_stmt = $conn->prepare("
         SELECT DISTINCT s.grade_level, s.section_name, st.strand_code, st.strand_name, adv.full_name AS adviser_name
         FROM subject_assignments sa
@@ -88,22 +132,33 @@ if ($student_id > 0) {
         LEFT JOIN strands st ON s.strand_id = st.id
         LEFT JOIN users adv ON s.adviser_id = adv.id
         WHERE ets.student_id = :student_id AND sa.academic_year = :sy
+        $section_scope_sql
         LIMIT 1
     ");
-    $sec_stmt->execute(['student_id' => $student_id, 'sy' => $selected_sy]);
+    $section_params = ['student_id' => $student_id, 'sy' => $selected_sy];
+    if (!$is_admin) {
+        $section_params['adviser_id'] = $user_id;
+    }
+    $sec_stmt->execute($section_params);
     $historical_section = $sec_stmt->fetch(PDO::FETCH_ASSOC);
 
     // Fallback to student's current assigned section if no historical grades exist yet
     if (!$historical_section && !empty($db_student['current_section_id'])) {
+        $current_section_scope_sql = $is_admin ? '' : ' AND s.adviser_id = :adviser_id';
         $curr_sec_stmt = $conn->prepare("
             SELECT s.grade_level, s.section_name, st.strand_code, st.strand_name, adv.full_name AS adviser_name
             FROM sections s
             LEFT JOIN strands st ON s.strand_id = st.id
             LEFT JOIN users adv ON s.adviser_id = adv.id
             WHERE s.id = :sec_id
+            $current_section_scope_sql
             LIMIT 1
         ");
-        $curr_sec_stmt->execute(['sec_id' => $db_student['current_section_id']]);
+        $current_section_params = ['sec_id' => $db_student['current_section_id']];
+        if (!$is_admin) {
+            $current_section_params['adviser_id'] = $user_id;
+        }
+        $curr_sec_stmt->execute($current_section_params);
         $historical_section = $curr_sec_stmt->fetch(PDO::FETCH_ASSOC);
     }
 
@@ -753,11 +808,12 @@ $tot_abs  = array_sum($days_absent);
 
             html, body {
                 width: 100% !important;
-                height: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 background: #ffffff !important;
-                overflow: hidden !important;
+                overflow: visible !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
             }
@@ -766,11 +822,20 @@ $tot_abs  = array_sum($days_absent);
                 display: none !important;
             }
 
+            .dashboard-wrapper {
+                display: block !important;
+                min-height: 0 !important;
+                height: auto !important;
+                overflow: visible !important;
+            }
+
             main.content {
                 margin: 0 !important;
                 padding: 0 !important;
                 width: 100% !important;
+                min-height: 0 !important;
                 height: auto !important;
+                display: block !important;
                 overflow: visible !important;
             }
 
@@ -794,6 +859,8 @@ $tot_abs  = array_sum($days_absent);
                 box-sizing: border-box !important;
                 font-size: 0.60rem !important;
                 zoom: 0.94;
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
             }
 
             .doc-page {
@@ -802,13 +869,21 @@ $tot_abs  = array_sum($days_absent);
                 flex: 0 0 calc(50% - 2mm) !important;
                 box-sizing: border-box !important;
                 page-break-inside: avoid !important;
+                break-inside: avoid !important;
                 padding: 5px 7px !important;
-                overflow: hidden !important;
+                overflow: visible !important;
                 border: 1px solid #000000 !important;
             }
 
             table.doc-table {
                 font-size: 0.52rem !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+
+            table.doc-table tr {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
             }
 
             table.attendance-table th, 
@@ -841,9 +916,9 @@ $tot_abs  = array_sum($days_absent);
                 <li><a href="ecr-view.php">Encode Term Grades</a></li>
                 <li><a href="ecr-summary.php">ECR Summary</a></li>
                 <li class="menu-divider" style="padding: 12px 16px 4px 16px; font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">
-                    Advisory Forms
+                Advisory Forms
                 </li>
-                <li><a href="sf9-reportcard.php" class="active">SF9 (Report Card)</a></li>
+                <li><a href="<?= htmlspecialchars($sf9_page) ?>" class="active">SF9 (Report Card)</a></li>
                 <li><a href="sf10-record.php">SF10 (Permanent Record)</a></li>
                 <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
             </ul>
@@ -852,30 +927,39 @@ $tot_abs  = array_sum($days_absent);
         <main class="content">
             <!-- Screen Header Control Bar -->
             <div class="sf9-toolbar no-print">
+                <?php if ($is_admin): ?>
+                    <?php if ($db_student): ?>
+                        <button class="btn-print" onclick="window.print()">Print Official SF9 Document</button>
+                    <?php endif; ?>
+                <?php else: ?>
                 <div class="toolbar-title" style="display: flex; align-items: center; gap: 12px;">
                     <button class="mobile-burger-btn" onclick="toggleSidebar()" title="Toggle Sidebar">☰</button>
                     
-                    <form method="GET" action="sf9-reportcard.php" id="studentSelectForm" style="margin: 0; display: flex; align-items: center; gap: 12px;">
+                    <form method="GET" action="<?= htmlspecialchars($sf9_page) ?>" id="studentSelectForm" style="margin: 0; display: flex; align-items: center; gap: 12px;">
                         <!-- Dynamic Student Selector Dropdown -->
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <label for="student_id" style="font-size: 0.85rem; font-weight: 600; color: #334155;">Learner:</label>
-                            <select name="student_id" id="student_id" onchange="document.getElementById('studentSelectForm').submit();" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: #ffffff; cursor: pointer; font-weight: 500;">
-                                <?php if (!empty($roster)): ?>
-                                    <?php foreach ($roster as $s): ?>
-                                        <option value="<?= $s['id'] ?>" <?= intval($s['id']) === $student_id ? 'selected' : '' ?>>
-                                            <?= htmlspecialchars(strtoupper($s['full_name'])) ?> (LRN: <?= htmlspecialchars($s['lrn'] ?: 'N/A') ?>)
-                                        </option>
-                                    <?php endforeach; ?>
-                                <?php else: ?>
-                                    <option value="">NO STUDENTS FOUND</option>
-                                <?php endif; ?>
-                            </select>
-                        </div>
+                        <?php if ($is_admin): ?>
+                            <input type="hidden" name="student_id" value="<?= $student_id ?>">
+                        <?php else: ?>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <label for="student_id" style="font-size: 0.85rem; font-weight: 600; color: #334155;">Learner:</label>
+                                <select name="student_id" id="student_id" onchange="document.getElementById('studentSelectForm').submit();" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: #ffffff; cursor: pointer; font-weight: 500;">
+                                    <?php if (!empty($roster)): ?>
+                                        <?php foreach ($roster as $s): ?>
+                                            <option value="<?= $s['id'] ?>" <?= intval($s['id']) === $student_id ? 'selected' : '' ?>>
+                                                <?= htmlspecialchars(strtoupper($s['full_name'])) ?> (LRN: <?= htmlspecialchars($s['lrn'] ?: 'N/A') ?>)
+                                            </option>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
+                                        <option value="">NO STUDENTS FOUND</option>
+                                    <?php endif; ?>
+                                </select>
+                            </div>
+                        <?php endif; ?>
 
                         <!-- Dynamic School Year Selector Dropdown -->
                         <div style="display: flex; align-items: center; gap: 6px;">
                             <label for="academic_year" style="font-size: 0.85rem; font-weight: 600; color: #334155;">School Year:</label>
-                            <select name="academic_year" id="academic_year" onchange="document.getElementById('studentSelectForm').submit();" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: #ffffff; cursor: pointer; font-weight: 500;">
+                            <select name="academic_year" id="academic_year" onchange="document.getElementById('studentSelectForm').submit();" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: #ffffff; cursor: pointer; font-weight: 500;" <?= $student_id > 0 ? '' : 'disabled' ?>>
                                 <?php if (!empty($available_years)): ?>
                                     <?php foreach ($available_years as $sy): ?>
                                         <option value="<?= $sy ?>" <?= $sy === $selected_sy ? 'selected' : '' ?>>
@@ -891,13 +975,17 @@ $tot_abs  = array_sum($days_absent);
                 </div>
                 
                 <div>
-                    <button class="btn-remarks" onclick="openRemarksModal()">Edit Adviser Remarks</button>
-                    <button class="btn-print" onclick="window.print()">Print Official SF9 Document</button>
+                    <?php if ($db_student): ?>
+                        <button class="btn-remarks" onclick="openRemarksModal()">Edit Adviser Remarks</button>
+                        <button class="btn-print" onclick="window.print()">Print Official SF9 Document</button>
+                    <?php endif; ?>
                 </div>
+                <?php endif; ?>
             </div>
 
             <!-- DOCUMENT DISPLAY CONTAINER -->
             <div class="report-document-wrapper">
+                <?php if ($db_student): ?>
                 <div class="report-document">
                     
                     <!-- PAGE 1: Academic Performance -->
@@ -1155,6 +1243,9 @@ $tot_abs  = array_sum($days_absent);
                     </div>
 
                 </div>
+                <?php else: ?>
+                    <p class="no-print">Select a student from the Master List to view and print their SF9 record.</p>
+                <?php endif; ?>
             </div>
         </main>
     </div>
@@ -1213,7 +1304,7 @@ $tot_abs  = array_sum($days_absent);
             const form = document.getElementById('saveRemarksForm');
             const formData = new FormData(form);
 
-            fetch('save-sf9-remarks.php', {
+            fetch('<?= htmlspecialchars($remarks_save_url) ?>', {
                 method: 'POST',
                 body: formData
             })
@@ -1231,6 +1322,10 @@ $tot_abs  = array_sum($days_absent);
                 alert('An error occurred while attempting to save remarks.');
             });
         }
+
+        <?php if (isset($_GET['print']) && $_GET['print'] === '1' && $db_student): ?>
+        window.addEventListener('load', () => window.print());
+        <?php endif; ?>
     </script>
 </body>
 
