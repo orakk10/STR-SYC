@@ -93,6 +93,17 @@ $sections_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
             body { overflow: auto; }
             main.content { margin-left: 0 !important; width: 100%; height: auto; overflow: visible; padding: 15px; }
             .table-container { overflow-y: visible; max-height: none; }
+            #sidebar.active .sidebar-header h3 { margin-bottom: 0; }
+            #sidebar.active .sidebar-close {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex: 0 0 36px;
+                width: 36px;
+                height: 36px;
+                position: relative;
+                z-index: 1002;
+            }
         }
 
         #sidebar:not(.active) ~ main.content { margin-left: 0; width: 100%; }

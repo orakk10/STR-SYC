@@ -124,11 +124,17 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
         .sidebar { height: 100vh; overflow-y: auto; overflow-x: hidden; box-sizing: border-box; }
 
         @media (max-width: 1024px) { 
-            body { overflow: auto; }
-            main.content { margin-left: 0 !important; width: 100%; height: auto; overflow: visible; padding: 15px; }
+            body { overflow-x: hidden; overflow-y: auto; }
+            .dashboard-wrapper { height: auto; min-height: 100vh; overflow: visible; }
+            main.content { margin-left: 0 !important; width: 100%; min-width: 0; min-height: 100vh; height: auto; overflow: visible; padding: 15px; }
             #curriculumContainer { overflow-y: visible; max-height: none; }
             .grade-grid { grid-template-columns: 1fr !important; } 
             .admin-actions-bar { flex-direction: column; align-items: flex-start; gap: 15px; }
+            .version-switcher { max-width: 100%; overflow-x: auto; }
+            .version-btn { white-space: nowrap; }
+            .modal-content { width: min(460px, calc(100vw - 30px)); max-height: calc(100dvh - 30px); overflow-y: auto; }
+            #sidebar.active .sidebar-header h3 { margin-bottom: 0; }
+            #sidebar.active .sidebar-close { display: flex; align-items: center; justify-content: center; flex: 0 0 36px; width: 36px; height: 36px; position: relative; z-index: 1002; }
         }
 
         #sidebar:not(.active) ~ main.content { margin-left: 0; width: 100%; }

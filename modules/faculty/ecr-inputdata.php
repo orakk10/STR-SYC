@@ -520,6 +520,26 @@ if ($assignment_id > 0) {
                                         This term has already been saved. Its assessment setup cannot be changed.
                                     </p>
                                 <?php endif; ?>
+                                <?php if (isset($_GET['saved'])): ?>
+                                    <p role="status" style="padding: 10px; color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px;">
+                                        Assessment columns updated. They are now reflected in the ECR for this term.
+                                    </p>
+                                <?php elseif (isset($_GET['error'])): ?>
+                                    <?php
+                                    $setup_errors = [
+                                        'assignment_invalid' => 'The selected subject load could not be verified. Please select your assigned class again.',
+                                        'invalid_count' => 'The assessment counts are invalid. Please use the available controls and try again.',
+                                        'term_locked' => 'This term has already been saved. Its assessment setup cannot be changed.',
+                                        'save_failed' => 'The assessment setup could not be saved. No changes were applied; please try again or contact the system administrator.'
+                                    ];
+                                    $setup_error = $setup_errors[$_GET['error']] ?? null;
+                                    ?>
+                                    <?php if ($setup_error !== null): ?>
+                                        <p role="alert" style="padding: 10px; color: #991b1b; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px;">
+                                            <?= htmlspecialchars($setup_error, ENT_QUOTES, 'UTF-8') ?>
+                                        </p>
+                                    <?php endif; ?>
+                                <?php endif; ?>
                                 <form id="assessmentSetupForm" action="save-assessment-setup.php" method="POST">
                                     <input type="hidden" name="assignment_id" value="<?= $assignment_id ?>">
                                     <input type="hidden" name="term" value="Term <?= $term ?>">

@@ -261,7 +261,7 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
         #sidebar:not(.active) ~ main.content { margin-left: 0; width: 100%; }
 
         .admin-layout {
-            display: grid; grid-template-columns: 380px 1fr; gap: 20px;
+            display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 20px;
             margin-top: 15px; align-items: start; flex: 1; min-height: 0; overflow: hidden;
         }
 
@@ -306,7 +306,7 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .table-container {
             background: white; padding: 20px; border-radius: 12px;
             border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-            height: 100%; overflow-y: auto; box-sizing: border-box;
+            min-width: 0; height: 100%; overflow: auto; box-sizing: border-box;
         }
 
         .mobile-toggle { display: none; z-index: 999; }
@@ -314,9 +314,16 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .sidebar { height: 100vh; overflow-y: auto; box-sizing: border-box; }
 
         @media (max-width: 1024px) {
-            body { overflow: auto; }
-            main.content { margin-left: 0 !important; width: 100%; height: auto; overflow: visible; padding: 15px; }
-            .admin-layout { grid-template-columns: 1fr; overflow: visible; }
+            body { overflow-x: hidden; overflow-y: auto; }
+            .dashboard-wrapper { height: auto; min-height: 100vh; overflow: visible; }
+            main.content { margin-left: 0 !important; width: 100%; min-width: 0; min-height: 100vh; height: auto; overflow: visible; padding: 15px; }
+            .admin-layout { grid-template-columns: minmax(0, 1fr); flex: none; min-height: auto; overflow: visible; }
+            .table-container { height: auto; overflow-x: auto; overflow-y: visible; }
+            .table-container > div:first-child form { flex-wrap: wrap; max-width: 100%; }
+            .table-container > div:first-child form select { flex: 1 1 130px; min-width: 0; max-width: 100%; }
+            .table-container table { min-width: 700px; }
+            #sidebar.active .sidebar-header h3 { margin-bottom: 0; }
+            #sidebar.active .sidebar-close { display: flex; align-items: center; justify-content: center; flex: 0 0 36px; width: 36px; height: 36px; position: relative; z-index: 1002; }
         }
     </style>
 </head>

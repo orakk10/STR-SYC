@@ -127,8 +127,17 @@ $strands_list = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")->
             }
 
             #sidebar.active .sidebar-close {
-                display: block;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex: 0 0 36px;
+                width: 36px;
+                height: 36px;
+                position: relative;
+                z-index: 1002;
             }
+
+            #sidebar.active .sidebar-header h3 { margin-bottom: 0; }
         }
 
         #sidebar:not(.active) ~ main.content { 

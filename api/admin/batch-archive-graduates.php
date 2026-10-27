@@ -1,100 +1,106 @@
 <?php
-// api/admin/batch-archive-graduates.php
 header('Content-Type: application/json');
 session_start();
 
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../core/GraduateArchive.php';
 
-// Authorization check: Admin only
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    http_response_code(403);
-    echo json_encode(['status' => 'error', 'message' => 'Access denied. Administrator privileges required.']);
+function respond(int $statusCode, array $payload): void
+{
+    http_response_code($statusCode);
+    echo json_encode($payload);
     exit();
+}
+
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
+    respond(403, ['status' => 'error', 'message' => 'Access denied. Administrator privileges required.']);
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+    respond(405, ['status' => 'error', 'message' => 'Only POST requests are allowed.']);
 }
 
 $data = json_decode(file_get_contents('php://input'), true);
-
-if (!isset($data['section_id'], $data['batch_year'])) {
-    http_response_code(400);
-    echo json_encode(['status' => 'error', 'message' => 'Missing section_id or batch_year parameter.']);
-    exit();
-}
-
-$sectionId = (int)$data['section_id'];
-$batchYear = (int)$data['batch_year'];
-if ($sectionId <= 0 || $batchYear < 1901 || $batchYear > 2155) {
-    http_response_code(400);
-    echo json_encode(['status' => 'error', 'message' => 'Invalid section_id or batch_year.']);
-    exit();
+$sectionId = is_array($data) && isset($data['section_id'])
+    ? filter_var($data['section_id'], FILTER_VALIDATE_INT)
+    : false;
+if (!$sectionId || $sectionId < 1) {
+    respond(400, ['status' => 'error', 'message' => 'A valid section_id is required.']);
 }
 
 $db = null;
-
 try {
     $db = getDBConnection();
     $db->beginTransaction();
 
-    $sectionStmt = $db->prepare("SELECT grade_level FROM sections WHERE id = :section_id FOR UPDATE");
+    $sectionStmt = $db->prepare("
+        SELECT id, grade_level
+        FROM sections
+        WHERE id = :section_id
+        FOR UPDATE
+    ");
     $sectionStmt->execute(['section_id' => $sectionId]);
-    $gradeLevel = $sectionStmt->fetchColumn();
-    if ($gradeLevel === false) {
+    $section = $sectionStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$section) {
         $db->rollBack();
-        http_response_code(404);
-        echo json_encode(['status' => 'error', 'message' => 'Section was not found.']);
-        exit();
+        respond(404, ['status' => 'error', 'message' => 'Section was not found.']);
     }
-    if ((int)$gradeLevel !== 12) {
+    if ((int) $section['grade_level'] !== 12) {
         $db->rollBack();
-        http_response_code(409);
-        echo json_encode(['status' => 'error', 'message' => 'Only Grade 12 students can be archived.']);
-        exit();
+        respond(409, ['status' => 'error', 'message' => 'Only Grade 12 students can be archived.']);
     }
 
-    // Archive only Grade 12 students; Grade 11 remains active.
-    $stmtArchive = $db->prepare("
-        INSERT INTO archived_students (original_id, lrn, username, full_name, strand_id, section_id, batch_year, archived_at)
-        SELECT 
-            u.id, u.lrn, u.username, u.full_name, s.strand_id, u.section_id, :batch_year, NOW()
+    $studentsStmt = $db->prepare("
+        SELECT u.id, u.lrn, u.username, u.full_name, u.section_id,
+               s.strand_id, s.academic_year
         FROM users u
-        INNER JOIN sections s ON u.section_id = s.id
-        WHERE u.section_id = :section_id AND u.role = 'student' AND s.grade_level = 12
-    ");
-    $stmtArchive->execute([
-        'batch_year' => $batchYear,
-        'section_id' => $sectionId
-    ]);
-
-    $archivedCount = $stmtArchive->rowCount();
-
-    // 2. Update user roles to 'alumni' and decouple active section_id
-    $stmtUpdateUsers = $db->prepare("
-        UPDATE users u
         INNER JOIN sections s ON s.id = u.section_id
-        SET u.role = 'alumni', u.section_id = NULL
-        WHERE u.section_id = :section_id AND u.role = 'student' AND s.grade_level = 12
+        WHERE u.section_id = :section_id
+          AND u.role = 'student'
+          AND s.grade_level = 12
+        ORDER BY u.id
+        FOR UPDATE
     ");
-    $stmtUpdateUsers->execute(['section_id' => $sectionId]);
+    $studentsStmt->execute(['section_id' => $sectionId]);
+    $students = $studentsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // 3. Log Activity
-    $stmtLog = $db->prepare("
+    foreach ($students as $student) {
+        archiveGraduateRecord($db, $student);
+    }
+
+    if (!empty($students)) {
+        $studentIds = array_map('intval', array_column($students, 'id'));
+        $placeholders = implode(',', array_fill(0, count($studentIds), '?'));
+        $updateStmt = $db->prepare("
+            UPDATE users
+            SET role = 'alumni', section_id = NULL
+            WHERE role = 'student' AND id IN ($placeholders)
+        ");
+        $updateStmt->execute($studentIds);
+    }
+
+    $logStmt = $db->prepare("
         INSERT INTO activity_logs (user_id, action, affected_table, ip_address)
-        VALUES (:uid, :action, 'archived_students', :ip)
+        VALUES (:user_id, :action, 'archived_students', :ip_address)
     ");
-    $stmtLog->execute([
-        'uid'    => $_SESSION['user_id'],
-        'action' => "Archived {$archivedCount} graduating students from section_id: {$sectionId} (Batch {$batchYear}).",
-        'ip'     => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+    $logStmt->execute([
+        'user_id' => (int) $_SESSION['user_id'],
+        'action' => 'Archived ' . count($students)
+            . ' Grade 12 students from section ' . $sectionId
+            . ' as alumni using the section academic year.',
+        'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
     ]);
 
     $db->commit();
-
-    echo json_encode([
-        'status'  => 'success',
-        'message' => "Successfully archived {$archivedCount} students for batch year {$batchYear}."
+    respond(200, [
+        'status' => 'success',
+        'archived_count' => count($students),
+        'message' => 'Archived ' . count($students) . ' Grade 12 students using their section academic year.',
     ]);
-
-} catch (PDOException $e) {
-    if ($db->inTransaction()) $db->rollBack();
-    http_response_code(500);
-    echo json_encode(['status' => 'error', 'message' => 'Database error: ' . $e->getMessage()]);
+} catch (Throwable $e) {
+    if ($db instanceof PDO && $db->inTransaction()) {
+        $db->rollBack();
+    }
+    error_log('Batch graduate archive failed: ' . $e->getMessage());
+    respond(500, ['status' => 'error', 'message' => 'Unable to archive the Grade 12 section. Please try again.']);
 }

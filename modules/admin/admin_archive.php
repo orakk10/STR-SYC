@@ -19,6 +19,27 @@ $archive_list = $conn->query($query)->fetchAll(PDO::FETCH_ASSOC);
 // Fetch unique years and strands for the filter dropdowns
 $years_query = $conn->query("SELECT DISTINCT batch_year FROM archived_students ORDER BY batch_year DESC")->fetchAll(PDO::FETCH_ASSOC);
 $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+
+$grade11_sections = $conn->query("
+    SELECT s.id, s.section_name, s.strand_id, s.academic_year, s.curriculum_version,
+           COALESCE(st.strand_name, 'General / Multi-Cluster') AS strand_name,
+           COUNT(u.id) AS student_count
+    FROM sections s
+    INNER JOIN users u ON u.section_id = s.id AND u.role = 'student'
+    LEFT JOIN strands st ON st.id = s.strand_id
+    WHERE s.grade_level = 11
+    GROUP BY s.id, s.section_name, s.strand_id, s.academic_year, s.curriculum_version, st.strand_name
+    ORDER BY s.academic_year DESC, s.section_name ASC
+")->fetchAll(PDO::FETCH_ASSOC);
+
+$grade12_sections = $conn->query("
+    SELECT s.id, s.section_name, s.strand_id, s.academic_year, s.curriculum_version,
+           COALESCE(st.strand_name, 'General / Multi-Cluster') AS strand_name
+    FROM sections s
+    LEFT JOIN strands st ON st.id = s.strand_id
+    WHERE s.grade_level = 12
+    ORDER BY s.academic_year DESC, s.section_name ASC
+")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -161,6 +182,63 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")-
             transform: scale(1.02); 
         }
 
+        .promotion-banner {
+            background: #334155;
+            color: white;
+            padding: 22px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            display: grid;
+            grid-template-columns: minmax(260px, 1fr) minmax(360px, 1fr);
+            align-items: center;
+            gap: 24px;
+        }
+
+        .promotion-banner h2 {
+            margin: 0 0 6px;
+            font-size: 1.15rem;
+        }
+
+        .promotion-banner p {
+            margin: 0;
+            opacity: 0.85;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .promotion-controls {
+            display: grid;
+            gap: 8px;
+        }
+
+        .promotion-controls select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 7px;
+            font-size: 0.9rem;
+        }
+
+        .promotion-controls select:disabled {
+            background: #cbd5e1;
+            color: #475569;
+        }
+
+        .btn-promote {
+            justify-self: start;
+            background: #ef4444;
+            color: white;
+            border: 0;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+        }
+
+        .btn-promote:hover {
+            background: #dc2626;
+        }
+
         /* --- BURGER TOGGLE UTILITIES --- */
         .mobile-toggle {
             display: none;
@@ -264,6 +342,10 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")-
                 text-align: center; 
                 gap: 20px; 
             }
+            .promotion-banner {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
         }
 
         #sidebar:not(.active) ~ main.content { 
@@ -305,7 +387,9 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")-
             <?php if (isset($_GET['status'])): ?>
                 <?php
                     $statusMessages = [
-                        'success' => ['Grade 12 archive completed. Grade 11 students were left active; archived accounts were retained as alumni.', '#dcfce7', '#166534', '#bbf7d0'],
+                        'archived' => ['Grade 12 archive completed. Alumni batch years were taken from their sections’ academic years; existing archive records were updated, not duplicated.', '#dcfce7', '#166534', '#bbf7d0'],
+                        'promoted' => ['Students verified for every subject assignment were moved to Grade 12. Students missing any verification remained in Grade 11.', '#dcfce7', '#166534', '#bbf7d0'],
+                        'no_students' => ['No eligible students were found for that operation. No records were changed.', '#fffbeb', '#92400e', '#fef3c7'],
                         'restored' => ['Student account restored successfully.', '#dcfce7', '#166534', '#bbf7d0'],
                         'error' => ['The requested archive operation could not be completed. No records were changed.', '#fee2e2', '#991b1b', '#fecaca']
                     ];
@@ -321,12 +405,42 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")-
             <div class="archive-banner">
                 <div>
                     <h3 style="margin: 0; font-size: 1.2rem;">Run End-of-Year Archive</h3>
-                    <p style="margin: 5px 0 0; opacity: 0.8; font-size: 0.9rem;">This archives currently active Grade 12 students for batch year <?php echo date("Y"); ?>. Grade 11 students remain active. Archived accounts are retained and changed to alumni.</p>
+                    <p style="margin: 5px 0 0; opacity: 0.8; font-size: 0.9rem;">This archives currently active Grade 12 students as alumni. Each graduate’s batch year is taken from their section’s academic year; Grade 11 students remain active.</p>
                 </div>
-                <form action="process_archive.php" method="POST" onsubmit="return confirm('Archive all currently active Grade 12 students as alumni for <?= date('Y') ?>? Grade 11 students will remain active.')">
+                <form action="process_archive.php" method="POST" onsubmit="return confirm('Archive all currently active Grade 12 students as alumni using each section academic year?')">
                     <button type="submit" name="trigger_archive" class="btn-run-archive">📦 Start Archiving</button>
                 </form>
             </div>
+
+            <section class="promotion-banner">
+                <div>
+                    <h2>Promote Grade 11 Students</h2>
+                    <p>Choose the current Grade 11 section and its Grade 12 destination. Students must be verified for every subject assignment before they can move.</p>
+                </div>
+                <form class="promotion-controls" action="process_promote.php" method="POST" onsubmit="return confirm('Promote only students verified for every subject assignment to the selected Grade 12 section?')">
+                    <select id="sourceSection" name="source_section_id" required>
+                        <option value="">Select Grade 11 section</option>
+                        <?php foreach ($grade11_sections as $section): ?>
+                            <option
+                                value="<?php echo (int) $section['id']; ?>"
+                                data-strand="<?php echo (int) ($section['strand_id'] ?? 0); ?>"
+                                data-curriculum="<?php echo htmlspecialchars($section['curriculum_version'], ENT_QUOTES, 'UTF-8'); ?>"
+                            ><?php echo htmlspecialchars($section['section_name'] . ' · ' . $section['strand_name'] . ' · ' . $section['academic_year'] . ' (' . (int) $section['student_count'] . ' students)', ENT_QUOTES, 'UTF-8'); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <select id="destinationSection" name="destination_section_id" required disabled>
+                        <option value="">Select Grade 12 destination</option>
+                        <?php foreach ($grade12_sections as $section): ?>
+                            <option
+                                value="<?php echo (int) $section['id']; ?>"
+                                data-strand="<?php echo (int) ($section['strand_id'] ?? 0); ?>"
+                                data-curriculum="<?php echo htmlspecialchars($section['curriculum_version'], ENT_QUOTES, 'UTF-8'); ?>"
+                            ><?php echo htmlspecialchars($section['section_name'] . ' · ' . $section['strand_name'] . ' · ' . $section['academic_year'], ENT_QUOTES, 'UTF-8'); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <button type="submit" class="btn-promote" id="promoteButton" disabled>Promote Verified Students</button>
+                </form>
+            </section>
 
             <div class="filter-bar">
                 <div class="filter-group" style="flex: 2;">
@@ -390,6 +504,35 @@ $strands_query = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")-
     </div>
 
     <script>
+        const sourceSection = document.getElementById('sourceSection');
+        const destinationSection = document.getElementById('destinationSection');
+        const promoteButton = document.getElementById('promoteButton');
+        const destinationOptions = Array.from(destinationSection.options).slice(1);
+
+        sourceSection.addEventListener('change', function () {
+            const selectedSource = sourceSection.options[sourceSection.selectedIndex];
+            const sourceStrand = selectedSource.dataset.strand;
+            const sourceCurriculum = selectedSource.dataset.curriculum;
+            let hasDestination = false;
+
+            destinationOptions.forEach(function (option) {
+                const matches = Boolean(sourceSection.value)
+                    && option.dataset.strand === sourceStrand
+                    && option.dataset.curriculum === sourceCurriculum;
+                option.hidden = !matches;
+                option.disabled = !matches;
+                hasDestination = hasDestination || matches;
+            });
+
+            destinationSection.value = '';
+            destinationSection.disabled = !hasDestination;
+            promoteButton.disabled = !hasDestination;
+        });
+
+        destinationSection.addEventListener('change', function () {
+            promoteButton.disabled = !destinationSection.value;
+        });
+
         function toggleSidebar() { 
             const sidebar = document.getElementById('sidebar');
             const burger = document.getElementById('mobileBurger');
