@@ -17,7 +17,7 @@ if ($session_role !== 'student') {
 
 $user_id = $_SESSION['user_id'];
 
-$query = "SELECT u.full_name, u.username as lrn, u.section_id, s.id as sec_id, s.section_name, s.grade_level, str.strand_name 
+$query = "SELECT u.full_name, u.username as lrn, u.section_id, u.require_reset, s.id as sec_id, s.section_name, s.grade_level, str.strand_name
           FROM users u 
           LEFT JOIN sections s ON u.section_id = s.id 
           LEFT JOIN strands str ON s.strand_id = str.id
@@ -224,6 +224,21 @@ if ($current_section_id) {
             border-radius: 8px;
             font-weight: 700;
             border: 1px solid #bbf7d0;
+        }
+
+        .temporary-password-notice {
+            background: #fffbeb;
+            border: 1px solid #fcd34d;
+            border-left: 5px solid #f59e0b;
+            border-radius: 8px;
+            color: #92400e;
+            padding: 14px 18px;
+            margin-bottom: 24px;
+        }
+
+        .temporary-password-notice a {
+            color: #78350f;
+            font-weight: 700;
         }
 
         .stats-grid {
@@ -506,6 +521,13 @@ if ($current_section_id) {
 
         <main class="content">
             <button class="mobile-toggle" id="mobileBurger" onclick="toggleSidebar()">☰</button>
+
+            <?php if (!empty($student_data['require_reset'])): ?>
+                <div class="temporary-password-notice" role="alert">
+                    <strong>Your account is using a temporary password.</strong>
+                    For your security, change it now in <a href="student_profile.php">Account Settings</a>.
+                </div>
+            <?php endif; ?>
 
             <div class="welcome-card">
                 <h1 style="margin: 0 0 8px 0; font-size: 2rem; font-weight: 700;">Hello, <?php echo htmlspecialchars(explode(' ', $student_data['full_name'] ?? 'Student')[0]); ?>!</h1>

@@ -34,14 +34,17 @@ $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
     
-    $username = trim($_POST['username'] ?? '');
+    $identifier = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
 
-    if (!empty($username) && !empty($password)) {
+    if (!empty($identifier) && !empty($password)) {
         $db = getDBConnection();
         
-        $stmt = $db->prepare("SELECT id, username, password, role, full_name, section_id FROM users WHERE username = :username LIMIT 1");
-        $stmt->execute(['username' => $username]);
+        $stmt = $db->prepare("SELECT id, username, password, role, full_name, section_id FROM users WHERE username = :username OR lrn = :lrn LIMIT 1");
+        $stmt->execute([
+            'username' => $identifier,
+            'lrn' => $identifier
+        ]);
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password'])) {

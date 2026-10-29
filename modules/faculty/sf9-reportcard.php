@@ -791,6 +791,56 @@ $tot_abs  = array_sum($days_absent);
         }
 
         @media screen and (max-width: 600px) {
+            .sf9-toolbar {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 12px;
+                padding: 12px;
+            }
+
+            .sf9-toolbar .toolbar-title {
+                flex-direction: column;
+                align-items: stretch !important;
+                gap: 8px !important;
+            }
+
+            .sf9-toolbar .mobile-burger-btn {
+                align-self: flex-start;
+                margin: 0;
+            }
+
+            .sf9-toolbar #studentSelectForm {
+                flex-direction: column;
+                align-items: stretch !important;
+                gap: 8px !important;
+            }
+
+            .sf9-toolbar #studentSelectForm > div {
+                flex-direction: column;
+                align-items: stretch !important;
+                gap: 4px !important;
+            }
+
+            .sf9-toolbar #studentSelectForm select {
+                width: 100%;
+                min-width: 0;
+            }
+
+            .sf9-toolbar .toolbar-actions {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .sf9-toolbar .toolbar-actions button,
+            .sf9-toolbar > .btn-print {
+                width: 100%;
+            }
+
+            .sf9-toolbar .btn-remarks {
+                margin-right: 0;
+            }
+
             .report-document {
                 flex-direction: column !important;
             }
@@ -974,7 +1024,7 @@ $tot_abs  = array_sum($days_absent);
                     </form>
                 </div>
                 
-                <div>
+                <div class="toolbar-actions">
                     <?php if ($db_student): ?>
                         <button class="btn-remarks" onclick="openRemarksModal()">Edit Adviser Remarks</button>
                         <button class="btn-print" onclick="window.print()">Print Official SF9 Document</button>

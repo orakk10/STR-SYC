@@ -16,6 +16,10 @@ $user_role = strtolower($_SESSION['role']);
 $is_adviser_or_admin = in_array($user_role, ['adviser', 'admin']);
 $success_msg = "";
 
+$reset_query = $pdo->prepare("SELECT require_reset FROM users WHERE id = ?");
+$reset_query->execute([$user_id]);
+$require_password_change = (bool) $reset_query->fetchColumn();
+
 // 1. Process Announcement Broadcast
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['post_announcement'])) {
     $title      = trim($_POST['title'] ?? '');
@@ -306,6 +310,11 @@ if ($section_data) {
                 <li>
                     <a href="ecr-summary.php" class="<?= basename($_SERVER['PHP_SELF']) == 'ecr-summary.php' ? 'active' : '' ?>">ECR Summary</a>
                 </li>
+                <?php if (in_array($user_role, ['faculty', 'adviser'], true)): ?>
+                    <li>
+                        <a href="change_password.php">Change Password</a>
+                    </li>
+                <?php endif; ?>
 
                 <?php if ($is_adviser_or_admin): ?>
                     <!-- Official DepEd Advisory Forms Section -->
@@ -335,6 +344,13 @@ if ($section_data) {
                 <h1>Teacher Overview</h1>
                 <p>Logged in as: <strong><?php echo ucfirst(htmlspecialchars($user_role)); ?></strong></p>
             </header>
+
+            <?php if ($require_password_change && in_array($user_role, ['faculty', 'adviser'], true)): ?>
+                <div class="alert-warning" role="alert" style="background: #fffbeb; border: 1px solid #fcd34d; border-left: 5px solid #f59e0b; border-radius: 8px; color: #92400e; padding: 14px 18px; margin-bottom: 24px;">
+                    <strong>Your account is using a temporary password.</strong>
+                    For your security, <a href="change_password.php" style="color: #78350f; font-weight: 700;">change it now</a>.
+                </div>
+            <?php endif; ?>
 
             <?php if ($success_msg): ?>
                 <div class="alert-success">✅ <?php echo htmlspecialchars($success_msg); ?></div>

@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 if ($res && password_verify($current_password, $res['password'])) {
                     $new_hashed = password_hash($new_password, PASSWORD_BCRYPT);
-                    $pass_update = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
+                    $pass_update = $conn->prepare("UPDATE users SET password = ?, require_reset = 0 WHERE id = ?");
                     $pass_update->execute([$new_hashed, $user_id]);
                     $message = "Password modified securely and updated successfully.";
                     $message_type = "success";
@@ -154,7 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Fetch Latest Student Record Info + Extended Metadata from Profile Relationship Table
-$query = "SELECT u.full_name, u.username as lrn, u.profile_image, s.section_name, s.grade_level, str.strand_name,
+$query = "SELECT u.full_name, u.username as lrn, u.profile_image, u.require_reset, s.section_name, s.grade_level, str.strand_name,
                  sp.birthdate, sp.gender, sp.address, sp.contact_no, sp.guardian_name, sp.guardian_contact, sp.specialization
           FROM users u 
           LEFT JOIN sections s ON u.section_id = s.id 
@@ -336,6 +336,11 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
             color: #b91c1c; 
             border: 1px solid #fca5a5; 
         }
+        .alert-warning {
+            background: #fffbeb;
+            color: #92400e;
+            border: 1px solid #fcd34d;
+        }
 
         /* --- BURGER TOGGLE UTILITIES --- */
         .mobile-toggle { 
@@ -489,6 +494,13 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
             <?php if (!empty($message)): ?>
                 <div class="alert alert-<?php echo $message_type; ?>">
                     <?php echo htmlspecialchars($message); ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($student_data['require_reset'])): ?>
+                <div class="alert alert-warning" role="alert">
+                    <strong>Your account is using a temporary password.</strong>
+                    Change it below to secure your account.
                 </div>
             <?php endif; ?>
 

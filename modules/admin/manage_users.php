@@ -8,6 +8,10 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit();
 }
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 $min_age_date = date('Y-m-d', strtotime('-16 years'));
 
 $where_clause = "WHERE u.role <> 'super_admin'";
@@ -420,7 +424,35 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
         }
 
         function deleteUser(id) { if(confirm("Permanently delete this user?")) window.location.href = `delete_user.php?id=${id}`; }
-        function resetPassword(id) { if(confirm("Reset password to 'strand1234'?")) window.location.href = `admin_perform_reset.php?id=${id}`; }
+        const csrfToken = <?php echo json_encode($_SESSION['csrf_token'], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+
+        async function resetPassword(id) {
+            if (!confirm("Generate a unique temporary password for this account? The user will need to change it at next login.")) return;
+
+            try {
+                const response = await fetch('admin_perform_reset.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken
+                    },
+                    body: JSON.stringify({ id })
+                });
+                const result = await response.json();
+
+                if (!response.ok || result.status !== 'success') {
+                    throw new Error(result.message || 'Password reset failed.');
+                }
+
+                window.prompt(
+                    'Temporary password (copy it now; it will not be shown again):',
+                    result.temporary_password
+                );
+                window.location.reload();
+            } catch (error) {
+                alert(error.message || 'Password reset failed. Please try again.');
+            }
+        }
 
         function viewProfile(userId) {
             fetch(`get_profile.php?id=${userId}`)
