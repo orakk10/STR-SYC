@@ -3,25 +3,25 @@
 // Dynamic base path auto-detection for modules/auth/ endpoints
 const BASE_AUTH_URL = window.location.pathname.includes('/modules/auth/') 
     ? '' 
-    : '/str-syc/modules/auth/';
+    : '/modules/auth/';
 
 // Idle Timeout Configuration (5 minutes = 300,000 milliseconds)
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
 let idleTimer = null;
 let isAppLocked = false;
 
-document.addEventListener("DOMContentLoaded", () => {
-    checkAppLockStatus();
-    initIdleTimer();
-});
-
-document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-        checkAppLockStatus(true);
+// -------------------------------------------------------------
+// UTILITY HELPERS (Must be loaded prior to API execution)
+// -------------------------------------------------------------
+function arrayBufferToBase64(buffer) {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
     }
-});
+    return window.btoa(binary);
+}
 
-// Helper function to safely decode Base64 and Base64URL strings
 function base64ToUint8Array(base64String) {
     if (!base64String) return new Uint8Array(0);
     
@@ -39,15 +39,24 @@ function base64ToUint8Array(base64String) {
     return outputArray;
 }
 
+document.addEventListener("DOMContentLoaded", () => {
+    checkAppLockStatus();
+    initIdleTimer();
+});
+
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+        checkAppLockStatus(true);
+    }
+});
+
 // -------------------------------------------------------------
 // IDLE TIMEOUT LOGIC
 // -------------------------------------------------------------
 function initIdleTimer() {
-    // List of events that signal user activity
     const activityEvents = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
 
     const resetTimer = () => {
-        // Only reset timer if app is not currently locked
         if (isAppLocked) return;
 
         if (idleTimer) clearTimeout(idleTimer);
@@ -58,12 +67,10 @@ function initIdleTimer() {
         }, IDLE_TIMEOUT_MS);
     };
 
-    // Attach passive activity listeners to window
     activityEvents.forEach(eventType => {
         window.addEventListener(eventType, resetTimer, { passive: true });
     });
 
-    // Start initial timer
     resetTimer();
 }
 
@@ -72,7 +79,9 @@ function initIdleTimer() {
 // -------------------------------------------------------------
 async function checkAppLockStatus(isUserResume = false) {
     try {
-        const response = await fetch(`${BASE_AUTH_URL}get-user-security-preference.php`);
+        const response = await fetch(`${BASE_AUTH_URL}get-user-security-preference.php`, {
+            credentials: 'same-origin'
+        });
         if (!response.ok) return;
 
         const data = await response.json();
@@ -112,7 +121,9 @@ async function registerFingerprint() {
     }
 
     try {
-        const res = await fetch(`${BASE_AUTH_URL}register-biometric.php?action=get_options`);
+        const res = await fetch(`${BASE_AUTH_URL}register-biometric.php?action=get_options`, {
+            credentials: 'same-origin'
+        });
         const options = await res.json();
 
         if (!options.success) {
@@ -148,6 +159,7 @@ async function registerFingerprint() {
         const saveRes = await fetch(`${BASE_AUTH_URL}register-biometric.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify({
                 id: credential.id,
                 rawId: arrayBufferToBase64(credential.rawId),
@@ -182,7 +194,9 @@ async function triggerFingerprintScan(isAutoPrompt = false) {
     }
 
     try {
-        const response = await fetch(`${BASE_AUTH_URL}get-biometric-challenge.php`);
+        const response = await fetch(`${BASE_AUTH_URL}get-biometric-challenge.php`, {
+            credentials: 'same-origin'
+        });
         const options = await response.json();
 
         if (!options.success) {
@@ -222,6 +236,7 @@ async function triggerFingerprintScan(isAutoPrompt = false) {
         const verifyRes = await fetch(`${BASE_AUTH_URL}verify-biometric.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify(authPayload)
         });
 
@@ -248,18 +263,17 @@ async function verifyPinOrPattern(inputVal, type = 'pin') {
         return;
     }
 
-    const formData = new FormData();
-    formData.append('type', type);
-    if (type === 'pin') {
-        formData.append('pin', inputVal.trim());
-    } else {
-        formData.append('pattern', inputVal.trim());
-    }
+    const payload = {
+        type: type,
+        [type]: inputVal.trim()
+    };
 
     try {
         const response = await fetch(`${BASE_AUTH_URL}verify-pin.php`, {
             method: 'POST',
-            body: formData
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload)
         });
 
         const result = await response.json();
@@ -404,7 +418,7 @@ function resetUnlockPatternCanvas() {
 // 6. UI Helper Functions
 // -------------------------------------------------------------
 function showAppLockOverlay(mode = 'pin') {
-    isAppLocked = true; // Set lock flag
+    isAppLocked = true;
 
     let overlay = document.getElementById('securityLockOverlay');
     if (!overlay) {
@@ -424,23 +438,13 @@ function showAppLockOverlay(mode = 'pin') {
 }
 
 function unlockAppScreen() {
-    isAppLocked = false; // Reset lock flag
+    isAppLocked = false;
     const overlay = document.getElementById('securityLockOverlay');
     if (overlay) {
         overlay.classList.remove('active');
     }
-    // Reset inactivity timer after unlocking
     if (idleTimer) clearTimeout(idleTimer);
     initIdleTimer();
-}
-
-function arrayBufferToBase64(buffer) {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
 }
 
 // -------------------------------------------------------------
@@ -454,7 +458,7 @@ function createLockOverlayElement() {
         <div class="security-lock-box">
             <div class="lock-icon">🔒</div>
             <h3>App Locked</h3>
-            <p>Please authenticate to access Strand-Sync.</p>
+            <p>Please authenticate to access STRAND-SYNC.</p>
             
             <!-- Biometric Section -->
             <div class="lock-section lock-section-biometric" style="display: none;">

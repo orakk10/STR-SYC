@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../config/database.php';
 
 header('Content-Type: application/json');
 
+// 1. Authorization check
 if (!isset($_SESSION['user_id'])) {
     echo json_encode(['success' => false, 'message' => 'Unauthorized access.']);
     exit;
@@ -14,8 +15,8 @@ $conn = getDBConnection();
 $user_id = intval($_SESSION['user_id']);
 
 try {
-    // Retrieve stored WebAuthn credential ID for current user
-    $stmt = $conn->prepare("SELECT credential_id FROM user_biometric_credentials WHERE user_id = :user_id LIMIT 1");
+    // 2. Fetch active registered WebAuthn credential ID for user
+    $stmt = $conn->prepare("SELECT credential_id FROM user_biometric_credentials WHERE user_id = :user_id ORDER BY created_at DESC LIMIT 1");
     $stmt->execute(['user_id' => $user_id]);
     $cred = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -27,15 +28,21 @@ try {
         exit;
     }
 
+    // 3. Generate secure cryptographic challenge
     $challenge = random_bytes(32);
     $_SESSION['biometric_auth_challenge'] = base64_encode($challenge);
 
+    // 4. Return challenge and allowed credential ID to client JS
     echo json_encode([
         'success' => true,
         'challenge' => $_SESSION['biometric_auth_challenge'],
         'credentialId' => $cred['credential_id']
     ]);
+} catch (PDOException $e) {
+    error_log("Get Biometric Challenge DB Error: " . $e->getMessage());
+    echo json_encode(['success' => false, 'message' => 'Database exception encountered.']);
 } catch (Exception $e) {
-    echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    error_log("Get Biometric Challenge Error: " . $e->getMessage());
+    echo json_encode(['success' => false, 'message' => 'Server error: ' . $e->getMessage()]);
 }
 exit;

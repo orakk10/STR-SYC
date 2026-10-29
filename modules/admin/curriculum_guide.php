@@ -10,12 +10,13 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 }
 
 // 2. Active Curriculum Filter Selection
-$curriculum_version =$_GET['version'] ?? 'Strengthened';
-if (!in_array($curriculum_version, ['Legacy', 'Strengthened'])) {$curriculum_version = 'Strengthened';
+$curriculum_version = $_GET['version'] ?? 'Strengthened';
+if (!in_array($curriculum_version, ['Legacy', 'Strengthened'])) {
+    $curriculum_version = 'Strengthened';
 }
 
 // 3. Fetch Strands for Dropdowns
-$strands_list =$conn->query("SELECT id, strand_name FROM strands ORDER BY strand_name ASC")->fetchAll();
+$strands_list = $conn->query("SELECT id, strand_name FROM strands ORDER BY strand_name ASC")->fetchAll();
 
 // 4. Fetch Subjects Filtered by Selected Curriculum Version
 $query = "SELECT s.*, COALESCE(st.strand_name, 'Universal Core / All Tracks') AS strand_name 
@@ -25,11 +26,12 @@ $query = "SELECT s.*, COALESCE(st.strand_name, 'Universal Core / All Tracks') AS
           ORDER BY strand_name ASC, s.grade_level ASC, s.`term` ASC";
 
 $stmt = $conn->prepare($query);
-$stmt->execute(['version' =>$curriculum_version]);
-$subjects_list =$stmt->fetchAll();
+$stmt->execute(['version' => $curriculum_version]);
+$subjects_list = $stmt->fetchAll();
 
 $curriculum = [];
-foreach ($subjects_list as $row) {$curriculum[$row['strand_name']][$row['grade_level']][$row['term']][] =$row;
+foreach ($subjects_list as $row) {
+    $curriculum[$row['strand_name']][$row['grade_level']][$row['term']][] = $row;
 }
 $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
 ?>
@@ -43,7 +45,7 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
         body { 
-            margin: 0; padding: 0; overflow: hidden; 
+            margin: 0; padding: 0; overflow-x: hidden; 
             font-family: 'Inter', system-ui, sans-serif; background-color: #f8fafc;
         }
 
@@ -54,10 +56,10 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
         main.content { 
             flex-grow: 1; margin-left: 260px; padding: 25px 30px; background: #f8fafc; 
             height: 100vh; width: 100%; box-sizing: border-box; display: flex; flex-direction: column;
-            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden; 
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1); overflow-y: auto; 
         }
 
-        #curriculumContainer { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
+        #curriculumContainer { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; touch-action: pan-y; }
         
         .version-switcher {
             display: flex; gap: 10px; background: #e2e8f0; padding: 4px; border-radius: 10px; margin-bottom: 15px; width: fit-content;
@@ -67,17 +69,24 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
         }
         .version-btn.active { background: #ffffff; color: #2563eb; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 
+        /* Swipeable Tab Navigation Container */
         .tab-container { 
             display: flex; gap: 8px; border-bottom: 2px solid #e5e7eb; 
             margin-bottom: 20px; overflow-x: auto; flex-shrink: 0;
+            -webkit-overflow-scrolling: touch; scrollbar-width: none;
+            touch-action: pan-x;
         }
+        .tab-container::-webkit-scrollbar { display: none; }
+
         .strand-tab { 
             padding: 10px 18px; cursor: pointer; border: none; background: none; 
             font-weight: 600; color: #64748b; border-bottom: 3px solid transparent; 
-            white-space: nowrap; transition: 0.2s; font-size: 0.88rem;
+            white-space: nowrap; transition: 0.2s; font-size: 0.88rem; flex-shrink: 0;
         }
         .strand-tab.active { color: #2563eb; border-bottom-color: #2563eb; }
-        .strand-content { display: none; }
+        
+        /* Swipeable Strand Content Panels */
+        .strand-content { display: none; touch-action: pan-y; }
         .strand-content.active { display: block; animation: slideDown 0.3s ease-out; }
 
         @keyframes slideDown { from { transform: translateY(-8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -101,13 +110,24 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
         .sem-3 { background: #f0fdf4; color: #16a34a; }
         .sem-full { background: #f3e8ff; color: #7e22ce; }
 
-        .subject-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        .subject-table td { padding: 10px 0; border-bottom: 1px solid #f8fafc; }
-        .sub-code { font-weight: 700; color: #64748b; width: 110px; font-size: 0.8rem; }
-        .sub-name { color: #334155; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .type-pill { font-size: 10px; background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; font-weight: 600; margin-left: 6px; }
-        .units-pill { font-size: 10px; background: #e2e8f0; color: #1e293b; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 4px; }
+        /* Base Desktop Table Layout */
+        .subject-table { width: 100%; border-collapse: collapse; }
+        .subject-table td { padding: 10px 0; border-bottom: 1px solid #f8fafc; vertical-align: top; }
+        .sub-code { font-weight: 700; color: #64748b; width: 110px; font-size: 0.8rem; vertical-align: top; padding-right: 6px; }
+        .sub-name { 
+            color: #334155; 
+            font-size: 0.85rem; 
+            overflow: visible; 
+            text-overflow: clip; 
+            white-space: normal !important; 
+            word-break: break-word !important; 
+            overflow-wrap: anywhere !important;
+            line-height: 1.4;
+        }
+        .type-pill { font-size: 10px; background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; font-weight: 600; margin-left: 4px; display: inline-block; }
+        .units-pill { font-size: 10px; background: #e2e8f0; color: #1e293b; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 4px; display: inline-block; }
         
+        .sub-actions { width: 60px; text-align: right; vertical-align: top; }
         .action-group { display: flex; justify-content: flex-end; gap: 6px; }
         .action-btn { width: 28px; height: 28px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 
@@ -135,6 +155,49 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
             .modal-content { width: min(460px, calc(100vw - 30px)); max-height: calc(100dvh - 30px); overflow-y: auto; }
             #sidebar.active .sidebar-header h3 { margin-bottom: 0; }
             #sidebar.active .sidebar-close { display: flex; align-items: center; justify-content: center; flex: 0 0 36px; width: 36px; height: 36px; position: relative; z-index: 1002; }
+        }
+
+        /* Mobile View: Switch Table Rows to Grid Stack to guarantee complete text visibility */
+        @media (max-width: 600px) {
+            .subject-table, 
+            .subject-table tbody {
+                display: block;
+                width: 100%;
+            }
+            .subject-table tr {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                padding: 12px 0;
+                border-bottom: 1px solid #f1f5f9;
+                box-sizing: border-box;
+            }
+            .subject-table td {
+                display: block;
+                width: 100% !important;
+                padding: 2px 0 !important;
+                box-sizing: border-box;
+            }
+            .sub-code {
+                font-size: 0.82rem;
+                margin-bottom: 4px;
+            }
+            .sub-name {
+                font-size: 0.88rem;
+                line-height: 1.45;
+                margin-bottom: 8px;
+                white-space: normal !important;
+                word-wrap: break-word !important;
+                overflow-wrap: anywhere !important;
+            }
+            .sub-actions {
+                display: flex;
+                justify-content: flex-start;
+                margin-top: 4px;
+            }
+            .action-group {
+                justify-content: flex-start;
+            }
         }
 
         #sidebar:not(.active) ~ main.content { margin-left: 0; width: 100%; }
@@ -181,9 +244,9 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
                 </button>
             </div>
 
-            <div class="tab-container">
-                <?php foreach($curriculum as $name =>$data): ?>
-                    <button class="strand-tab <?php echo ($name ===$first_strand) ? 'active' : ''; ?>" 
+            <div class="tab-container" id="tabNavContainer">
+                <?php foreach($curriculum as $name => $data): ?>
+                    <button class="strand-tab <?php echo ($name === $first_strand) ? 'active' : ''; ?>" 
                             onclick="switchTab(this, 'tab-<?php echo md5($name); ?>')">
                         <?php echo htmlspecialchars($name); ?>
                     </button>
@@ -206,30 +269,30 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
                         No subject entries found for the <strong><?= htmlspecialchars($curriculum_version) ?> Curriculum</strong>. Use "Add New Subject" or run the seed script to add rows.
                     </div>
                 <?php else: ?>
-                    <?php foreach($curriculum as $name =>$grades): ?>
-                        <div id="tab-<?php echo md5($name); ?>" class="strand-content <?php echo ($name ===$first_strand) ? 'active' : ''; ?>">
+                    <?php foreach($curriculum as $name => $grades): ?>
+                        <div id="tab-<?php echo md5($name); ?>" class="strand-content <?php echo ($name === $first_strand) ? 'active' : ''; ?>">
                             <div class="grade-grid">
-                                <?php ksort($grades); foreach($grades as $lvl =>$terms): ?>
+                                <?php ksort($grades); foreach($grades as $lvl => $terms): ?>
                                     <div class="grade-card">
                                         <div class="grade-header">Grade <?php echo $lvl; ?></div>
-                                        <?php ksort($terms); foreach($terms as $t_num =>$subs): ?>
+                                        <?php ksort($terms); foreach($terms as $t_num => $subs): ?>
                                             <?php 
                                                 $badge_class = 'sem-1'; 
-                                                $term_label =$t_num;
+                                                $term_label = $t_num;
                                                 
-                                                if ($t_num === '1st') { $badge_class = 'sem-1';$term_label = '1st Term'; }
-                                                elseif ($t_num === '2nd') { $badge_class = 'sem-2';$term_label = '2nd Term'; }
-                                                elseif ($t_num === '3rd') { $badge_class = 'sem-3';$term_label = '3rd Term'; }
-                                                elseif ($t_num === '1st Sem') { $badge_class = 'sem-1';$term_label = '1st Semester'; }
-                                                elseif ($t_num === '2nd Sem') { $badge_class = 'sem-2';$term_label = '2nd Semester'; }
-                                                elseif ($t_num === 'Full Year') { $badge_class = 'sem-full';$term_label = 'Full Year (Core)'; }
+                                                if ($t_num === '1st') { $badge_class = 'sem-1'; $term_label = '1st Term'; }
+                                                elseif ($t_num === '2nd') { $badge_class = 'sem-2'; $term_label = '2nd Term'; }
+                                                elseif ($t_num === '3rd') { $badge_class = 'sem-3'; $term_label = '3rd Term'; }
+                                                elseif ($t_num === '1st Sem') { $badge_class = 'sem-1'; $term_label = '1st Semester'; }
+                                                elseif ($t_num === '2nd Sem') { $badge_class = 'sem-2'; $term_label = '2nd Semester'; }
+                                                elseif ($t_num === 'Full Year') { $badge_class = 'sem-full'; $term_label = 'Full Year (Core)'; }
                                             ?>
                                             <div class="semester-section">
                                                 <span class="sem-badge <?php echo $badge_class; ?>">
                                                     <?php echo $term_label; ?>
                                                 </span>
                                                 <table class="subject-table">
-                                                    <?php foreach($subs as$s): ?>
+                                                    <?php foreach($subs as $s): ?>
                                                         <tr>
                                                             <td class="sub-code"><?php echo htmlspecialchars($s['subject_code']); ?></td>
                                                             <td class="sub-name">
@@ -278,7 +341,7 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
                     <label>Assigned Strand / Cluster</label>
                     <select name="strand_id" id="strand_id">
                         <option value="">Universal Core / Applicable to All</option>
-                        <?php foreach ($strands_list as$st): ?>
+                        <?php foreach ($strands_list as $st): ?>
                             <option value="<?php echo $st['id']; ?>"><?php echo htmlspecialchars($st['strand_name']); ?></option>
                         <?php endforeach; ?>
                     </select>
@@ -305,7 +368,6 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
                     <div class="form-group" style="flex:1;">
                         <label>Term / Period</label>
                         <select name="term" id="term">
-                            <!-- Options injected dynamically by adaptTermOptions JavaScript function -->
                         </select>
                     </div>
                 </div>
@@ -354,7 +416,13 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
             document.querySelectorAll('.strand-tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.strand-content').forEach(c => c.classList.remove('active'));
             btn.classList.add('active');
-            document.getElementById(id).classList.add('active');
+            
+            const targetContent = document.getElementById(id);
+            if (targetContent) {
+                targetContent.classList.add('active');
+            }
+            
+            btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
         }
 
         function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
@@ -430,8 +498,48 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
             }
         }
 
-        // Initialize modal term options on boot
-        adaptTermOptions("<?= $curriculum_version ?>");
+        // Initialize Touch Gestures
+        document.addEventListener('DOMContentLoaded', () => {
+            adaptTermOptions("<?= $curriculum_version ?>");
+
+            const container = document.getElementById('curriculumContainer');
+            let startX = 0;
+            let startY = 0;
+            let distX = 0;
+            let distY = 0;
+
+            if (container) {
+                container.addEventListener('touchstart', (e) => {
+                    const touch = e.touches[0];
+                    startX = touch.clientX;
+                    startY = touch.clientY;
+                    distX = 0;
+                    distY = 0;
+                }, { passive: true });
+
+                container.addEventListener('touchmove', (e) => {
+                    if (!startX || !startY) return;
+                    const touch = e.touches[0];
+                    distX = touch.clientX - startX;
+                    distY = touch.clientY - startY;
+                }, { passive: true });
+
+                container.addEventListener('touchend', () => {
+                    if (Math.abs(distX) > 50 && Math.abs(distX) > Math.abs(distY) * 1.5) {
+                        const tabs = Array.from(document.querySelectorAll('.strand-tab'));
+                        const activeIndex = tabs.findIndex(tab => tab.classList.contains('active'));
+
+                        if (distX < 0 && activeIndex < tabs.length - 1) {
+                            tabs[activeIndex + 1].click();
+                        } else if (distX > 0 && activeIndex > 0) {
+                            tabs[activeIndex - 1].click();
+                        }
+                    }
+                    startX = 0;
+                    startY = 0;
+                });
+            }
+        });
     </script>
 </body>
 </html>

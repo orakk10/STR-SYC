@@ -3,8 +3,9 @@
 session_start();
 require_once __DIR__ . '/../../config/database.php';
 
+// Redirect unauthenticated users to the correct login path
 if (!isset($_SESSION['user_id'])) {
-    header("Location: ../../login.php");
+    header("Location: ../../manifest/login.php");
     exit;
 }
 
@@ -20,7 +21,7 @@ try {
         $current_pref = $user['security_preference'];
     }
 } catch (Exception $e) {
-    // Fallback
+    error_log("Settings preference fetch error: " . $e->getMessage());
 }
 ?>
 <!DOCTYPE html>
@@ -353,7 +354,8 @@ try {
                 try {
                     const res = await fetch('save-security-preference.php', {
                         method: 'POST',
-                        body: formData
+                        body: formData,
+                        credentials: 'same-origin' // Transmits session cookies in APK WebView
                     });
 
                     const data = await res.json();
