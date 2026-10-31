@@ -7,7 +7,7 @@ header('Content-Type: application/json');
 
 // 1. Session Authorization Check
 if (!isset($_SESSION['user_id']) || intval($_SESSION['user_id']) <= 0) {
-    echo json_encode(['success' => false, 'message' => 'Unauthorized access.']);
+    echo json_encode(['success' => false, 'message' => 'Unauthorized access. Please log in again.']);
     exit;
 }
 
@@ -18,8 +18,8 @@ $input = is_array($jsonInput) ? array_merge($_POST, $jsonInput) : $_POST;
 $conn = getDBConnection();
 $user_id = intval($_SESSION['user_id']);
 $pref    = $input['security_preference'] ?? 'none';
-$pin     = $input['pin'] ?? '';
-$pattern = $input['pattern'] ?? '';
+$pin     = trim($input['pin'] ?? '');
+$pattern = trim($input['pattern'] ?? '');
 
 $allowed_prefs = ['biometric', 'pin', 'pattern', 'none'];
 if (!in_array($pref, $allowed_prefs)) {
@@ -28,15 +28,36 @@ if (!in_array($pref, $allowed_prefs)) {
 }
 
 try {
-    // 2. Fetch existing hashes to preserve or overwrite cleanly
+    // 2. Fetch existing hashes
     $stmtSelect = $conn->prepare("SELECT security_pin_hash, security_pattern_hash FROM users WHERE id = :id LIMIT 1");
     $stmtSelect->execute(['id' => $user_id]);
     $existing = $stmtSelect->fetch(PDO::FETCH_ASSOC);
 
-    $pin_hash = !empty($pin) ? password_hash($pin, PASSWORD_BCRYPT) : ($existing['security_pin_hash'] ?? null);
-    $pattern_hash = !empty($pattern) ? password_hash($pattern, PASSWORD_BCRYPT) : ($existing['security_pattern_hash'] ?? null);
+    $pin_hash = $existing['security_pin_hash'] ?? null;
+    $pattern_hash = $existing['security_pattern_hash'] ?? null;
 
-    // 3. Update security preference and hashes
+    // 3. Process new credential inputs based on selected mode
+    if ($pref === 'pin') {
+        if (!empty($pin)) {
+            $pin_hash = password_hash($pin, PASSWORD_BCRYPT);
+        } elseif (empty($pin_hash)) {
+            echo json_encode(['success' => false, 'message' => 'Please enter a PIN to enable PIN security.']);
+            exit;
+        }
+    } elseif ($pref === 'pattern') {
+        if (!empty($pattern)) {
+            $pattern_hash = password_hash($pattern, PASSWORD_BCRYPT);
+        } elseif (empty($pattern_hash)) {
+            echo json_encode(['success' => false, 'message' => 'Please draw a pattern to enable pattern security.']);
+            exit;
+        }
+    } elseif ($pref === 'none') {
+        // Clear hashes when secondary security is disabled
+        $pin_hash = null;
+        $pattern_hash = null;
+    }
+
+    // 4. Update user record
     $stmt = $conn->prepare("
         UPDATE users 
         SET security_preference = :pref,
@@ -52,8 +73,8 @@ try {
         'id' => $user_id
     ]);
 
-    // 4. Map redirect destination based on session user role
-    $role = $_SESSION['role'] ?? 'student';
+    // 5. Map redirect destination based on session user role
+    $role = strtolower($_SESSION['role'] ?? 'student');
     $redirect_url = '../student/student_dashboard.php';
 
     if (in_array($role, ['super_admin', 'admin'])) {
@@ -64,7 +85,7 @@ try {
 
     echo json_encode([
         'success' => true, 
-        'message' => 'Security settings saved successfully.',
+        'message' => 'Security settings updated successfully.',
         'redirect' => $redirect_url
     ]);
 } catch (PDOException $e) {

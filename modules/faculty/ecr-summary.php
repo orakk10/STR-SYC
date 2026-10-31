@@ -42,7 +42,7 @@ $is_adviser_or_admin = in_array($user_role_clean, ['adviser', 'admin'], true);
 $current_page = basename($_SERVER['PHP_SELF']);
 
 // Fetch Active Faculty Subject Load
-$assignments_stmt =$pdo->prepare("
+$assignments_stmt = $pdo->prepare("
     SELECT sa.id AS assignment_id, sub.subject_name, sub.subject_code, sec.id AS section_id, sec.section_name, sec.grade_level
     FROM subject_assignments sa
     JOIN subjects sub ON sa.subject_id = sub.id
@@ -50,8 +50,8 @@ $assignments_stmt =$pdo->prepare("
     WHERE sa.faculty_id = :faculty_id
     ORDER BY sec.grade_level ASC, sec.section_name ASC, sub.subject_name ASC
 ");
-$assignments_stmt->execute(['faculty_id' =>$user_id]);
-$my_assignments =$assignments_stmt->fetchAll(PDO::FETCH_ASSOC);
+$assignments_stmt->execute(['faculty_id' => $user_id]);
+$my_assignments = $assignments_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 if ($assignment_id === 0 && !empty($my_assignments)) {
     $assignment_id = (int)$my_assignments[0]['assignment_id'];
@@ -59,26 +59,31 @@ if ($assignment_id === 0 && !empty($my_assignments)) {
 
 // Fetch Active Assignment Metadata
 $subject_name = "";
+$subject_code = "";
 $section_id   = 0;
 $section_name = "";
+$grade_level  = "";
 $strand_code  = "N/A";
 
 if ($assignment_id > 0) {
-    $info_stmt =$pdo->prepare("
-        SELECT sub.subject_name, sa.section_id, sec.section_name, sec.grade_level, st.strand_code
+    $info_stmt = $pdo->prepare("
+        SELECT sub.subject_name, sub.subject_code, sa.section_id, sec.section_name, sec.grade_level, st.strand_code
         FROM subject_assignments sa
         JOIN subjects sub ON sa.subject_id = sub.id
         JOIN sections sec ON sa.section_id = sec.id
         LEFT JOIN strands st ON sec.strand_id = st.id
         WHERE sa.id = :assignment_id
     ");
-    $info_stmt->execute(['assignment_id' =>$assignment_id]);
-    $info_data =$info_stmt->fetch(PDO::FETCH_ASSOC);
+    $info_stmt->execute(['assignment_id' => $assignment_id]);
+    $info_data = $info_stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($info_data) {
-        $subject_name =$info_data['subject_name'] ?? "";
-        $section_id   = (int)$info_data['section_id'];$section_name = "Grade " . $info_data['grade_level'] . " - " . $info_data['section_name'];
-        $strand_code  =$info_data['strand_code'] ?? "N/A";
+        $subject_name = $info_data['subject_name'] ?? "";
+        $subject_code = $info_data['subject_code'] ?? "";
+        $section_id   = (int)$info_data['section_id'];
+        $grade_level  = $info_data['grade_level'] ?? "";
+        $section_name = "Grade " . $grade_level . " - " . ($info_data['section_name'] ?? "");
+        $strand_code  = $info_data['strand_code'] ?? "N/A";
     }
 }
 
@@ -97,11 +102,11 @@ if (!function_exists('getDepEdDescriptor')) {
 }
 
 // 4. Fetch Active Student Roster and Term Grades
-$males   = [];$females = [];
+$males   = []; $females = [];
 
 if ($section_id > 0) {
-    // Fetch Males with Term Summaries
-    $m_stmt =$pdo->prepare("
+    // Fetch Males
+    $m_stmt = $pdo->prepare("
         SELECT u.id, u.full_name AS name,
                ts.term1_transmuted AS term1,
                ts.term2_transmuted AS term2,
@@ -126,11 +131,11 @@ if ($section_id > 0) {
         WHERE u.section_id = :section_id AND u.role = 'student' AND (sp.gender = 'Male' OR sp.gender IS NULL)
         ORDER BY u.full_name ASC
     ");
-    $m_stmt->execute(['section_id' => $section_id, 'assignment_id' =>$assignment_id]);
-    $males =$m_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $m_stmt->execute(['section_id' => $section_id, 'assignment_id' => $assignment_id]);
+    $males = $m_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Fetch Females with Term Summaries
-    $f_stmt =$pdo->prepare("
+    // Fetch Females
+    $f_stmt = $pdo->prepare("
         SELECT u.id, u.full_name AS name,
                ts.term1_transmuted AS term1,
                ts.term2_transmuted AS term2,
@@ -155,8 +160,8 @@ if ($section_id > 0) {
         WHERE u.section_id = :section_id AND u.role = 'student' AND sp.gender = 'Female'
         ORDER BY u.full_name ASC
     ");
-    $f_stmt->execute(['section_id' => $section_id, 'assignment_id' =>$assignment_id]);
-    $females =$f_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $f_stmt->execute(['section_id' => $section_id, 'assignment_id' => $assignment_id]);
+    $females = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $verification_stmt = $pdo->prepare("
         SELECT student_id
@@ -483,10 +488,9 @@ if ($section_id > 0) {
             opacity: 0.6;
         }
 
-        @media print {
-            .promotion-toggle {
-                display: none;
-            }
+        /* Printable Official Header Section (Hidden on Screen) */
+        .print-header {
+            display: none;
         }
 
         .mobile-toggle {
@@ -514,6 +518,129 @@ if ($section_id > 0) {
                 margin-left: 0 !important;
                 width: 100% !important;
                 padding: 15px;
+            }
+        }
+
+        /* ------------------------------------------------------------- */
+        /* OFFICIAL PRINT FORMATTING RULES (LANDSCAPE PRINTABLE FILE) */
+        /* ------------------------------------------------------------- */
+        @media print {
+            @page {
+                size: A4 landscape;
+                margin: 12mm;
+            }
+
+            html, body {
+                background: #ffffff !important;
+                color: #000000 !important;
+                overflow: visible !important;
+                height: auto !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                font-family: Arial, sans-serif !important;
+            }
+
+            /* Hide Web App UI Navigation & Controls */
+            .sidebar, 
+            .mobile-toggle, 
+            .ecr-header-toolbar, 
+            .ecr-control-strip, 
+            .ecr-tab-bar, 
+            .promotion-toggle {
+                display: none !important;
+            }
+
+            .dashboard-wrapper, 
+            main.content, 
+            .ecr-card-master, 
+            .table-viewport-container {
+                display: block !important;
+                position: static !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                box-shadow: none !important;
+                border: none !important;
+                overflow: visible !important;
+            }
+
+            /* Render Official Document Print Header */
+            .print-header {
+                display: block !important;
+                text-align: center;
+                margin-bottom: 15px;
+                border-bottom: 2px solid #000000;
+                padding-bottom: 10px;
+            }
+
+            .print-header h2 {
+                margin: 0;
+                font-size: 14pt;
+                text-transform: uppercase;
+                font-weight: bold;
+            }
+
+            .print-header h3 {
+                margin: 3px 0;
+                font-size: 11pt;
+                font-weight: normal;
+            }
+
+            .print-meta-grid {
+                display: flex;
+                justify-content: space-between;
+                margin-top: 10px;
+                font-size: 9pt;
+                text-align: left;
+            }
+
+            /* Clean Table Grid for Paper / PDF Export */
+            table.ecr-grid {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                font-size: 9pt !important;
+                page-break-inside: auto;
+            }
+
+            table.ecr-grid th, 
+            table.ecr-grid td {
+                border: 1px solid #000000 !important;
+                color: #000000 !important;
+                padding: 6px 8px !important;
+                background: transparent !important;
+                box-shadow: none !important;
+            }
+
+            table.ecr-grid thead th {
+                position: static !important;
+                background-color: #f1f5f9 !important;
+                font-weight: bold !important;
+            }
+
+            .col-sticky-name {
+                position: static !important;
+                width: auto !important;
+                min-width: 0 !important;
+                box-shadow: none !important;
+                padding: 6px 8px !important;
+            }
+
+            tr.summary-row {
+                page-break-inside: avoid;
+            }
+
+            tr.group-header td {
+                background-color: #e2e8f0 !important;
+                font-weight: bold !important;
+            }
+
+            .badge-remark, .promotion-status {
+                background: none !important;
+                color: #000000 !important;
+                padding: 0 !important;
+                font-weight: bold !important;
             }
         }
     </style>
@@ -594,9 +721,25 @@ if ($section_id > 0) {
                         </h1>
                     </div>
                     <div>
-                        <button onclick="window.print()" class="btn-action">Print Summary</button>
+                        <button onclick="window.print()" class="btn-action">🖨️ Print Summary / Save PDF</button>
                     </div>
                 </header>
+
+                <!-- Official Printable Document Header (Rendered on Print) -->
+                <div class="print-header">
+                    <h2>DEPARTMENT OF EDUCATION</h2>
+                    <h3>SENIOR HIGH SCHOOL ELECTRONIC CLASS RECORD - FINAL SUMMARY</h3>
+                    <div class="print-meta-grid">
+                        <div>
+                            <strong>SUBJECT:</strong> <?= htmlspecialchars($subject_name) ?> (<?= htmlspecialchars($subject_code) ?>)<br>
+                            <strong>SECTION:</strong> <?= htmlspecialchars($section_name) ?>
+                        </div>
+                        <div>
+                            <strong>STRAND:</strong> <?= htmlspecialchars($strand_code) ?><br>
+                            <strong>DATE GENERATED:</strong> <?= date('F d, Y') ?>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Subject Assignment Selector Strip -->
                 <div class="ecr-control-strip">
@@ -606,9 +749,9 @@ if ($section_id > 0) {
                             <?php if (empty($my_assignments)): ?>
                                 <option value="0">No teaching subjects assigned</option>
                             <?php else: ?>
-                                <?php foreach ($my_assignments as$assign): ?>
-                                    <option value="<?= $assign['assignment_id'] ?>" <?= $assign['assignment_id'] ==$assignment_id ? 'selected' : '' ?>>
-                                        Grade <?= htmlspecialchars($assign['grade_level'] . ' - ' .$assign['section_name']) ?> | <?= htmlspecialchars($assign['subject_name'] . ' (' .$assign['subject_code'] . ')') ?>
+                                <?php foreach ($my_assignments as $assign): ?>
+                                    <option value="<?= $assign['assignment_id'] ?>" <?= $assign['assignment_id'] == $assignment_id ? 'selected' : '' ?>>
+                                        Grade <?= htmlspecialchars($assign['grade_level'] . ' - ' . $assign['section_name']) ?> | <?= htmlspecialchars($assign['subject_name'] . ' (' . $assign['subject_code'] . ')') ?>
                                     </option>
                                 <?php endforeach; ?>
                             <?php endif; ?>
@@ -628,7 +771,6 @@ if ($section_id > 0) {
                     <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=2" class="tab-link">TERM 2</a>
                     <a href="ecr-view.php?assignment_id=<?= $assignment_id ?>&term=3" class="tab-link">TERM 3</a>
                     <a href="ecr-summary.php?assignment_id=<?= $assignment_id ?>" class="tab-link active">SUMMARY</a>
-                    <a href="../auth/settings.php" class="nav-link">Security Settings</a>
                 </nav>
 
                 <!-- Summary Grid Matrix -->
@@ -656,15 +798,17 @@ if ($section_id > 0) {
                                     <td colspan="8" style="padding: 12px !important; color: #94a3b8; text-align: center;">No male students enrolled in this section.</td>
                                 </tr>
                             <?php else: ?>
-                                <?php foreach ($males as $index =>$student): ?>
+                                <?php foreach ($males as $index => $student): ?>
                                     <?php 
-                                        $t1 =$student['term1'] ?? null;
-                                        $t2 =$student['term2'] ?? null;
-                                        $t3 =$student['term3'] ?? null;
+                                        $t1 = $student['term1'] ?? null;
+                                        $t2 = $student['term2'] ?? null;
+                                        $t3 = $student['term3'] ?? null;
                                         
-                                        $validTerms = array_filter([$t1,$t2, $t3], fn($v) => $v !== null);$average = count($validTerms) > 0 ? round(array_sum($validTerms) / count($validTerms), 2) : ($student['final_grade'] ?? null);
+                                        $validTerms = array_filter([$t1, $t2, $t3], fn($v) => $v !== null);
+                                        $average = count($validTerms) > 0 ? round(array_sum($validTerms) / count($validTerms), 2) : ($student['final_grade'] ?? null);
                                         
-                                        $letter  =$average !== null ? getDepEdDescriptor($average) : '-';$remarks = $average !== null ? ($average >= 75 ? 'PASSED' : 'FAILED') : '-';
+                                        $letter  = $average !== null ? getDepEdDescriptor($average) : '-';
+                                        $remarks = $average !== null ? ($average >= 75 ? 'PASSED' : 'FAILED') : '-';
                                     ?>
                                     <tr class="summary-row" data-id="<?= $student['id'] ?>">
                                         <td class="col-sticky-name" title="<?= htmlspecialchars($student['name']) ?>">
@@ -710,15 +854,17 @@ if ($section_id > 0) {
                                     <td colspan="8" style="padding: 12px !important; color: #94a3b8; text-align: center;">No female students enrolled in this section.</td>
                                 </tr>
                             <?php else: ?>
-                                <?php foreach ($females as $index =>$student): ?>
+                                <?php foreach ($females as $index => $student): ?>
                                     <?php 
-                                        $t1 =$student['term1'] ?? null;
-                                        $t2 =$student['term2'] ?? null;
-                                        $t3 =$student['term3'] ?? null;
+                                        $t1 = $student['term1'] ?? null;
+                                        $t2 = $student['term2'] ?? null;
+                                        $t3 = $student['term3'] ?? null;
                                         
-                                        $validTerms = array_filter([$t1,$t2, $t3], fn($v) => $v !== null);$average = count($validTerms) > 0 ? round(array_sum($validTerms) / count($validTerms), 2) : ($student['final_grade'] ?? null);
+                                        $validTerms = array_filter([$t1, $t2, $t3], fn($v) => $v !== null);
+                                        $average = count($validTerms) > 0 ? round(array_sum($validTerms) / count($validTerms), 2) : ($student['final_grade'] ?? null);
                                         
-                                        $letter  =$average !== null ? getDepEdDescriptor($average) : '-';$remarks = $average !== null ? ($average >= 75 ? 'PASSED' : 'FAILED') : '-';
+                                        $letter  = $average !== null ? getDepEdDescriptor($average) : '-';
+                                        $remarks = $average !== null ? ($average >= 75 ? 'PASSED' : 'FAILED') : '-';
                                     ?>
                                     <tr class="summary-row" data-id="<?= $student['id'] ?>">
                                         <td class="col-sticky-name" title="<?= htmlspecialchars($student['name']) ?>">

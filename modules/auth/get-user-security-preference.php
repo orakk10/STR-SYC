@@ -5,8 +5,10 @@ require_once __DIR__ . '/../../config/database.php';
 
 header('Content-Type: application/json');
 
-// 1. Session Authorization Check
-if (!isset($_SESSION['user_id']) || intval($_SESSION['user_id']) <= 0) {
+// 1. Session Authorization Check (Supports active and pending 2FA challenge states)
+$user_id = $_SESSION['user_id'] ?? $_SESSION['pending_user_id'] ?? null;
+
+if (!$user_id || intval($user_id) <= 0) {
     echo json_encode([
         'success' => false, 
         'security_preference' => 'none',
@@ -16,15 +18,15 @@ if (!isset($_SESSION['user_id']) || intval($_SESSION['user_id']) <= 0) {
 }
 
 $conn = getDBConnection();
-$user_id = intval($_SESSION['user_id']);
+$user_id = intval($user_id);
 
 try {
-    // 2. Fetch security preference setting for the active session user
+    // 2. Fetch security preference setting for the session user
     $stmt = $conn->prepare("SELECT security_preference FROM users WHERE id = :id LIMIT 1");
     $stmt->execute(['id' => $user_id]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Default to 'none' or 'password' if the database field is NULL
+    // Default to 'none' if the database field is NULL or empty
     $preference = !empty($user['security_preference']) ? $user['security_preference'] : 'none';
 
     echo json_encode([

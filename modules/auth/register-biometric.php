@@ -5,9 +5,9 @@ require_once __DIR__ . '/../../config/database.php';
 
 header('Content-Type: application/json');
 
-// 1. Session Check
-if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Unauthorized access.']);
+// 1. Session Authorization Check
+if (!isset($_SESSION['user_id']) || intval($_SESSION['user_id']) <= 0) {
+    echo json_encode(['success' => false, 'message' => 'Unauthorized access. Please log in again.']);
     exit;
 }
 
@@ -36,7 +36,7 @@ if ($action === 'get_options') {
     exit;
 }
 
-// 3. Action: Store Biometric Credential
+// 3. Action: Store Biometric Credential Payload
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
     
@@ -53,7 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $conn->prepare("
             INSERT INTO user_biometric_credentials (user_id, credential_id, public_key, created_at)
             VALUES (:user_id, :cred_id, :pub_key, NOW())
-            ON DUPLICATE KEY UPDATE public_key = VALUES(public_key)
+            ON DUPLICATE KEY UPDATE 
+                public_key = VALUES(public_key),
+                created_at = NOW()
         ");
         $stmt->execute([
             'user_id' => $user_id,
@@ -61,15 +63,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'pub_key' => $public_key
         ]);
 
-        // Update user security preference
+        // Update user security preference to biometric
         $updateStmt = $conn->prepare("UPDATE users SET security_preference = 'biometric' WHERE id = :id");
         $updateStmt->execute(['id' => $user_id]);
 
         // Determine dashboard redirect based on role
-        $role = $_SESSION['role'] ?? 'student';
+        $role = strtolower($_SESSION['role'] ?? 'student');
         $redirect_url = '../student/student_dashboard.php';
 
-        if (in_array($role, ['super_admin', 'admin'])) {
+        if (in_array($role, ['super_admin', 'admin', 'super admin'])) {
             $redirect_url = '../admin/admin_dashboard.php';
         } elseif (in_array($role, ['adviser', 'faculty'])) {
             $redirect_url = '../faculty/faculty_dashboard.php';

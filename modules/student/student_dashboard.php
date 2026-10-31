@@ -3,15 +3,22 @@ session_start();
 require_once __DIR__ . '/../../config/database.php';
 $conn = getDBConnection();
 
-if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php");
+// 1. Check if user is redirected mid-2FA challenge
+if (!isset($_SESSION['user_id']) && isset($_SESSION['pending_user_id'])) {
+    header("Location: ../auth/2fa-challenge.php");
     exit();
 }
 
-// Case-insensitive role fallback verification
+// 2. Ensure active authenticated session exists
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../../manifest/login.php");
+    exit();
+}
+
+// 3. Case-insensitive role fallback verification
 $session_role = isset($_SESSION['role']) ? strtolower($_SESSION['role']) : '';
 if ($session_role !== 'student') {
-    header("Location: login.php?error=unauthorized_role");
+    header("Location: ../../manifest/login.php?error=unauthorized_role");
     exit();
 }
 
@@ -115,7 +122,6 @@ if ($current_section_id) {
     <title>Student Dashboard | STRAND-SYNC</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <link rel="stylesheet" href="../../assets/css/security-lock.css">
-    <script src="../../assets/js/security-lock.js" defer></script>
     <style>
         body {
             margin: 0;
@@ -697,6 +703,7 @@ if ($current_section_id) {
             }, 150);
         });
     </script>
+    <script src="../../assets/js/security-lock.js" defer></script>
 </body>
 
 </html>

@@ -8,10 +8,9 @@ const BASE_AUTH_URL = window.location.pathname.includes('/modules/auth/')
 // Idle Timeout Configuration (5 minutes = 300,000 milliseconds)
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
 let idleTimer = null;
-let isAppLocked = false;
 
 // -------------------------------------------------------------
-// UTILITY HELPERS (Must be loaded prior to API execution)
+// UTILITY HELPERS
 // -------------------------------------------------------------
 function arrayBufferToBase64(buffer) {
     let binary = '';
@@ -39,16 +38,25 @@ function base64ToUint8Array(base64String) {
     return outputArray;
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    checkAppLockStatus();
-    initIdleTimer();
-});
-
-document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-        checkAppLockStatus(true);
+// -------------------------------------------------------------
+// INITIALIZATION LISTENER & SAFEGUARD
+// -------------------------------------------------------------
+function runInitSequence() {
+    if (!window.location.pathname.includes('2fa-challenge.php') && 
+        !window.location.pathname.includes('login.php')) {
+        initIdleTimer();
     }
-});
+
+    if (document.getElementById('unlockPatternCanvas')) {
+        initUnlockPatternCanvas();
+    }
+}
+
+if (document.readyState === "complete" || document.readyState === "interactive") {
+    setTimeout(runInitSequence, 50);
+} else {
+    document.addEventListener("DOMContentLoaded", runInitSequence);
+}
 
 // -------------------------------------------------------------
 // IDLE TIMEOUT LOGIC
@@ -57,13 +65,11 @@ function initIdleTimer() {
     const activityEvents = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
 
     const resetTimer = () => {
-        if (isAppLocked) return;
-
         if (idleTimer) clearTimeout(idleTimer);
         
-        idleTimer = setTimeout(() => {
-            console.log("Inactivity limit reached. Locking application...");
-            checkAppLockStatus();
+        idleTimer = setTimeout(async () => {
+            console.log("Inactivity limit reached. Redirecting to 2FA Challenge...");
+            await lockSessionAndRedirect();
         }, IDLE_TIMEOUT_MS);
     };
 
@@ -74,49 +80,28 @@ function initIdleTimer() {
     resetTimer();
 }
 
-// -------------------------------------------------------------
-// 1. Check User Security Preference & Display Lock
-// -------------------------------------------------------------
-async function checkAppLockStatus(isUserResume = false) {
+async function lockSessionAndRedirect() {
     try {
-        const response = await fetch(`${BASE_AUTH_URL}get-user-security-preference.php`, {
+        const response = await fetch(`${BASE_AUTH_URL}lock-session.php`, {
+            method: 'POST',
             credentials: 'same-origin'
         });
-        if (!response.ok) return;
 
         const data = await response.json();
-
-        if (!data.success || data.security_preference === 'none' || !data.security_preference) {
-            console.log("Security lock not configured for this user.");
-            return;
-        }
-
-        switch (data.security_preference) {
-            case 'biometric':
-                showAppLockOverlay('biometric');
-                triggerFingerprintScan(true);
-                break;
-            case 'pin':
-                showAppLockOverlay('pin');
-                break;
-            case 'pattern':
-                showAppLockOverlay('pattern');
-                initUnlockPatternCanvas();
-                break;
-            default:
-                break;
+        if (data.success) {
+            window.location.href = `${BASE_AUTH_URL}2fa-challenge.php`;
         }
     } catch (err) {
-        console.error("Failed to fetch security preferences:", err);
+        console.error("Failed to lock session on inactivity:", err);
     }
 }
 
 // -------------------------------------------------------------
-// 2. WebAuthn Fingerprint Registration (Called from settings.php)
+// WebAuthn Fingerprint Registration (Called from settings.php)
 // -------------------------------------------------------------
 async function registerFingerprint() {
     if (!window.PublicKeyCredential) {
-        alert("WebAuthn API is not enabled on this connection. Please verify your connection context or HTTPS connection.");
+        alert("WebAuthn API is not enabled on this connection. Please verify HTTPS or localhost connection.");
         return;
     }
 
@@ -137,7 +122,7 @@ async function registerFingerprint() {
         const credential = await navigator.credentials.create({
             publicKey: {
                 challenge: challengeBuffer,
-                rp: { name: "Strand-Sync App" },
+                rp: { name: "STRAND-SYNC App" },
                 user: {
                     id: userIdBuffer,
                     name: options.user.name,
@@ -179,13 +164,18 @@ async function registerFingerprint() {
             alert(result.message || "Failed to save biometric credential.");
         }
     } catch (err) {
+        // Silently ignore user cancelation or timeout errors
+        if (err.name === "NotAllowedError" || err.name === "AbortError") {
+            console.log("Biometric registration canceled by user.");
+            return;
+        }
         console.error("Biometric registration error:", err);
         alert("Fingerprint Scan Error: " + err.message);
     }
 }
 
 // -------------------------------------------------------------
-// 3. WebAuthn Fingerprint Authentication (Unlocking App)
+// WebAuthn Fingerprint Authentication (Called on 2FA Challenge)
 // -------------------------------------------------------------
 async function triggerFingerprintScan(isAutoPrompt = false) {
     if (!window.PublicKeyCredential) {
@@ -242,60 +232,25 @@ async function triggerFingerprintScan(isAutoPrompt = false) {
 
         const result = await verifyRes.json();
         if (result.success) {
-            unlockAppScreen();
+            window.location.href = result.redirect || '../../index.php';
         } else {
             if (!isAutoPrompt) alert(result.message || "Fingerprint authentication failed.");
         }
     } catch (err) {
+        // Silently handle user cancelation
+        if (err.name === "NotAllowedError" || err.name === "AbortError") {
+            console.log("Biometric scan canceled by user.");
+            return;
+        }
         console.error("Biometric authentication error:", err);
-        if (!isAutoPrompt && err.name !== "NotAllowedError") {
+        if (!isAutoPrompt) {
             alert("Biometric Error: " + err.message);
         }
     }
 }
 
 // -------------------------------------------------------------
-// 4. Verify PIN or Pattern Credentials via Backend
-// -------------------------------------------------------------
-async function verifyPinOrPattern(inputVal, type = 'pin') {
-    if (!inputVal || inputVal.trim() === '') {
-        alert(`Please enter your ${type.toUpperCase()}.`);
-        return;
-    }
-
-    const payload = {
-        type: type,
-        [type]: inputVal.trim()
-    };
-
-    try {
-        const response = await fetch(`${BASE_AUTH_URL}verify-pin.php`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify(payload)
-        });
-
-        const result = await response.json();
-        if (result.success) {
-            unlockAppScreen();
-        } else {
-            alert(result.message || "Incorrect PIN or Pattern.");
-            if (type === 'pattern') {
-                resetUnlockPatternCanvas();
-            }
-        }
-    } catch (err) {
-        console.error("Verification error:", err);
-        alert("An error occurred during verification.");
-        if (type === 'pattern') {
-            resetUnlockPatternCanvas();
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// 5. Interactive 3x3 Canvas Pattern Logic for Lock Overlay
+// Interactive 3x3 Canvas Pattern Logic (For 2FA Challenge)
 // -------------------------------------------------------------
 let unlockPatternSequence = [];
 let isUnlockDrawing = false;
@@ -343,11 +298,6 @@ function initUnlockPatternCanvas() {
         isUnlockDrawing = false;
         unlockCanvas.releasePointerCapture(e.pointerId);
         drawUnlockPatternGrid();
-
-        if (unlockPatternSequence.length > 0) {
-            const patternStr = unlockPatternSequence.join('-');
-            verifyPinOrPattern(patternStr, 'pattern');
-        }
     };
 }
 
@@ -375,7 +325,7 @@ function drawUnlockPatternGrid(currentPos = null) {
 
     if (unlockPatternSequence.length > 0) {
         unlockCtx.beginPath();
-        unlockCtx.strokeStyle = '#0d6efd';
+        unlockCtx.strokeStyle = '#2563eb';
         unlockCtx.lineWidth = 5;
         unlockCtx.lineCap = 'round';
         unlockCtx.lineJoin = 'round';
@@ -396,13 +346,13 @@ function drawUnlockPatternGrid(currentPos = null) {
         const isSelected = unlockPatternSequence.includes(dot.id);
         unlockCtx.beginPath();
         unlockCtx.arc(dot.x, dot.y, dot.radius, 0, Math.PI * 2);
-        unlockCtx.fillStyle = isSelected ? '#0d6efd' : '#cccccc';
+        unlockCtx.fillStyle = isSelected ? '#2563eb' : '#cbd5e1';
         unlockCtx.fill();
 
         if (isSelected) {
             unlockCtx.beginPath();
             unlockCtx.arc(dot.x, dot.y, dot.radius + 6, 0, Math.PI * 2);
-            unlockCtx.strokeStyle = 'rgba(13, 110, 253, 0.3)';
+            unlockCtx.strokeStyle = 'rgba(37, 99, 235, 0.3)';
             unlockCtx.lineWidth = 3;
             unlockCtx.stroke();
         }
@@ -412,75 +362,4 @@ function drawUnlockPatternGrid(currentPos = null) {
 function resetUnlockPatternCanvas() {
     unlockPatternSequence = [];
     drawUnlockPatternGrid();
-}
-
-// -------------------------------------------------------------
-// 6. UI Helper Functions
-// -------------------------------------------------------------
-function showAppLockOverlay(mode = 'pin') {
-    isAppLocked = true;
-
-    let overlay = document.getElementById('securityLockOverlay');
-    if (!overlay) {
-        overlay = createLockOverlayElement();
-        document.body.appendChild(overlay);
-    }
-
-    overlay.querySelectorAll('.lock-section').forEach(sec => sec.style.display = 'none');
-    const activeSection = overlay.querySelector(`.lock-section-${mode}`);
-    if (activeSection) activeSection.style.display = 'block';
-
-    overlay.classList.add('active');
-
-    if (mode === 'pattern') {
-        setTimeout(initUnlockPatternCanvas, 50);
-    }
-}
-
-function unlockAppScreen() {
-    isAppLocked = false;
-    const overlay = document.getElementById('securityLockOverlay');
-    if (overlay) {
-        overlay.classList.remove('active');
-    }
-    if (idleTimer) clearTimeout(idleTimer);
-    initIdleTimer();
-}
-
-// -------------------------------------------------------------
-// 7. DOM Generator for Security Lock Overlay
-// -------------------------------------------------------------
-function createLockOverlayElement() {
-    const div = document.createElement('div');
-    div.id = 'securityLockOverlay';
-    div.className = 'security-lock-overlay';
-    div.innerHTML = `
-        <div class="security-lock-box">
-            <div class="lock-icon">🔒</div>
-            <h3>App Locked</h3>
-            <p>Please authenticate to access STRAND-SYNC.</p>
-            
-            <!-- Biometric Section -->
-            <div class="lock-section lock-section-biometric" style="display: none;">
-                <button type="button" class="btn-unlock-biometric" onclick="triggerFingerprintScan()">
-                    Touch Fingerprint Sensor
-                </button>
-            </div>
-
-            <!-- PIN Section -->
-            <div class="lock-section lock-section-pin" style="display: none;">
-                <input type="password" id="lockPinInput" maxlength="6" placeholder="Enter PIN" pattern="[0-9]*" inputmode="numeric">
-                <button type="button" class="btn-unlock-submit" onclick="verifyPinOrPattern(document.getElementById('lockPinInput').value, 'pin')">
-                    Unlock with PIN
-                </button>
-            </div>
-
-            <!-- Pattern Section -->
-            <div class="lock-section lock-section-pattern" style="display: none;">
-                <p style="font-size: 0.85rem; color: #666; margin-bottom: 8px;">Draw pattern to unlock</p>
-                <canvas id="unlockPatternCanvas" width="220" height="220" style="background:#f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; touch-action: none !important; cursor: pointer;"></canvas>
-            </div>
-        </div>
-    `;
-    return div;
 }

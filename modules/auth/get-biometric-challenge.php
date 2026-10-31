@@ -5,14 +5,16 @@ require_once __DIR__ . '/../../config/database.php';
 
 header('Content-Type: application/json');
 
-// 1. Authorization check
-if (!isset($_SESSION['user_id'])) {
+// 1. Authorization check (Support both active sessions and pending 2FA challenge sessions)
+$user_id = $_SESSION['user_id'] ?? $_SESSION['pending_user_id'] ?? null;
+
+if (!$user_id) {
     echo json_encode(['success' => false, 'message' => 'Unauthorized access.']);
     exit;
 }
 
 $conn = getDBConnection();
-$user_id = intval($_SESSION['user_id']);
+$user_id = intval($user_id);
 
 try {
     // 2. Fetch active registered WebAuthn credential ID for user

@@ -5,8 +5,9 @@ require_once __DIR__ . '/../config/constants.php';
 
 // Helper function to get role dashboard URL
 function getDashboardUrl($role) {
-    switch ($role) {
+    switch (strtolower($role)) {
         case 'super_admin':
+        case 'super admin':
             return "../modules/super admin/super_admin_dashboard.php";
         case 'admin':
             return "../modules/admin/admin_dashboard.php";
@@ -16,15 +17,21 @@ function getDashboardUrl($role) {
         case 'student':
             return "../modules/student/student_dashboard.php";
         case 'alumni':
-            return "../modules/alimni/alumni_dashboard.php";
+            return "../modules/alumni/alumni_dashboard.php";
         default:
             return "../index.php";
     }
 }
 
-// 1. Redirect if already authenticated
+// 1. Redirect if already fully authenticated
 if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
     header("Location: " . getDashboardUrl($_SESSION['role']));
+    exit();
+}
+
+// 1b. Redirect if user is in mid-2FA challenge state
+if (!isset($_SESSION['user_id']) && isset($_SESSION['pending_user_id'])) {
+    header("Location: ../modules/auth/2fa-challenge.php");
     exit();
 }
 
@@ -40,21 +47,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($identifier) && !empty($password)) {
         $db = getDBConnection();
         
-        $stmt = $db->prepare("SELECT id, username, password, role, full_name, section_id FROM users WHERE username = :username OR lrn = :lrn LIMIT 1");
+        // Fetch primary user record including security preference
+        $stmt = $db->prepare("
+            SELECT id, username, password, role, full_name, section_id, security_preference 
+            FROM users 
+            WHERE username = :username OR lrn = :lrn 
+            LIMIT 1
+        ");
         $stmt->execute([
             'username' => $identifier,
             'lrn' => $identifier
         ]);
-        $user = $stmt->fetch();
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($user && password_verify($password, $user['password'])) {
             session_regenerate_id(true);
 
+            // Check if secondary security is required
+            $sec_pref = $user['security_preference'] ?? 'none';
+
+            if ($sec_pref !== 'none' && !empty($sec_pref)) {
+                // Set pending state for 2FA verification
+                $_SESSION['pending_user_id'] = $user['id'];
+                $_SESSION['pending_role'] = $user['role'];
+                $_SESSION['pending_security_pref'] = $sec_pref;
+
+                $challengeUrl = "../modules/auth/2fa-challenge.php";
+
+                if ($isAjax) {
+                    header('Content-Type: application/json');
+                    echo json_encode(['status' => 'success', 'redirect' => $challengeUrl]);
+                    exit();
+                }
+
+                header("Location: " . $challengeUrl);
+                exit();
+            }
+
+            // No secondary security enabled — perform full login
             $_SESSION['user_id']    = $user['id'];
             $_SESSION['username']   = $user['username'];
             $_SESSION['full_name']  = $user['full_name'];
             $_SESSION['role']       = $user['role'];
             $_SESSION['section_id'] = $user['section_id'];
+
+            // Clear any lingering pending flags
+            unset($_SESSION['pending_user_id']);
+            unset($_SESSION['pending_role']);
+            unset($_SESSION['pending_security_pref']);
 
             // Log user activity
             $logStmt = $db->prepare("INSERT INTO activity_logs (user_id, action, ip_address) VALUES (:uid, 'User Login', :ip)");
@@ -199,7 +239,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <?php echo htmlspecialchars($error ?? ''); ?>
             </div>
 
-            <!-- Fixed action attribute -->
+            <!-- Login Form -->
             <form id="loginForm" method="POST" action="">
                 <div class="input-group">
                     <label for="username">Username / LRN</label>
@@ -240,7 +280,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
-    <!-- Fixed script source path -->
     <script src="../assets/js/app.js"></script>
 </body>
 
