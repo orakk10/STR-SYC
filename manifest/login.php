@@ -183,6 +183,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border: 1px solid #bbf7d0;
         }
 
+        .modal-content .alert-box {
+            margin-top: 12px;
+        }
+
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -273,6 +277,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="input-group">
                 <input type="text" id="resetUsername" placeholder="Enter Username / LRN" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
             </div>
+            <div id="resetAlert" class="alert-box alert-danger hidden" role="status" aria-live="polite"></div>
             <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
                 <button type="button" id="closeResetBtn" style="background: none; border: none; cursor: pointer; color: #64748b;">Cancel</button>
                 <button type="button" id="submitResetBtn" style="background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer;">Notify Admin</button>

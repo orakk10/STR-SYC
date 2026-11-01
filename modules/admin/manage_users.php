@@ -97,6 +97,7 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
 
         .row-needs-reset { background-color: #fffbeb !important; border-left: 5px solid #f59e0b !important; }
         .badge-reset { background: #f59e0b; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left: 5px; }
+        .btn-ignore-reset { background: #64748b; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2000; }
         .modal-content { background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; }
         .hidden { display: none !important; }
@@ -296,6 +297,9 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
                             </td>
                             <td>
                                 <button class="btn-edit" onclick="resetPassword(<?php echo $row['id']; ?>)">Reset</button>
+                                <?php if ((int) $row['reset_requested'] === 1): ?>
+                                    <button type="button" class="btn-ignore-reset" onclick="cancelResetRequest(<?php echo (int) $row['id']; ?>)">Cancel Request</button>
+                                <?php endif; ?>
                                 <button class="btn-delete" onclick="deleteUser(<?php echo $row['id']; ?>)">Remove</button>
                             </td>
                         </tr>
@@ -451,6 +455,30 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
                 window.location.reload();
             } catch (error) {
                 alert(error.message || 'Password reset failed. Please try again.');
+            }
+        }
+
+        async function cancelResetRequest(id) {
+            if (!confirm("Ignore this password reset request? The account password will not be changed.")) return;
+
+            try {
+                const response = await fetch('admin_cancel_reset_request.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken
+                    },
+                    body: JSON.stringify({ id })
+                });
+                const result = await response.json();
+
+                if (!response.ok || result.status !== 'success') {
+                    throw new Error(result.message || 'Unable to cancel the reset request.');
+                }
+
+                window.location.reload();
+            } catch (error) {
+                alert(error.message || 'Unable to cancel the reset request. Please try again.');
             }
         }
 

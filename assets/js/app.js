@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const resetModal = document.getElementById('resetModal');
     const closeResetBtn = document.getElementById('closeResetBtn');
     const submitResetBtn = document.getElementById('submitResetBtn');
+    const resetUsernameInput = document.getElementById('resetUsername');
+    const resetAlert = document.getElementById('resetAlert');
 
     // 1. Toggle Password Visibility
     if (togglePasswordBtn && passwordInput) {
@@ -69,25 +71,53 @@ document.addEventListener('DOMContentLoaded', () => {
     if (forgotPasswordLink && resetModal) {
         forgotPasswordLink.addEventListener('click', (e) => {
             e.preventDefault();
+            hideResetAlert();
             resetModal.classList.remove('hidden');
         });
     }
 
     if (closeResetBtn) {
         closeResetBtn.addEventListener('click', () => {
+            hideResetAlert();
             resetModal.classList.add('hidden');
         });
     }
 
     if (submitResetBtn) {
-        submitResetBtn.addEventListener('click', () => {
-            const resetUser = document.getElementById('resetUsername').value.trim();
+        submitResetBtn.addEventListener('click', async () => {
+            const resetUser = resetUsernameInput.value.trim();
             if (!resetUser) {
-                alert('Please enter your Username or LRN.');
+                showResetAlert('Please enter your Username or LRN.', 'danger');
                 return;
             }
-            alert('Admin has been notified for account recovery.');
-            resetModal.classList.add('hidden');
+
+            submitResetBtn.disabled = true;
+            submitResetBtn.textContent = 'Submitting...';
+            hideResetAlert();
+
+            try {
+                const response = await fetch('request_password_reset.php', {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: new URLSearchParams({ username: resetUser })
+                });
+                const data = await response.json();
+
+                if (!response.ok || data.status !== 'success') {
+                    showResetAlert(data.message || 'Unable to submit your request. Please try again.', 'danger');
+                    return;
+                }
+
+                resetModal.classList.add('hidden');
+                resetUsernameInput.value = '';
+                hideAlert();
+                showAlert(data.message, 'success');
+            } catch (err) {
+                showResetAlert('Unable to submit your request. Please try again.', 'danger');
+            } finally {
+                submitResetBtn.disabled = false;
+                submitResetBtn.textContent = 'Notify Admin';
+            }
         });
     }
 
@@ -101,6 +131,17 @@ document.addEventListener('DOMContentLoaded', () => {
     function hideAlert() {
         alertBox.classList.add('hidden');
         alertBox.textContent = '';
+    }
+
+    function showResetAlert(msg, type) {
+        resetAlert.className = `alert-box alert-${type}`;
+        resetAlert.textContent = msg;
+        resetAlert.classList.remove('hidden');
+    }
+
+    function hideResetAlert() {
+        resetAlert.classList.add('hidden');
+        resetAlert.textContent = '';
     }
 
     function setLoading(isLoading) {
