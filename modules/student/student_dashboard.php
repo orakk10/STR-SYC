@@ -703,7 +703,7 @@ if ($current_section_id) {
             }, 150);
         });
     </script>
-    <script src="../../assets/js/security-lock.js" defer></script>
+    <script src="../../assets/js/security-lock.js?v=<?php echo time(); ?>"></script>
 </body>
 
 </html>

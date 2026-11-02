@@ -132,7 +132,7 @@ if ($section_data) {
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <link rel="stylesheet" href="../../assets/css/style.css">
     <link rel="stylesheet" href="../../assets/css/security-lock.css">
-    <script src="../../assets/js/security-lock.js" defer></script>
+    <script src="../../assets/js/security-lock.js?v=<?php echo time(); ?>"></script>
     <style>
         /* Layered Dashboard Page Specific Overrides */
         body {

@@ -1,5 +1,17 @@
 <?php
 // modules/auth/verify-2fa.php
+
+// Handle secure HTTPS session cookie scope across reverse proxies (ngrok / Cloudflare / InfinityFree)
+if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+    $_SERVER['HTTPS'] = 'on';
+}
+
+ini_set('session.cookie_httponly', 1);
+ini_set('session.use_only_cookies', 1);
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    ini_set('session.cookie_secure', 1);
+}
+
 session_start();
 require_once __DIR__ . '/../../config/database.php';
 
@@ -50,6 +62,10 @@ try {
     }
 
     if ($isValid) {
+        // Regenerate session ID to prevent session fixation attacks
+        session_regenerate_id(true);
+        $new_session_id = session_id();
+
         // 4. Elevate session to active authenticated state
         $_SESSION['user_id'] = $user_id;
         if (!empty($_SESSION['pending_role'])) {
@@ -57,6 +73,13 @@ try {
         } else if (!empty($user['role'])) {
             $_SESSION['role'] = $user['role'];
         }
+
+        // Single Device Login: Save current active session ID to database
+        $sessionStmt = $pdo->prepare("UPDATE users SET current_session_id = :session_id WHERE id = :id");
+        $sessionStmt->execute([
+            'session_id' => $new_session_id,
+            'id'         => $user_id
+        ]);
 
         // Clear temporary 2FA pending session flags
         unset($_SESSION['pending_user_id']);
