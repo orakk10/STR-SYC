@@ -1,5 +1,17 @@
 <?php
 // modules/auth/get-biometric-challenge.php
+
+// Handle secure HTTPS session cookie scope across reverse proxies (ngrok / Cloudflare / InfinityFree)
+if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+    $_SERVER['HTTPS'] = 'on';
+}
+
+ini_set('session.cookie_httponly', 1);
+ini_set('session.use_only_cookies', 1);
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    ini_set('session.cookie_secure', 1);
+}
+
 session_start();
 require_once __DIR__ . '/../../config/database.php';
 
@@ -18,7 +30,7 @@ $user_id = intval($user_id);
 
 try {
     // 2. Fetch active registered WebAuthn credential ID for user
-    $stmt = $conn->prepare("SELECT credential_id FROM user_biometric_credentials WHERE user_id = :user_id ORDER BY created_at DESC LIMIT 1");
+    $stmt = $conn->prepare("SELECT credential_id FROM user_biometric_credentials WHERE user_id = :user_id ORDER BY id DESC LIMIT 1");
     $stmt->execute(['user_id' => $user_id]);
     $cred = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -30,7 +42,7 @@ try {
         exit;
     }
 
-    // 3. Generate secure cryptographic challenge
+    // 3. Generate secure cryptographic challenge and store in session
     $challenge = random_bytes(32);
     $_SESSION['biometric_auth_challenge'] = base64_encode($challenge);
 

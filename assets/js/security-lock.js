@@ -265,13 +265,12 @@ async function lockSessionAndLogout() {
 }
 
 // -------------------------------------------------------------
-// SINGLE DEVICE LOGIN CHECKER
-// Checks if session ID matches database every 10 seconds
+// SINGLE DEVICE LOGIN CHECKER (Optimized for WebViews & APKs)
 // -------------------------------------------------------------
 function initSingleDeviceCheck() {
     if (singleDeviceInterval) clearInterval(singleDeviceInterval);
 
-    singleDeviceInterval = setInterval(async () => {
+    const performDeviceCheck = async () => {
         try {
             const endpoint = `${getAuthEndpoint('check-session-validity.php')}?_t=${Date.now()}`;
             
@@ -297,7 +296,22 @@ function initSingleDeviceCheck() {
         } catch (err) {
             console.error("Single device check error:", err);
         }
-    }, 10000);
+    };
+
+    // 1. Standard background poll every 10 seconds
+    singleDeviceInterval = setInterval(performDeviceCheck, 10000);
+
+    // 2. CRITICAL FOR APKS: Check session immediately when user returns to the app or unlocks screen
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            performDeviceCheck();
+        }
+    });
+
+    // 3. Additional fallback for mobile webviews on window focus
+    window.addEventListener('focus', () => {
+        performDeviceCheck();
+    });
 }
 
 // -------------------------------------------------------------

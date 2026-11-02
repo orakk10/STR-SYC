@@ -122,6 +122,7 @@ if ($current_section_id) {
     <title>Student Dashboard | STRAND-SYNC</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <link rel="stylesheet" href="../../assets/css/security-lock.css">
+    <script src="../../assets/js/security-lock.js?v=<?php echo time(); ?>"></script>
     <style>
         body {
             margin: 0;
@@ -703,7 +704,13 @@ if ($current_section_id) {
             }, 150);
         });
     </script>
-    <script src="../../assets/js/security-lock.js?v=<?php echo time(); ?>"></script>
+    <div id="sessionExpiredModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.85); z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:white; padding:30px; border-radius:16px; max-width:400px; width:90%; text-align:center; box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);">
+            <h3 style="color:#0f172a; margin-bottom:10px; font-size:1.3rem;">Session Expired</h3>
+            <p style="color:#64748b; font-size:0.9rem; margin-bottom:20px;">You have logged in from another device or your session has expired.</p>
+            <a href="../../manifest/login.php?timeout=1" style="display:inline-block; background:#2563eb; color:white; padding:12px 24px; border-radius:8px; text-decoration:none; font-weight:600;">Log In Again</a>
+        </div>
+    </div>
 </body>
 
 </html>
