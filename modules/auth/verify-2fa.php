@@ -38,8 +38,8 @@ if (empty($type) || empty($value)) {
 }
 
 try {
-    // 2. Fetch security hashes and user role
-    $stmt = $pdo->prepare("SELECT role, security_pin_hash, security_pattern_hash FROM users WHERE id = :id LIMIT 1");
+    // 2. Fetch security hashes and user metadata
+    $stmt = $pdo->prepare("SELECT username, full_name, role, section_id, security_pin_hash, security_pattern_hash FROM users WHERE id = :id LIMIT 1");
     $stmt->execute(['id' => $user_id]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -67,7 +67,11 @@ try {
         $new_session_id = session_id();
 
         // 4. Elevate session to active authenticated state
-        $_SESSION['user_id'] = $user_id;
+        $_SESSION['user_id']    = $user_id;
+        $_SESSION['username']   = $user['username'] ?? '';
+        $_SESSION['full_name']  = $user['full_name'] ?? '';
+        $_SESSION['section_id'] = $user['section_id'] ?? null;
+        
         if (!empty($_SESSION['pending_role'])) {
             $_SESSION['role'] = $_SESSION['pending_role'];
         } else if (!empty($user['role'])) {
@@ -99,8 +103,8 @@ try {
         }
 
         echo json_encode([
-            'success' => true, 
-            'message' => ucfirst($type) . ' verified successfully.',
+            'success'  => true, 
+            'message'  => ucfirst($type) . ' verified successfully.',
             'redirect' => $redirect
         ]);
     } else {

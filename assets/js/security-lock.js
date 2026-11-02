@@ -15,6 +15,7 @@ function getAuthEndpoint(filename) {
 // Idle Timeout Configuration (5 minutes = 300,000 milliseconds)
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
 let idleTimer = null;
+let singleDeviceInterval = null;
 
 // -------------------------------------------------------------
 // UTILITY HELPERS
@@ -246,6 +247,11 @@ function initIdleTimer() {
 }
 
 async function lockSessionAndLogout() {
+    if (singleDeviceInterval) {
+        clearInterval(singleDeviceInterval);
+        singleDeviceInterval = null;
+    }
+
     try {
         await fetch(getAuthEndpoint('force-logout.php'), {
             method: 'POST',
@@ -263,7 +269,9 @@ async function lockSessionAndLogout() {
 // Checks if session ID matches database every 10 seconds
 // -------------------------------------------------------------
 function initSingleDeviceCheck() {
-    setInterval(async () => {
+    if (singleDeviceInterval) clearInterval(singleDeviceInterval);
+
+    singleDeviceInterval = setInterval(async () => {
         try {
             const endpoint = `${getAuthEndpoint('check-session-validity.php')}?_t=${Date.now()}`;
             
@@ -279,6 +287,10 @@ function initSingleDeviceCheck() {
             const data = await res.json();
 
             if (!data.valid) {
+                // STOP POLLING immediately once session is invalidated
+                clearInterval(singleDeviceInterval);
+                singleDeviceInterval = null;
+
                 console.warn("Session invalidated:", data.reason || 'device_mismatch');
                 showSessionExpiredModal("You have been logged in from another device or location.");
             }

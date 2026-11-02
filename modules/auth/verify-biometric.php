@@ -1,5 +1,17 @@
 <?php
 // modules/auth/verify-biometric.php
+
+// Handle secure HTTPS session cookie scope across reverse proxies (ngrok / Cloudflare / InfinityFree)
+if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+    $_SERVER['HTTPS'] = 'on';
+}
+
+ini_set('session.cookie_httponly', 1);
+ini_set('session.use_only_cookies', 1);
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    ini_set('session.cookie_secure', 1);
+}
+
 session_start();
 require_once __DIR__ . '/../../config/database.php';
 
@@ -25,7 +37,7 @@ if (empty($credential_id)) {
     exit;
 }
 
-// Optional: Validate session challenge
+// Validate session challenge
 if (empty($_SESSION['biometric_auth_challenge'])) {
     echo json_encode(['success' => false, 'message' => 'Biometric challenge expired or invalid. Please try again.']);
     exit;
@@ -34,9 +46,9 @@ if (empty($_SESSION['biometric_auth_challenge'])) {
 $conn = getDBConnection();
 
 try {
-    // 2. Fetch biometric credential and user role
+    // 2. Fetch biometric credential and full user metadata
     $stmt = $conn->prepare("
-        SELECT ubc.id, ubc.counter, u.role 
+        SELECT ubc.id, ubc.counter, u.username, u.full_name, u.role, u.section_id 
         FROM user_biometric_credentials ubc
         JOIN users u ON u.id = ubc.user_id
         WHERE ubc.user_id = :user_id AND ubc.credential_id = :cred_id 
@@ -50,13 +62,28 @@ try {
         $updateStmt = $conn->prepare("UPDATE user_biometric_credentials SET counter = counter + 1, last_used_at = NOW() WHERE id = :id");
         $updateStmt->execute(['id' => $cred['id']]);
 
+        // Regenerate session ID to prevent session fixation attacks
+        session_regenerate_id(true);
+        $new_session_id = session_id();
+
         // 4. Elevate pending session to fully authenticated active session
-        $_SESSION['user_id'] = $user_id;
+        $_SESSION['user_id']    = $user_id;
+        $_SESSION['username']   = $cred['username'] ?? '';
+        $_SESSION['full_name']  = $cred['full_name'] ?? '';
+        $_SESSION['section_id'] = $cred['section_id'] ?? null;
+
         if (!empty($_SESSION['pending_role'])) {
             $_SESSION['role'] = $_SESSION['pending_role'];
         } else if (!empty($cred['role'])) {
             $_SESSION['role'] = $cred['role'];
         }
+
+        // Single Device Login: Save current active session ID to database
+        $sessionStmt = $conn->prepare("UPDATE users SET current_session_id = :session_id WHERE id = :id");
+        $sessionStmt->execute([
+            'session_id' => $new_session_id,
+            'id'         => $user_id
+        ]);
 
         // Clear temporary pending 2FA flags & biometric challenge session
         unset($_SESSION['pending_user_id']);
@@ -77,8 +104,8 @@ try {
         }
 
         echo json_encode([
-            'success' => true, 
-            'message' => 'Fingerprint authentication successful.',
+            'success'  => true, 
+            'message'  => 'Fingerprint authentication successful.',
             'redirect' => $redirect
         ]);
     } else {

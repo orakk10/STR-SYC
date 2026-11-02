@@ -47,6 +47,9 @@ if (!isset($_SESSION['user_id']) && isset($_SESSION['pending_user_id'])) {
 }
 
 $error = '';
+if (isset($_GET['timeout']) && $_GET['timeout'] == '1') {
+    $error = "Your session has expired or you were logged in from another device. Please log in again.";
+}
 
 // 2. Handle Asynchronous (AJAX) or Native POST Submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -116,11 +119,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             unset($_SESSION['pending_security_pref']);
 
             // Log user activity
-            $logStmt = $db->prepare("INSERT INTO activity_logs (user_id, action, ip_address) VALUES (:uid, 'User Login', :ip)");
-            $logStmt->execute([
-                'uid' => $user['id'],
-                'ip'  => $_SERVER['REMOTE_ADDR']
-            ]);
+            try {
+                $logStmt = $db->prepare("INSERT INTO activity_logs (user_id, action, ip_address) VALUES (:uid, 'User Login', :ip)");
+                $logStmt->execute([
+                    'uid' => $user['id'],
+                    'ip'  => $_SERVER['REMOTE_ADDR']
+                ]);
+            } catch (Exception $e) {
+                // Silently ignore if activity_logs is optional
+            }
 
             $redirectUrl = getDashboardUrl($user['role']);
 
