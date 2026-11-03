@@ -456,7 +456,7 @@ if ($section_data) {
                                             </td>
                                             <td style="padding: 10px; text-align: center;">
                                                 <!-- Fixed routing link passing clean numeric parameters -->
-                                                <a href="ecr-inputdata.php?assignment_id=<?php echo $load['assignment_id']; ?>&term=1" class="btn-table-action">Enter Grades</a>
+                                                <a href="ecr-inputdata.php?assignment_id=<?php echo $load['assignment_id']; ?>" class="btn-table-action">Enter Grades</a>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>

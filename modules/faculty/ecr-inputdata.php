@@ -18,24 +18,19 @@ $user_id   = $_SESSION['user_id'];
 $user_role = $_SESSION['role'];
 
 // Variables for dynamic navigation sidebar
-$nav_assignment_param = !empty($assignment_id) ? "?assignment_id={$assignment_id}" : "";
-$nav_term_param = !empty($assignment_id) 
-    ? "?assignment_id={$assignment_id}&term=" . ($term ?? 1) 
-    : "?term=" . ($term ?? 1);
-
 $user_role_clean = strtolower($_SESSION['role'] ?? 'faculty');
 $is_adviser_or_admin = in_array($user_role_clean, ['adviser', 'admin'], true);
 $current_page = basename($_SERVER['PHP_SELF']);
 
 // 3. Query Selected Term & Assignment
-$term = isset($_GET['term']) ? (int)$_GET['term'] : 1;
-if (!in_array($term, [1, 2, 3])) { $term = 1; }
+$term = isset($_GET['term']) ? (int)$_GET['term'] : null;
+if ($term !== null && !in_array($term, [1, 2, 3], true)) { $term = 1; }
 
 $assignment_id = isset($_GET['assignment_id']) ? (int)$_GET['assignment_id'] : 0;
 
 // 4. Fetch All Active Teaching Assignments for Faculty
 $assignments_stmt = $pdo->prepare("
-    SELECT sa.id AS assignment_id, sub.subject_name, sub.subject_code, sub.type AS subject_type,
+    SELECT sa.id AS assignment_id, sa.semester, sub.subject_name, sub.subject_code, sub.type AS subject_type,
            sec.id AS section_id, sec.section_name, sec.grade_level, st.strand_code, st.strand_name
     FROM subject_assignments sa
     JOIN subjects sub ON sa.subject_id = sub.id
@@ -59,6 +54,23 @@ foreach ($my_assignments as $assign) {
         break;
     }
 }
+
+$assignment_term_map = [
+    '1st Term' => 1,
+    '1st Sem' => 1,
+    '2nd Term' => 2,
+    '2nd Sem' => 2,
+    '3rd Term' => 3,
+    'Full Year' => 1
+];
+if ($term === null) {
+    $term = $assignment_term_map[$active_assignment['semester'] ?? ''] ?? 1;
+}
+
+$nav_assignment_param = !empty($assignment_id) ? "?assignment_id={$assignment_id}" : "";
+$nav_term_param = !empty($assignment_id)
+    ? "?assignment_id={$assignment_id}&term={$term}"
+    : "?term={$term}";
 
 $section_id = $active_assignment['section_id'] ?? 0;
 $strand_identifier = ($active_assignment['strand_code'] ?? '') . ' ' . ($active_assignment['strand_name'] ?? '');
@@ -655,7 +667,7 @@ if ($assignment_id > 0) {
 
         function switchAssignment(assignmentId) {
             if (assignmentId > 0) {
-                window.location.href = `ecr-inputdata.php?assignment_id=${assignmentId}&term=<?= $term ?>`;
+                window.location.href = `ecr-inputdata.php?assignment_id=${assignmentId}`;
             }
         }
 

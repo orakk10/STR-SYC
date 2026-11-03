@@ -246,23 +246,23 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
         body {
-            margin: 0; padding: 0; overflow: hidden;
+            margin: 0; padding: 0; overflow-x: hidden; overflow-y: auto;
             background-color: #f8fafc; font-family: 'Inter', system-ui, sans-serif;
         }
 
-        .dashboard-wrapper { display: flex; height: 100vh; width: 100%; overflow: hidden; position: relative; }
+        .dashboard-wrapper { display: flex; min-height: 100vh; height: auto; width: 100%; overflow: visible; position: relative; }
 
         main.content {
             flex-grow: 1; margin-left: 260px; padding: 25px 30px; width: 100%;
-            height: 100vh; box-sizing: border-box; display: flex; flex-direction: column;
-            transition: margin-left 0.3s ease; overflow: hidden;
+            min-height: 100vh; height: auto; box-sizing: border-box; display: flex; flex-direction: column;
+            transition: margin-left 0.3s ease; overflow: visible;
         }
 
         #sidebar:not(.active) ~ main.content { margin-left: 0; width: 100%; }
 
         .admin-layout {
             display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 20px;
-            margin-top: 15px; align-items: start; flex: 1; min-height: 0; overflow: hidden;
+            margin-top: 15px; align-items: start; flex: none; min-height: auto; overflow: visible;
         }
 
         .card {
@@ -306,7 +306,7 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .table-container {
             background: white; padding: 20px; border-radius: 12px;
             border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-            min-width: 0; height: 100%; overflow: auto; box-sizing: border-box;
+            min-width: 0; height: auto; overflow-x: auto; overflow-y: visible; box-sizing: border-box;
         }
 
         .mobile-toggle { display: none; z-index: 999; }

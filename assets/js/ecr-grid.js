@@ -115,9 +115,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Attach real-time input listeners to all score fields
     document.querySelectorAll('.score-input').forEach(input => {
         input.addEventListener('input', (e) => {
+            if (parseFloat(e.target.value) > 100) {
+                e.target.value = '100';
+            }
             const row = e.target.closest('tr');
             if (row) recalculateRow(row);
             markDraftUnsaved();
+        });
+    });
+
+    document.querySelectorAll('.hps-input').forEach(input => {
+        input.addEventListener('input', () => {
+            if (parseFloat(input.value) > 100) {
+                input.value = '100';
+            }
+            document.querySelectorAll('.student-row').forEach(recalculateRow);
         });
     });
     document.querySelectorAll('.student-row').forEach(recalculateRow);

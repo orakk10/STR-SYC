@@ -110,6 +110,18 @@ try {
             continue;
         }
 
+        if (
+            !is_numeric($item['score'])
+            || !is_finite((float)$item['score'])
+            || (float)$item['score'] < 0
+            || (float)$item['score'] > 100
+        ) {
+            $db->rollBack();
+            http_response_code(400);
+            echo json_encode(['status' => 'error', 'message' => 'Student scores must be between 0 and 100.']);
+            exit();
+        }
+
         $stmtScore->execute([
             'component_id' => (int)$item['component_id'],
             'student_id'   => (int)$item['student_id'],

@@ -74,19 +74,18 @@ $grade12_sections = $conn->query("
             padding: 30px;
             width: 100%;
             max-width: 100%;
-            height: 100vh; 
+            min-height: 100vh;
+            height: auto;
             box-sizing: border-box;
             display: flex; 
             flex-direction: column; 
             transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            overflow: hidden;
+            overflow: visible;
         }
 
-        /* Scrollable Data Viewport Container */
         .table-container { 
-            flex: 1; 
-            min-height: 0; 
-            overflow-y: auto; 
+            height: auto;
+            overflow-y: visible;
             overflow-x: auto; 
             background: white;
             padding: 25px;
