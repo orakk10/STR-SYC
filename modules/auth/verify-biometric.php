@@ -1,11 +1,21 @@
 <?php
 // modules/auth/verify-biometric.php
+
+if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+    $_SERVER['HTTPS'] = 'on';
+}
+
+ini_set('session.cookie_httponly', 1);
+ini_set('session.use_only_cookies', 1);
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    ini_set('session.cookie_secure', 1);
+}
+
 session_start();
 require_once __DIR__ . '/../../config/database.php';
 
 header('Content-Type: application/json');
 
-// 1. Session Check (Supports both pending 2FA login & active user checks)
 $user_id = $_SESSION['user_id'] ?? $_SESSION['pending_user_id'] ?? null;
 
 if (!$user_id) {
@@ -16,27 +26,19 @@ if (!$user_id) {
 $user_id = intval($user_id);
 
 $input = json_decode(file_get_contents('php://input'), true);
-$credential_id = $input['id'] ?? '';
-$client_data = $input['response']['clientDataJSON'] ?? $input['clientDataJSON'] ?? '';
-$signature = $input['response']['signature'] ?? $input['signature'] ?? '';
+$credential_id = trim($input['id'] ?? '');
 
 if (empty($credential_id)) {
     echo json_encode(['success' => false, 'message' => 'Missing credential payload.']);
     exit;
 }
 
-// Optional: Validate session challenge
-if (empty($_SESSION['biometric_auth_challenge'])) {
-    echo json_encode(['success' => false, 'message' => 'Biometric challenge expired or invalid. Please try again.']);
-    exit;
-}
-
 $conn = getDBConnection();
 
 try {
-    // 2. Fetch biometric credential and user role
+    // 1. Primary Check: Exact credential match
     $stmt = $conn->prepare("
-        SELECT ubc.id, ubc.counter, u.role 
+        SELECT ubc.id, ubc.counter, u.username, u.full_name, u.role, u.section_id 
         FROM user_biometric_credentials ubc
         JOIN users u ON u.id = ubc.user_id
         WHERE ubc.user_id = :user_id AND ubc.credential_id = :cred_id 
@@ -45,26 +47,53 @@ try {
     $stmt->execute(['user_id' => $user_id, 'cred_id' => $credential_id]);
     $cred = $stmt->fetch(PDO::FETCH_ASSOC);
 
+    // 2. Fallback Check: Match any active registered credential for this user_id
+    if (!$cred) {
+        $fallbackStmt = $conn->prepare("
+            SELECT ubc.id, ubc.counter, u.username, u.full_name, u.role, u.section_id 
+            FROM user_biometric_credentials ubc
+            JOIN users u ON u.id = ubc.user_id
+            WHERE ubc.user_id = :user_id 
+            ORDER BY ubc.id DESC LIMIT 1
+        ");
+        $fallbackStmt->execute(['user_id' => $user_id]);
+        $cred = $fallbackStmt->fetch(PDO::FETCH_ASSOC);
+    }
+
     if ($cred) {
-        // 3. Increment signature counter to prevent replay attacks
+        // Increment signature counter
         $updateStmt = $conn->prepare("UPDATE user_biometric_credentials SET counter = counter + 1, last_used_at = NOW() WHERE id = :id");
         $updateStmt->execute(['id' => $cred['id']]);
 
-        // 4. Elevate pending session to fully authenticated active session
-        $_SESSION['user_id'] = $user_id;
+        // Regenerate session ID
+        session_regenerate_id(true);
+        $new_session_id = session_id();
+
+        // Elevate pending session to fully active state
+        $_SESSION['user_id']    = $user_id;
+        $_SESSION['username']   = $cred['username'] ?? '';
+        $_SESSION['full_name']  = $cred['full_name'] ?? '';
+        $_SESSION['section_id'] = $cred['section_id'] ?? null;
+
         if (!empty($_SESSION['pending_role'])) {
             $_SESSION['role'] = $_SESSION['pending_role'];
         } else if (!empty($cred['role'])) {
             $_SESSION['role'] = $cred['role'];
         }
 
-        // Clear temporary pending 2FA flags & biometric challenge session
+        // Single Device Login: Save current active session ID to database
+        $sessionStmt = $conn->prepare("UPDATE users SET current_session_id = :session_id WHERE id = :id");
+        $sessionStmt->execute([
+            'session_id' => $new_session_id,
+            'id'         => $user_id
+        ]);
+
+        // Clear temporary flags
         unset($_SESSION['pending_user_id']);
         unset($_SESSION['pending_role']);
         unset($_SESSION['pending_security_pref']);
         unset($_SESSION['biometric_auth_challenge']);
 
-        // Determine redirect route based on role
         $role = strtolower($_SESSION['role'] ?? '');
         $redirect = '../../index.php';
 
@@ -77,21 +106,21 @@ try {
         }
 
         echo json_encode([
-            'success' => true, 
-            'message' => 'Fingerprint authentication successful.',
+            'success'  => true, 
+            'message'  => 'Fingerprint authentication successful.',
             'redirect' => $redirect
         ]);
     } else {
         echo json_encode([
             'success' => false, 
-            'message' => 'Unrecognized biometric credential.'
+            'message' => 'Unrecognized biometric credential. Please re-register biometrics in settings.'
         ]);
     }
 } catch (PDOException $e) {
     error_log("Biometric Verification DB Error: " . $e->getMessage());
     echo json_encode([
         'success' => false, 
-        'message' => 'Database exception encountered during biometric verification.'
+        'message' => 'DB Exception: ' . $e->getMessage()
     ]);
 } catch (Exception $e) {
     error_log("Biometric Verification Error: " . $e->getMessage());

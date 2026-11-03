@@ -488,6 +488,7 @@ $escape = static function ($value): string {
             STRAND-SYNC | Student Record Management System
         </div>
     </div>
+    <script src="../../assets/js/security-lock.js?v=<?php echo time(); ?>"></script>
 
 </body>
 </html>

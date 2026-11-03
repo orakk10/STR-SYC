@@ -1,4 +1,15 @@
 <?php
+// Handle secure HTTPS session cookie scope across reverse proxies (ngrok / Cloudflare / InfinityFree)
+if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+    $_SERVER['HTTPS'] = 'on';
+}
+
+ini_set('session.cookie_httponly', 1);
+ini_set('session.use_only_cookies', 1);
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    ini_set('session.cookie_secure', 1);
+}
+
 session_start();
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/constants.php';
@@ -36,6 +47,9 @@ if (!isset($_SESSION['user_id']) && isset($_SESSION['pending_user_id'])) {
 }
 
 $error = '';
+if (isset($_GET['timeout']) && $_GET['timeout'] == '1') {
+    $error = "Your session has expired or you were logged in from another device. Please log in again.";
+}
 
 // 2. Handle Asynchronous (AJAX) or Native POST Submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -62,6 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($user && password_verify($password, $user['password'])) {
             session_regenerate_id(true);
+            $new_session_id = session_id();
 
             // Check if secondary security is required
             $sec_pref = $user['security_preference'] ?? 'none';
@@ -91,17 +106,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['role']       = $user['role'];
             $_SESSION['section_id'] = $user['section_id'];
 
+            // Single Device Login: Store current active session ID in database
+            $sessionStmt = $db->prepare("UPDATE users SET current_session_id = :session_id WHERE id = :id");
+            $sessionStmt->execute([
+                'session_id' => $new_session_id,
+                'id'         => $user['id']
+            ]);
+
             // Clear any lingering pending flags
             unset($_SESSION['pending_user_id']);
             unset($_SESSION['pending_role']);
             unset($_SESSION['pending_security_pref']);
 
             // Log user activity
-            $logStmt = $db->prepare("INSERT INTO activity_logs (user_id, action, ip_address) VALUES (:uid, 'User Login', :ip)");
-            $logStmt->execute([
-                'uid' => $user['id'],
-                'ip'  => $_SERVER['REMOTE_ADDR']
-            ]);
+            try {
+                $logStmt = $db->prepare("INSERT INTO activity_logs (user_id, action, ip_address) VALUES (:uid, 'User Login', :ip)");
+                $logStmt->execute([
+                    'uid' => $user['id'],
+                    'ip'  => $_SERVER['REMOTE_ADDR']
+                ]);
+            } catch (Exception $e) {
+                // Silently ignore if activity_logs is optional
+            }
 
             $redirectUrl = getDashboardUrl($user['role']);
 

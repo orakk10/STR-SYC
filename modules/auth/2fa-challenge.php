@@ -1,5 +1,17 @@
 <?php
 // modules/auth/2fa-challenge.php
+
+// Handle secure HTTPS session cookie scope across reverse proxies (ngrok / Cloudflare / InfinityFree)
+if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+    $_SERVER['HTTPS'] = 'on';
+}
+
+ini_set('session.cookie_httponly', 1);
+ini_set('session.use_only_cookies', 1);
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    ini_set('session.cookie_secure', 1);
+}
+
 session_start();
 
 if (!isset($_SESSION['pending_user_id'])) {
@@ -345,6 +357,9 @@ $sec_pref = $_SESSION['pending_security_pref'] ?? 'pin';
 </div>
 
 <script>
+    let isBiometricScanning = false;
+    let isUIInitialized = false;
+
     function initPatternWithRetry(retries = 10) {
         if (typeof initUnlockPatternCanvas === 'function') {
             const canvas = document.getElementById('unlockPatternCanvas');
@@ -370,6 +385,9 @@ $sec_pref = $_SESSION['pending_security_pref'] ?? 'pin';
     }
 
     async function startBiometricScan() {
+        if (isBiometricScanning) return;
+        isBiometricScanning = true;
+
         const statusText = document.getElementById('biometricStatusText');
         if (statusText) {
             statusText.textContent = "Scanning biometric credential...";
@@ -384,15 +402,20 @@ $sec_pref = $_SESSION['pending_security_pref'] ?? 'pin';
                     statusText.textContent = "Scan canceled or failed. Tap icon to retry.";
                     statusText.style.color = "var(--danger)";
                 }
+            } finally {
+                isBiometricScanning = false;
             }
         } else {
-            setTimeout(() => {
+            setTimeout(async () => {
                 if (typeof triggerFingerprintScan === 'function') {
-                    triggerFingerprintScan();
+                    try {
+                        await triggerFingerprintScan();
+                    } catch (e) {}
                 } else if (statusText) {
                     statusText.textContent = "Biometric module loading failed.";
                     statusText.style.color = "var(--danger)";
                 }
+                isBiometricScanning = false;
             }, 300);
         }
     }
@@ -408,6 +431,9 @@ $sec_pref = $_SESSION['pending_security_pref'] ?? 'pin';
     }
 
     function setupChallengeUI() {
+        if (isUIInitialized) return;
+        isUIInitialized = true;
+
         const currentPref = "<?php echo htmlspecialchars($sec_pref); ?>";
         
         if (currentPref === "pattern") {
@@ -429,7 +455,6 @@ $sec_pref = $_SESSION['pending_security_pref'] ?? 'pin';
     } else {
         document.addEventListener("DOMContentLoaded", setupChallengeUI);
     }
-    window.addEventListener("load", setupChallengeUI);
 
     async function verifyOneTimeSecurity(type) {
         let value = '';

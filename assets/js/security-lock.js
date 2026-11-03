@@ -1,13 +1,21 @@
 // assets/js/security-lock.js
 
-// Dynamic base path auto-detection for modules/auth/ endpoints
-const BASE_AUTH_URL = window.location.pathname.includes('/modules/auth/') 
-    ? '' 
-    : '/modules/auth/';
+// Dynamic path helper to locate modules/auth/ endpoints safely
+function getAuthEndpoint(filename) {
+    const pathSegments = window.location.pathname.split('/');
+    const authIndex = pathSegments.indexOf('modules');
+    
+    if (authIndex !== -1) {
+        const rootPath = pathSegments.slice(0, authIndex).join('/');
+        return `${rootPath}/modules/auth/${filename}`;
+    }
+    return `/modules/auth/${filename}`;
+}
 
 // Idle Timeout Configuration (5 minutes = 300,000 milliseconds)
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
 let idleTimer = null;
+let singleDeviceInterval = null;
 
 // -------------------------------------------------------------
 // UTILITY HELPERS
@@ -39,12 +47,170 @@ function base64ToUint8Array(base64String) {
 }
 
 // -------------------------------------------------------------
+// CENTERED FIXED SESSION EXPIRED MODAL
+// -------------------------------------------------------------
+function showSessionExpiredModal(customMessage = null) {
+    if (document.getElementById('sessionExpiredOverlay')) return;
+
+    // Remove old stylesheet if present to force style updates
+    const oldStyle = document.getElementById('sessionOverlayStyles');
+    if (oldStyle) oldStyle.remove();
+
+    const style = document.createElement('style');
+    style.id = 'sessionOverlayStyles';
+    style.innerHTML = `
+        .session-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh; /* Dynamic Viewport Height for Mobile Browsers */
+            background: rgba(15, 23, 42, 0.82);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 999999;
+            display: flex;
+            align-items: center; /* Always centers vertically on all viewports */
+            justify-content: center;
+            padding: 20px;
+            box-sizing: border-box;
+            touch-action: none; /* Prevents background touch scrolling */
+            animation: fadeInOverlay 0.25s ease-out forwards;
+        }
+
+        .session-modal-card {
+            width: 100%;
+            max-width: 400px;
+            background: #ffffff;
+            border-radius: 24px;
+            padding: 28px 24px;
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.35);
+            text-align: center;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            animation: popInModal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .session-shield-badge {
+            width: 56px;
+            height: 56px;
+            background: #eff6ff;
+            color: #2563eb;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            box-shadow: 0 0 0 6px #f0f7ff;
+        }
+
+        .session-shield-badge svg {
+            width: 26px;
+            height: 26px;
+        }
+
+        .session-modal-card h3 {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: #0f172a;
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
+        }
+
+        .session-modal-card p {
+            font-size: 0.88rem;
+            color: #64748b;
+            line-height: 1.5;
+            margin-bottom: 12px;
+            padding: 0 4px;
+        }
+
+        .session-error-code {
+            font-size: 0.78rem;
+            color: #94a3b8;
+            font-weight: 600;
+            margin-bottom: 20px;
+            letter-spacing: 0.02em;
+        }
+
+        .btn-session-login {
+            width: 100%;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            color: #ffffff;
+            border: none;
+            padding: 14px;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+            transition: transform 0.15s ease, background-color 0.15s ease;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .btn-session-login:active {
+            transform: scale(0.98);
+        }
+
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes popInModal {
+            from { opacity: 0; transform: scale(0.92) translateY(12px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+    `;
+    document.head.appendChild(style);
+
+    const messageText = customMessage || "Your session has expired. For your security, we need you to log in again to continue.";
+
+    const overlay = document.createElement('div');
+    overlay.id = 'sessionExpiredOverlay';
+    overlay.className = 'session-overlay';
+    overlay.innerHTML = `
+        <div class="session-modal-card">
+            <div class="session-shield-badge">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                </svg>
+            </div>
+            <h3>Log in to continue</h3>
+            <p>${messageText}</p>
+            <div class="session-error-code">(Code: 3103401)</div>
+            <button type="button" class="btn-session-login" onclick="redirectToLogin()">Log in</button>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+}
+
+function redirectToLogin() {
+    const pathSegments = window.location.pathname.split('/');
+    const modulesIndex = pathSegments.indexOf('modules');
+    
+    let rootPath = '';
+    if (modulesIndex > 0) {
+        rootPath = pathSegments.slice(0, modulesIndex).join('/');
+    }
+    
+    window.location.href = `${window.location.origin}${rootPath}/manifest/login.php?timeout=1`;
+}
+
+// -------------------------------------------------------------
 // INITIALIZATION LISTENER & SAFEGUARD
 // -------------------------------------------------------------
 function runInitSequence() {
-    if (!window.location.pathname.includes('2fa-challenge.php') && 
-        !window.location.pathname.includes('login.php')) {
+    const currentPath = window.location.pathname;
+    const isPublicPage = currentPath.includes('login.php') || currentPath.includes('2fa-challenge.php');
+
+    if (!isPublicPage) {
         initIdleTimer();
+        initSingleDeviceCheck();
     }
 
     if (document.getElementById('unlockPatternCanvas')) {
@@ -68,8 +234,8 @@ function initIdleTimer() {
         if (idleTimer) clearTimeout(idleTimer);
         
         idleTimer = setTimeout(async () => {
-            console.log("Inactivity limit reached. Redirecting to 2FA Challenge...");
-            await lockSessionAndRedirect();
+            console.log("Inactivity limit reached. Prompting session expiration...");
+            await lockSessionAndLogout();
         }, IDLE_TIMEOUT_MS);
     };
 
@@ -80,20 +246,72 @@ function initIdleTimer() {
     resetTimer();
 }
 
-async function lockSessionAndRedirect() {
+async function lockSessionAndLogout() {
+    if (singleDeviceInterval) {
+        clearInterval(singleDeviceInterval);
+        singleDeviceInterval = null;
+    }
+
     try {
-        const response = await fetch(`${BASE_AUTH_URL}lock-session.php`, {
+        await fetch(getAuthEndpoint('force-logout.php'), {
             method: 'POST',
             credentials: 'same-origin'
         });
-
-        const data = await response.json();
-        if (data.success) {
-            window.location.href = `${BASE_AUTH_URL}2fa-challenge.php`;
-        }
+        showSessionExpiredModal();
     } catch (err) {
-        console.error("Failed to lock session on inactivity:", err);
+        console.error("Failed to expire session on inactivity:", err);
+        showSessionExpiredModal();
     }
+}
+
+// -------------------------------------------------------------
+// SINGLE DEVICE LOGIN CHECKER (Optimized for WebViews & APKs)
+// -------------------------------------------------------------
+function initSingleDeviceCheck() {
+    if (singleDeviceInterval) clearInterval(singleDeviceInterval);
+
+    const performDeviceCheck = async () => {
+        try {
+            const endpoint = `${getAuthEndpoint('check-session-validity.php')}?_t=${Date.now()}`;
+            
+            const res = await fetch(endpoint, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: {
+                    'ngrok-skip-browser-warning': 'true',
+                    'Cache-Control': 'no-cache'
+                }
+            });
+            
+            const data = await res.json();
+
+            if (!data.valid) {
+                // STOP POLLING immediately once session is invalidated
+                clearInterval(singleDeviceInterval);
+                singleDeviceInterval = null;
+
+                console.warn("Session invalidated:", data.reason || 'device_mismatch');
+                showSessionExpiredModal("You have been logged in from another device or location.");
+            }
+        } catch (err) {
+            console.error("Single device check error:", err);
+        }
+    };
+
+    // 1. Standard background poll every 10 seconds
+    singleDeviceInterval = setInterval(performDeviceCheck, 10000);
+
+    // 2. CRITICAL FOR APKS: Check session immediately when user returns to the app or unlocks screen
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            performDeviceCheck();
+        }
+    });
+
+    // 3. Additional fallback for mobile webviews on window focus
+    window.addEventListener('focus', () => {
+        performDeviceCheck();
+    });
 }
 
 // -------------------------------------------------------------
@@ -106,7 +324,7 @@ async function registerFingerprint() {
     }
 
     try {
-        const res = await fetch(`${BASE_AUTH_URL}register-biometric.php?action=get_options`, {
+        const res = await fetch(`${getAuthEndpoint('register-biometric.php')}?action=get_options`, {
             credentials: 'same-origin'
         });
         const options = await res.json();
@@ -141,7 +359,7 @@ async function registerFingerprint() {
             }
         });
 
-        const saveRes = await fetch(`${BASE_AUTH_URL}register-biometric.php`, {
+        const saveRes = await fetch(getAuthEndpoint('register-biometric.php'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
@@ -164,7 +382,6 @@ async function registerFingerprint() {
             alert(result.message || "Failed to save biometric credential.");
         }
     } catch (err) {
-        // Silently ignore user cancelation or timeout errors
         if (err.name === "NotAllowedError" || err.name === "AbortError") {
             console.log("Biometric registration canceled by user.");
             return;
@@ -184,7 +401,7 @@ async function triggerFingerprintScan(isAutoPrompt = false) {
     }
 
     try {
-        const response = await fetch(`${BASE_AUTH_URL}get-biometric-challenge.php`, {
+        const response = await fetch(getAuthEndpoint('get-biometric-challenge.php'), {
             credentials: 'same-origin'
         });
         const options = await response.json();
@@ -223,7 +440,7 @@ async function triggerFingerprintScan(isAutoPrompt = false) {
             type: credential.type
         };
 
-        const verifyRes = await fetch(`${BASE_AUTH_URL}verify-biometric.php`, {
+        const verifyRes = await fetch(getAuthEndpoint('verify-biometric.php'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
@@ -237,7 +454,6 @@ async function triggerFingerprintScan(isAutoPrompt = false) {
             if (!isAutoPrompt) alert(result.message || "Fingerprint authentication failed.");
         }
     } catch (err) {
-        // Silently handle user cancelation
         if (err.name === "NotAllowedError" || err.name === "AbortError") {
             console.log("Biometric scan canceled by user.");
             return;

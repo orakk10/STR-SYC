@@ -589,5 +589,6 @@ $users_list = $conn->query("SELECT id, username, full_name, role FROM users WHER
             .finally(() => input.value = '');
         }
     </script>
+    <script src="../../assets/js/security-lock.js?v=<?php echo time(); ?>"></script>
 </body>
 </html>
