@@ -1,4 +1,3 @@
-
 <?php
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -541,8 +540,6 @@ $tot_abs = array_sum($days_absent);
     <script src="../../assets/js/security-lock.js" defer></script>
 
     <style>
-
-        
 /* =========================================
    GENERAL SETTINGS
 ========================================= */
@@ -818,17 +815,17 @@ table.attendance-table {
 
 table.attendance-table th,
 table.attendance-table td {
-    padding: 2px 1px !important;
+    padding: 1px 0px !important;
     font-size: 8px !important;
     text-align: center !important;
-    white-space: normal !important;
-    overflow-wrap: anywhere;
-    word-break: normal;
+    white-space: nowrap !important;
+    overflow: hidden !important;
 }
 
 table.attendance-table td.text-left {
     text-align: left !important;
     padding-left: 2px !important;
+    white-space: normal !important;
     font-size: 8px !important;
 }
 
@@ -1045,7 +1042,6 @@ table.attendance-table td.text-left {
 
 /* =========================================
    MOBILE RESPONSIVENESS
-   STACK THE TWO SF9 PAGES VERTICALLY
 ========================================= */
 @media screen and (max-width: 600px) {
 
@@ -1118,7 +1114,6 @@ table.attendance-table td.text-left {
         margin: 0;
     }
 
-    /* Document becomes vertically stacked */
     .report-document-wrapper {
         display: block;
         width: 100%;
@@ -1151,7 +1146,6 @@ table.attendance-table td.text-left {
         border: 1px solid #000;
     }
 
-    /* Document header */
     .header-section {
         font-size: 9px;
         padding-top: 2px;
@@ -1159,10 +1153,6 @@ table.attendance-table td.text-left {
 
     .header-section .deped-line {
         margin: 2px 0;
-    }
-
-    .header-section .deped-line[style] {
-        max-width: 100%;
     }
 
     .vector-deped-seal,
@@ -1180,7 +1170,6 @@ table.attendance-table td.text-left {
         margin: 7px 0 4px;
     }
 
-    /* Student information */
     .student-info-block {
         font-size: 10px;
         line-height: 1.5;
@@ -1192,16 +1181,11 @@ table.attendance-table td.text-left {
         gap: 5px 10px;
     }
 
-    .info-row > span {
-        max-width: 100%;
-    }
-
     .message-block {
         font-size: 10px;
         line-height: 1.35;
     }
 
-    /* Academic table */
     table.doc-table {
         width: 100% !important;
         font-size: 8px;
@@ -1215,26 +1199,12 @@ table.attendance-table td.text-left {
         overflow-wrap: anywhere;
     }
 
-    /* Attendance table */
-    table.attendance-table {
-        width: 100% !important;
-        table-layout: fixed !important;
-    }
-
     table.attendance-table th,
     table.attendance-table td {
         font-size: 6.5px !important;
-        padding: 3px 0 !important;
-        white-space: normal !important;
-        overflow-wrap: anywhere;
+        padding: 2px 0 !important;
     }
 
-    table.attendance-table td.text-left {
-        font-size: 6.5px !important;
-        padding-left: 2px !important;
-    }
-
-    /* Descriptors */
     .descriptors-table {
         font-size: 9px;
     }
@@ -1244,7 +1214,6 @@ table.attendance-table td.text-left {
         padding: 2px;
     }
 
-    /* Comments and signatures */
     .comment-area {
         min-height: 35px;
         font-size: 10px;
@@ -1259,7 +1228,6 @@ table.attendance-table td.text-left {
         font-size: 9px;
     }
 
-    /* Prevent modal from exceeding screen */
     .modal-box {
         padding: 18px;
         max-height: 85vh;
@@ -1267,44 +1235,6 @@ table.attendance-table td.text-left {
 
     .modal-header h4 {
         font-size: .9rem;
-    }
-}
-
-/* =========================================
-   VERY SMALL MOBILE DEVICES
-========================================= */
-@media screen and (max-width: 360px) {
-
-    main.content {
-        padding: 5px !important;
-    }
-
-    .report-document {
-        padding: 5px;
-    }
-
-    .doc-page {
-        padding: 6px;
-    }
-
-    .student-info-block {
-        font-size: 9px;
-    }
-
-    table.doc-table th,
-    table.doc-table td {
-        font-size: 7px;
-        padding: 2px 1px;
-    }
-
-    table.attendance-table th,
-    table.attendance-table td {
-        font-size: 5.8px !important;
-    }
-
-    .btn-print,
-    .btn-remarks {
-        font-size: 11px;
     }
 }
 
@@ -1458,8 +1388,7 @@ table.attendance-table td.text-left {
         print-color-adjust: exact !important;
     }
 }
-</style>
-
+    </style>
 </head>
 
 <body>
@@ -1522,44 +1451,70 @@ table.attendance-table td.text-left {
 
         <div class="sf9-toolbar no-print">
 
-    <div class="toolbar-title">
+            <div class="toolbar-title">
 
-        <button class="mobile-burger-btn"
-                onclick="toggleSidebar()"
-                title="Toggle Sidebar">
-            ☰
-        </button>
+                <button class="mobile-burger-btn"
+                        onclick="toggleSidebar()"
+                        title="Toggle Sidebar">
+                    ☰
+                </button>
 
-        <form method="GET"
-              action="<?= htmlspecialchars($sf9_page) ?>"
-              id="studentSelectForm"
-              style="margin:0; display:flex; align-items:center; gap:12px;">
+                <form method="GET"
+                      action="<?= htmlspecialchars($sf9_page) ?>"
+                      id="studentSelectForm"
+                      style="margin:0; display:flex; align-items:center; gap:12px;">
 
-            <!-- Keep your existing learner select here -->
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <label for="student_id" style="font-size: 0.85rem; font-weight: 600; color: #334155;">Learner:</label>
+                        <select name="student_id" id="student_id" onchange="document.getElementById('studentSelectForm').submit();" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: #ffffff; cursor: pointer; font-weight: 500;">
+                            <?php if (!empty($roster)): ?>
+                                <?php foreach ($roster as $s): ?>
+                                    <option value="<?= $s['id'] ?>" <?= intval($s['id']) === $student_id ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars(strtoupper($s['full_name'])) ?> (LRN: <?= htmlspecialchars($s['lrn'] ?: 'N/A') ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <option value="">NO STUDENTS FOUND</option>
+                            <?php endif; ?>
+                        </select>
+                    </div>
 
-            <!-- Keep your existing academic year select here -->
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <label for="academic_year" style="font-size: 0.85rem; font-weight: 600; color: #334155;">School Year:</label>
+                        <select name="academic_year" id="academic_year" onchange="document.getElementById('studentSelectForm').submit();" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: #ffffff; cursor: pointer; font-weight: 500;" <?= $student_id > 0 ? '' : 'disabled' ?>>
+                            <?php if (!empty($available_years)): ?>
+                                <?php foreach ($available_years as $sy): ?>
+                                    <option value="<?= $sy ?>" <?= $sy === $selected_sy ? 'selected' : '' ?>>
+                                        SY <?= htmlspecialchars($sy) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <option value="">N/A</option>
+                            <?php endif; ?>
+                        </select>
+                    </div>
 
-        </form>
+                </form>
 
-    </div>
+            </div>
 
-    <?php if ($db_student): ?>
-    <div class="toolbar-actions">
+            <?php if ($db_student): ?>
+            <div class="toolbar-actions">
 
-        <button class="btn-remarks"
-                onclick="openRemarksModal()">
-            Edit Adviser Remarks
-        </button>
+                <button class="btn-remarks"
+                        onclick="openRemarksModal()">
+                    Edit Adviser Remarks
+                </button>
 
-        <button class="btn-print"
-                onclick="window.print()">
-            Print Official SF9 Document
-        </button>
+                <button class="btn-print"
+                        onclick="window.print()">
+                    Print Official SF9 Document
+                </button>
 
-    </div>
-    <?php endif; ?>
+            </div>
+            <?php endif; ?>
 
-</div>
+        </div>
 
         <!-- ==========================================
              SF9 DOCUMENT
@@ -1976,21 +1931,21 @@ table.attendance-table td.text-left {
 
                         <colgroup>
 
-                            <col style="width:25%;">
+                            <col style="width:26%;">
 
-                            <col style="width:5.2%;">
-                            <col style="width:5.2%;">
-                            <col style="width:5.2%;">
-                            <col style="width:5.2%;">
-                            <col style="width:5.2%;">
-                            <col style="width:5.2%;">
-                            <col style="width:5.2%;">
-                            <col style="width:5.2%;">
-                            <col style="width:5.2%;">
-                            <col style="width:5.2%;">
-                            <col style="width:5.2%;">
+                            <col style="width:5%;">
+                            <col style="width:5%;">
+                            <col style="width:5%;">
+                            <col style="width:5%;">
+                            <col style="width:5%;">
+                            <col style="width:5%;">
+                            <col style="width:5%;">
+                            <col style="width:5%;">
+                            <col style="width:5%;">
+                            <col style="width:5%;">
+                            <col style="width:5%;">
 
-                            <col style="width:17.8%;">
+                            <col style="width:14%;">
 
                         </colgroup>
 
