@@ -14,7 +14,7 @@ if (empty($username) || empty($password)) {
 }
 
 // 1. Authenticate primary credentials
-$stmt = $pdo->prepare("SELECT id, password, role, security_preference FROM users WHERE username = :username LIMIT 1");
+$stmt = $pdo->prepare("SELECT id, password, role, security_preference FROM users WHERE username = :username AND role <> 'archived' LIMIT 1");
 $stmt->execute(['username' => $username]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 

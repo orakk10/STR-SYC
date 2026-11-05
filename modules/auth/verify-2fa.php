@@ -43,7 +43,7 @@ try {
     $stmt->execute(['id' => $user_id]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$user) {
+    if (!$user || $user['role'] === 'archived') {
         echo json_encode(['success' => false, 'message' => 'User record not found.']);
         exit();
     }

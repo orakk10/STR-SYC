@@ -41,7 +41,8 @@ try {
         SELECT ubc.id, ubc.counter, u.username, u.full_name, u.role, u.section_id 
         FROM user_biometric_credentials ubc
         JOIN users u ON u.id = ubc.user_id
-        WHERE ubc.user_id = :user_id AND ubc.credential_id = :cred_id 
+        WHERE ubc.user_id = :user_id AND ubc.credential_id = :cred_id
+          AND u.role <> 'archived'
         LIMIT 1
     ");
     $stmt->execute(['user_id' => $user_id, 'cred_id' => $credential_id]);
@@ -53,7 +54,8 @@ try {
             SELECT ubc.id, ubc.counter, u.username, u.full_name, u.role, u.section_id 
             FROM user_biometric_credentials ubc
             JOIN users u ON u.id = ubc.user_id
-            WHERE ubc.user_id = :user_id 
+            WHERE ubc.user_id = :user_id
+              AND u.role <> 'archived'
             ORDER BY ubc.id DESC LIMIT 1
         ");
         $fallbackStmt->execute(['user_id' => $user_id]);

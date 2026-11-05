@@ -47,7 +47,9 @@ if (!isset($_SESSION['user_id']) && isset($_SESSION['pending_user_id'])) {
 }
 
 $error = '';
-if (isset($_GET['timeout']) && $_GET['timeout'] == '1') {
+if (($_GET['reason'] ?? '') === 'account_archived') {
+    $error = "Your account has been archived by an administrator. Contact an administrator for assistance.";
+} elseif (isset($_GET['timeout']) && $_GET['timeout'] == '1') {
     $error = "Your session has expired or you were logged in from another device. Please log in again.";
 }
 
@@ -65,7 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $db->prepare("
             SELECT id, username, password, role, full_name, section_id, security_preference 
             FROM users 
-            WHERE username = :username OR lrn = :lrn 
+            WHERE (username = :username OR lrn = :lrn)
+              AND role <> 'archived'
             LIMIT 1
         ");
         $stmt->execute([

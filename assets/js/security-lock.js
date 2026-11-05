@@ -189,7 +189,7 @@ function showSessionExpiredModal(customMessage = null) {
     document.body.appendChild(overlay);
 }
 
-function redirectToLogin() {
+function redirectToLogin(reason = '') {
     const pathSegments = window.location.pathname.split('/');
     const modulesIndex = pathSegments.indexOf('modules');
     
@@ -198,7 +198,8 @@ function redirectToLogin() {
         rootPath = pathSegments.slice(0, modulesIndex).join('/');
     }
     
-    window.location.href = `${window.location.origin}${rootPath}/manifest/login.php?timeout=1`;
+    const reasonParam = reason === 'account_archived' ? '&reason=account_archived' : '';
+    window.location.href = `${window.location.origin}${rootPath}/manifest/login.php?timeout=1${reasonParam}`;
 }
 
 // -------------------------------------------------------------
@@ -291,7 +292,13 @@ function initSingleDeviceCheck() {
                 singleDeviceInterval = null;
 
                 console.warn("Session invalidated:", data.reason || 'device_mismatch');
-                showSessionExpiredModal("You have been logged in from another device or location.");
+                if (data.reason === 'account_archived') {
+                    redirectToLogin('account_archived');
+                    return;
+                }
+
+                const message = "You have been logged in from another device or location.";
+                showSessionExpiredModal(message);
             }
         } catch (err) {
             console.error("Single device check error:", err);

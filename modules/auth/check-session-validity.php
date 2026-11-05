@@ -36,10 +36,28 @@ session_write_close();
 try {
     $conn = getDBConnection();
     
-    // Fetch stored active session ID for this user from database
-    $stmt = $conn->prepare("SELECT COALESCE(current_session_id, '') AS db_session FROM users WHERE id = :id LIMIT 1");
+    // Fetch the account state and stored active session ID
+    $stmt = $conn->prepare("SELECT role, COALESCE(current_session_id, '') AS db_session FROM users WHERE id = :id LIMIT 1");
     $stmt->execute(['id' => $user_id]);
-    $db_session = $stmt->fetchColumn();
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$user || $user['role'] === 'archived') {
+        @session_start();
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000,
+                $params['path'], $params['domain'],
+                $params['secure'], $params['httponly']
+            );
+        }
+        @session_destroy();
+
+        echo json_encode(['valid' => false, 'reason' => 'account_archived']);
+        exit;
+    }
+
+    $db_session = $user['db_session'];
 
     // If DB session is completely empty, initialize it with current active session
     if (empty($db_session)) {
