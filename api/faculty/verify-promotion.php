@@ -4,7 +4,7 @@ session_start();
 
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../core/PromotionVerification.php';
-
+require_once __DIR__ . '/../../core/ActivityLogger.php';
 function respond(int $statusCode, array $payload): void
 {
     http_response_code($statusCode);
@@ -83,6 +83,7 @@ try {
         respond(404, ['status' => 'error', 'message' => 'Student was not found in this section.']);
     }
 
+    $actionName = '';
     if ($data['verified']) {
         $verificationStmt = $pdo->prepare("
             INSERT INTO ecr_promotion_verifications_by_assignment (student_id, assignment_id, verified_by)
@@ -96,6 +97,7 @@ try {
             'assignment_id' => $assignmentId,
             'verified_by' => (int)$_SESSION['user_id'],
         ]);
+        $actionName = 'VERIFY_STUDENT_PROMOTION';
     } else {
         $verificationStmt = $pdo->prepare("
             DELETE FROM ecr_promotion_verifications_by_assignment
@@ -105,7 +107,22 @@ try {
             'student_id' => $studentId,
             'assignment_id' => $assignmentId,
         ]);
+        $actionName = 'UNDO_STUDENT_PROMOTION_VERIFICATION';
     }
+
+    // 2. RECORD THE ACTIVITY WITH JSON DETAILS
+    ActivityLogger::log(
+        $pdo,
+        (int)$_SESSION['user_id'],
+        $actionName,
+        'ecr_promotion_verifications_by_assignment',
+        [
+            'student_id'    => $studentId,
+            'assignment_id' => $assignmentId,
+            'verified_state'=> $data['verified'] ? true : false,
+            'ip'            => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+        ]
+    );
 
     respond(200, ['status' => 'success']);
 } catch (PDOException $e) {

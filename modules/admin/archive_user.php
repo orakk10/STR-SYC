@@ -49,14 +49,19 @@ try {
     $updateStmt = $conn->prepare("UPDATE users SET role = 'archived' WHERE id = ?");
     $updateStmt->execute([$id]);
 
+    // Log the account archiving action utilizing the structured details column
     $logStmt = $conn->prepare("
-        INSERT INTO activity_logs (user_id, action, affected_table, ip_address)
-        VALUES (:user_id, :action, 'account_archives', :ip_address)
+        INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details)
+        VALUES (:user_id, :action, 'account_archives', :ip_address, :details)
     ");
     $logStmt->execute([
-        'user_id' => (int) $_SESSION['user_id'],
-        'action' => 'Archived account ' . $id . ' (role: ' . $role . ').',
+        'user_id'    => (int) $_SESSION['user_id'],
+        'action'     => 'ARCHIVE_USER',
         'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+        'details'    => json_encode([
+            'archived_user_id' => $id,
+            'original_role'    => $role
+        ])
     ]);
 
     $conn->commit();

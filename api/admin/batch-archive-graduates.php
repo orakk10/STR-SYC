@@ -34,7 +34,7 @@ try {
     $db->beginTransaction();
 
     $sectionStmt = $db->prepare("
-        SELECT id, grade_level
+        SELECT id, grade_level, academic_year
         FROM sections
         WHERE id = :section_id
         FOR UPDATE
@@ -79,16 +79,20 @@ try {
         $updateStmt->execute($studentIds);
     }
 
+    // Log the batch archive action utilizing the structured details column
     $logStmt = $db->prepare("
-        INSERT INTO activity_logs (user_id, action, affected_table, ip_address)
-        VALUES (:user_id, :action, 'archived_students', :ip_address)
+        INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details)
+        VALUES (:user_id, :action, 'archived_students', :ip_address, :details)
     ");
     $logStmt->execute([
-        'user_id' => (int) $_SESSION['user_id'],
-        'action' => 'Archived ' . count($students)
-            . ' Grade 12 students from section ' . $sectionId
-            . ' as alumni using the section academic year.',
+        'user_id'    => (int) $_SESSION['user_id'],
+        'action'     => 'BATCH_ARCHIVE_GRADUATES',
         'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+        'details'    => json_encode([
+            'section_id'     => $sectionId,
+            'archived_count' => count($students),
+            'academic_year'  => $section['academic_year'] ?? 'unknown'
+        ])
     ]);
 
     $db->commit();

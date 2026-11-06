@@ -1,9 +1,19 @@
 <?php
+header('Content-Type: application/json');
 session_start();
+
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../core/ActivityLogger.php'; // <-- Include ActivityLogger
+
+if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['faculty', 'adviser', 'admin'], true)) {
+    http_response_code(403);
+    echo json_encode(['status' => 'error', 'message' => 'Unauthorized access.']);
+    exit();
+}
+
 $pdo = getDBConnection();
 
-$data = json_decode(file_get_contents('php_input'), true);
+$data = json_decode(file_get_contents('php://input'), true);
 
 $student_id = $data['student_id'] ?? 0;
 $subject_id = $data['subject_id'] ?? 0;
@@ -38,6 +48,9 @@ if ($student_id && $subject_id && $section_id && in_array($term, [1, 2, 3])) {
     $calc_stmt->execute([$student_id, $subject_id, $section_id]);
     $row = $calc_stmt->fetch(PDO::FETCH_ASSOC);
 
+    $final_grade = null;
+    $remarks = null;
+
     if ($row) {
         $terms = array_filter([$row['term1_transmuted'], $row['term2_transmuted'], $row['term3_transmuted']], fn($v) => $v !== null);
         if (!empty($terms)) {
@@ -60,5 +73,26 @@ if ($student_id && $subject_id && $section_id && in_array($term, [1, 2, 3])) {
         }
     }
 
+    // RECORD THE ACTIVITY WITH JSON DETAILS
+    ActivityLogger::log(
+        $pdo,
+        (int)$_SESSION['user_id'],
+        'SAVE_ECR_GRADES',
+        'ecr_term_summaries',
+        [
+            'student_id'       => $student_id,
+            'subject_id'       => $subject_id,
+            'section_id'       => $section_id,
+            'term'             => $term,
+            'transmuted_grade' => $transmuted,
+            'final_grade'      => $final_grade,
+            'remarks'          => $remarks,
+            'ip'               => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+        ]
+    );
+
     echo json_encode(['status' => 'success']);
+} else {
+    http_response_code(400);
+    echo json_encode(['status' => 'error', 'message' => 'Invalid parameters provided.']);
 }

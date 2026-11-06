@@ -33,21 +33,57 @@ if (
     exit();
 }
 
-if ($section_id > 0) {
-    $stmt = $conn->prepare('
-        UPDATE sections
-        SET section_name = ?, grade_level = ?, strand_id = ?, adviser_id = ?, academic_year = ?, curriculum_version = ?
-        WHERE id = ?
-    ');
-    $stmt->execute([$section_name, $grade_level, $strand_id, $adviser_id, $academic_year, $curriculum_version, $section_id]);
-    $msg = 'updated';
-} else {
-    $stmt = $conn->prepare('
-        INSERT INTO sections (section_name, grade_level, strand_id, adviser_id, academic_year, curriculum_version)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ');
-    $stmt->execute([$section_name, $grade_level, $strand_id, $adviser_id, $academic_year, $curriculum_version]);
-    $msg = 'saved';
+try {
+    $conn->beginTransaction();
+
+    if ($section_id > 0) {
+        $stmt = $conn->prepare('
+            UPDATE sections
+            SET section_name = ?, grade_level = ?, strand_id = ?, adviser_id = ?, academic_year = ?, curriculum_version = ?
+            WHERE id = ?
+        ');
+        $stmt->execute([$section_name, $grade_level, $strand_id, $adviser_id, $academic_year, $curriculum_version, $section_id]);
+        $action = 'UPDATE_SECTION';
+        $msg = 'updated';
+    } else {
+        $stmt = $conn->prepare('
+            INSERT INTO sections (section_name, grade_level, strand_id, adviser_id, academic_year, curriculum_version)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ');
+        $stmt->execute([$section_name, $grade_level, $strand_id, $adviser_id, $academic_year, $curriculum_version]);
+        $section_id = (int) $conn->lastInsertId();
+        $action = 'CREATE_SECTION';
+        $msg = 'saved';
+    }
+
+    // Log the section creation or update with structured JSON details
+    $logStmt = $conn->prepare("
+        INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details)
+        VALUES (:user_id, :action, 'sections', :ip_address, :details)
+    ");
+    $logStmt->execute([
+        'user_id'    => (int) $_SESSION['user_id'],
+        'action'     => $action,
+        'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+        'details'    => json_encode([
+            'section_id'         => $section_id,
+            'section_name'       => $section_name,
+            'grade_level'        => $grade_level,
+            'strand_id'          => $strand_id,
+            'adviser_id'         => $adviser_id,
+            'academic_year'      => $academic_year,
+            'curriculum_version' => $curriculum_version
+        ])
+    ]);
+
+    $conn->commit();
+} catch (Exception $e) {
+    if ($conn->inTransaction()) {
+        $conn->rollBack();
+    }
+    error_log('Section save failed: ' . $e->getMessage());
+    header('Location: manage_sections.php?error=save_failed');
+    exit();
 }
 
 $query = http_build_query([

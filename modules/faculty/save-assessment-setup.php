@@ -108,6 +108,30 @@ try {
     }
 
     $pdo->commit();
+
+    // Log the activity using the newly added details column
+    try {
+        $logStmt = $pdo->prepare("
+            INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details, created_at)
+            VALUES (:user_id, :action, :affected_table, :ip_address, :details, NOW())
+        ");
+        $logStmt->execute([
+            'user_id'        => (int)$_SESSION['user_id'],
+            'action'         => 'UPDATE_ASSESSMENT_SETUP',
+            'affected_table' => 'ecr_assessment_components',
+            'ip_address'     => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+            'details'        => json_encode([
+                'assignment_id' => $assignment_id,
+                'term'          => $term,
+                'ww_count'      => $new_ww_count,
+                'pt_count'      => $new_pt_count,
+                'qa_count'      => $new_qa_count
+            ])
+        ]);
+    } catch (Exception $logEx) {
+        error_log("Activity log insertion failed: " . $logEx->getMessage());
+    }
+
 } catch (Exception $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();

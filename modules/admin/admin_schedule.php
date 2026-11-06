@@ -105,17 +105,50 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_schedule'])) {
                     $message = "faculty_conflict";
                 }
             } else {
-                $insert_query = "INSERT INTO schedules (section_id, subject_id, day_of_week, start_time, end_time, room_number) VALUES (:section_id, :subject_id, :day, :start_time, :end_time, :room)";
-                $stmt = $conn->prepare($insert_query);
-                $stmt->execute([
-                    ':section_id' => $section_id,
-                    ':subject_id' => $subject_id,
-                    ':day' => $day,
-                    ':start_time' => $start,
-                    ':end_time' => $end,
-                    ':room' => $room,
-                ]);
-                $message = 'success';
+                try {
+                    $conn->beginTransaction();
+
+                    $insert_query = "INSERT INTO schedules (section_id, subject_id, day_of_week, start_time, end_time, room_number) VALUES (:section_id, :subject_id, :day, :start_time, :end_time, :room)";
+                    $stmt = $conn->prepare($insert_query);
+                    $stmt->execute([
+                        ':section_id' => $section_id,
+                        ':subject_id' => $subject_id,
+                        ':day' => $day,
+                        ':start_time' => $start,
+                        ':end_time' => $end,
+                        ':room' => $room,
+                    ]);
+                    $schedule_id = (int)$conn->lastInsertId();
+
+                    // Log Activity with structured JSON details
+                    $logStmt = $conn->prepare("
+                        INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details)
+                        VALUES (:user_id, :action, 'schedules', :ip_address, :details)
+                    ");
+                    $logStmt->execute([
+                        'user_id'    => (int)$_SESSION['user_id'],
+                        'action'     => 'CREATE_SCHEDULE',
+                        'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+                        'details'    => json_encode([
+                            'schedule_id' => $schedule_id,
+                            'section_id'  => $section_id,
+                            'subject_id'  => $subject_id,
+                            'day'         => $day,
+                            'start_time'  => $start,
+                            'end_time'    => $end,
+                            'room_number' => $room
+                        ])
+                    ]);
+
+                    $conn->commit();
+                    $message = 'success';
+                } catch (Exception $e) {
+                    if ($conn->inTransaction()) {
+                        $conn->rollBack();
+                    }
+                    error_log("Schedule creation failed: " . $e->getMessage());
+                    $message = "save_failed";
+                }
             }
         }
     }
@@ -125,8 +158,43 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_schedule'])) {
 if (isset($_GET['delete'])) {
     $id = (int) $_GET['delete'];
     if ($id > 0) {
-        $stmt = $conn->prepare("DELETE FROM schedules WHERE id = :id");
-        $stmt->execute([':id' => $id]);
+        try {
+            $conn->beginTransaction();
+
+            // Fetch schedule details prior to deletion for logging metadata
+            $fetchSch = $conn->prepare("SELECT * FROM schedules WHERE id = :id");
+            $fetchSch->execute([':id' => $id]);
+            $deletedSched = $fetchSch->fetch(PDO::FETCH_ASSOC);
+
+            $stmt = $conn->prepare("DELETE FROM schedules WHERE id = :id");
+            $stmt->execute([':id' => $id]);
+
+            if ($deletedSched) {
+                $logStmt = $conn->prepare("
+                    INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details)
+                    VALUES (:user_id, :action, 'schedules', :ip_address, :details)
+                ");
+                $logStmt->execute([
+                    'user_id'    => (int)$_SESSION['user_id'],
+                    'action'     => 'DELETE_SCHEDULE',
+                    'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+                    'details'    => json_encode([
+                        'schedule_id' => $id,
+                        'section_id'  => $deletedSched['section_id'],
+                        'subject_id'  => $deletedSched['subject_id'],
+                        'day'         => $deletedSched['day_of_week'],
+                        'room_number' => $deletedSched['room_number']
+                    ])
+                ]);
+            }
+
+            $conn->commit();
+        } catch (Exception $e) {
+            if ($conn->inTransaction()) {
+                $conn->rollBack();
+            }
+            error_log("Schedule deletion failed: " . $e->getMessage());
+        }
     }
     header("Location: admin_schedule.php?msg=deleted");
     exit();
@@ -327,11 +395,6 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
         .form-group { 
             margin-bottom: 15px; 
         }
-        /* .content-header h1 { 
-            margin: 0; 
-            font-size: 1.8rem; 
-            color: #111827; 
-        } */
         .form-group label { 
             display: block; 
             margin-bottom: 6px; 

@@ -34,12 +34,45 @@ if (
     exit();
 }
 
-$stmt = $conn->prepare('
-    UPDATE sections
-    SET section_name = ?, grade_level = ?, strand_id = ?, adviser_id = ?, academic_year = ?, curriculum_version = ?
-    WHERE id = ?
-');
-$stmt->execute([$section_name, $grade_level, $strand_id, $adviser_id, $academic_year, $curriculum_version, $id]);
+try {
+    $conn->beginTransaction();
+
+    $stmt = $conn->prepare('
+        UPDATE sections
+        SET section_name = ?, grade_level = ?, strand_id = ?, adviser_id = ?, academic_year = ?, curriculum_version = ?
+        WHERE id = ?
+    ');
+    $stmt->execute([$section_name, $grade_level, $strand_id, $adviser_id, $academic_year, $curriculum_version, $id]);
+
+    // Log the section update utilizing the structured details column
+    $logStmt = $conn->prepare("
+        INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details)
+        VALUES (:user_id, :action, 'sections', :ip_address, :details)
+    ");
+    $logStmt->execute([
+        'user_id'    => (int) $_SESSION['user_id'],
+        'action'     => 'UPDATE_SECTION',
+        'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+        'details'    => json_encode([
+            'section_id'         => $id,
+            'section_name'       => $section_name,
+            'grade_level'        => $grade_level,
+            'strand_id'          => $strand_id,
+            'adviser_id'         => $adviser_id,
+            'academic_year'      => $academic_year,
+            'curriculum_version' => $curriculum_version
+        ])
+    ]);
+
+    $conn->commit();
+} catch (Exception $e) {
+    if ($conn->inTransaction()) {
+        $conn->rollBack();
+    }
+    error_log('Section update failed: ' . $e->getMessage());
+    header('Location: manage_sections.php?error=update_failed');
+    exit();
+}
 
 $query = http_build_query([
     'academic_year' => $academic_year,

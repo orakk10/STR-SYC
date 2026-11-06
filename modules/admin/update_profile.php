@@ -31,13 +31,14 @@ $guardian_name = trim($_POST['guardian_name'] ?? '');
 $guardian_contact = trim($_POST['guardian_contact'] ?? '');
 $specialization = trim($_POST['specialization'] ?? '');
 
-$user_stmt = $conn->prepare('SELECT role FROM users WHERE id = ? LIMIT 1');
+$user_stmt = $conn->prepare('SELECT role, username, full_name FROM users WHERE id = ? LIMIT 1');
 $user_stmt->execute([$user_id]);
-$user_role = $user_stmt->fetchColumn();
-if ($user_role === false) {
+$user_info = $user_stmt->fetch(PDO::FETCH_ASSOC);
+if (!$user_info) {
     header('Location: manage_users.php?msg=error');
     exit();
 }
+$user_role = $user_info['role'];
 
 $is_teacher = in_array($user_role, ['adviser', 'faculty'], true);
 
@@ -59,7 +60,38 @@ try {
     } else {
         $conn->prepare('UPDATE users SET section_id = ? WHERE id = ?')->execute([$user_role === 'student' ? $section_id : null, $user_id]);
     }
-    $conn->prepare('INSERT INTO student_profiles (user_id, gender, birthdate, contact_no, address, guardian_name, guardian_contact, specialization) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE gender = VALUES(gender), birthdate = VALUES(birthdate), contact_no = VALUES(contact_no), address = VALUES(address), guardian_name = VALUES(guardian_name), guardian_contact = VALUES(guardian_contact), specialization = VALUES(specialization)')->execute([$user_id, $gender, $birthdate, $contact_no, $address, $guardian_name, $guardian_contact, $specialization]);
+
+    $conn->prepare('
+        INSERT INTO student_profiles (user_id, gender, birthdate, contact_no, address, guardian_name, guardian_contact, specialization) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?) 
+        ON DUPLICATE KEY UPDATE 
+            gender = VALUES(gender), 
+            birthdate = VALUES(birthdate), 
+            contact_no = VALUES(contact_no), 
+            address = VALUES(address), 
+            guardian_name = VALUES(guardian_name), 
+            guardian_contact = VALUES(guardian_contact), 
+            specialization = VALUES(specialization)
+    ')->execute([$user_id, $gender, $birthdate, $contact_no, $address, $guardian_name, $guardian_contact, $specialization]);
+
+    // Log the profile update action utilizing the structured details column
+    $logStmt = $conn->prepare("
+        INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details)
+        VALUES (:user_id, :action, 'student_profiles', :ip_address, :details)
+    ");
+    $logStmt->execute([
+        'user_id'    => (int) $_SESSION['user_id'],
+        'action'     => 'UPDATE_USER_PROFILE',
+        'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+        'details'    => json_encode([
+            'target_user_id' => $user_id,
+            'username'       => $user_info['username'],
+            'full_name'      => $user_info['full_name'],
+            'role'           => $user_role,
+            'section_id'     => $section_id
+        ])
+    ]);
+
     $conn->commit();
 } catch (PDOException $e) {
     if ($conn->inTransaction()) {

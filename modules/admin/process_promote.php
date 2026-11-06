@@ -117,16 +117,23 @@ try {
     }
 
     $remainingCount = count($studentIds) - $promotedCount;
+
+    // Log the promotion action utilizing the structured details column
     $logStmt = $conn->prepare("
-        INSERT INTO activity_logs (user_id, action, affected_table, ip_address)
-        VALUES (:user_id, :action, 'users', :ip_address)
+        INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details)
+        VALUES (:user_id, :action, 'users', :ip_address, :details)
     ");
     $logStmt->execute([
-        'user_id' => (int) $_SESSION['user_id'],
-        'action' => 'Promoted ' . $promotedCount . ' verified Grade 11 students from section '
-            . $sourceSectionId . ' to Grade 12 section ' . $destinationSectionId
-            . '; ' . $remainingCount . ' students remained pending verification.',
+        'user_id'    => (int) $_SESSION['user_id'],
+        'action'     => 'PROMOTE_STUDENTS',
         'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+        'details'    => json_encode([
+            'source_section_id'      => $sourceSectionId,
+            'destination_section_id' => $destinationSectionId,
+            'promoted_count'         => $promotedCount,
+            'remaining_count'        => $remainingCount,
+            'total_students'         => count($studentIds)
+        ])
     ]);
 
     $conn->commit();

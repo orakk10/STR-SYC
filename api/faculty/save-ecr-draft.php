@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../core/EcrDraftStore.php';
 require_once __DIR__ . '/../../core/EcrTermLock.php';
 require_once __DIR__ . '/../../core/EcrSubjectTerm.php';
+require_once __DIR__ . '/../../core/ActivityLogger.php'; // <-- 1. Include the ActivityLogger
 
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'adviser', 'admin'], true)) {
     http_response_code(403);
@@ -145,7 +146,22 @@ try {
         'term' => $termName,
         'draft_data' => $draftJson
     ]);
+    
     $db->commit();
+
+    // 2. RECORD THE ACTIVITY WITH JSON DETAILS
+    ActivityLogger::log(
+        $db,
+        (int)$_SESSION['user_id'],
+        'SAVE_ECR_DRAFT',
+        'ecr_score_drafts',
+        [
+            'assignment_id' => $assignmentId,
+            'term'          => $termName,
+            'total_scores'  => count($scores),
+            'ip'            => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+        ]
+    );
 
     echo json_encode(['status' => 'success', 'message' => 'Draft saved successfully.']);
 } catch (PDOException $e) {

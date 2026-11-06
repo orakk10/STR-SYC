@@ -35,16 +35,51 @@ if ($strand_id <= 0 || $grade_level <= 0 || $term === '' || $subject_code === ''
     exit();
 }
 
-// 5. Insert or Update Database Record
-if ($subject_id > 0) {
-    // Update existing subject
-    $stmt = $conn->prepare('UPDATE subjects SET strand_id = ?, type = ?, grade_level = ?, term = ?, subject_code = ?, subject_name = ? WHERE id = ?');
-    $stmt->execute([$strand_id, $type, $grade_level, $term, $subject_code, $subject_name, $subject_id]);
-} else {
-    // Insert new subject
-    $stmt = $conn->prepare('INSERT INTO subjects (strand_id, type, grade_level, term, subject_code, subject_name) VALUES (?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$strand_id, $type, $grade_level, $term, $subject_code, $subject_name]);
-}
+try {
+    $conn->beginTransaction();
 
-header('Location: curriculum_guide.php?msg=success');
-exit();
+    // 5. Insert or Update Database Record
+    if ($subject_id > 0) {
+        // Update existing subject
+        $stmt = $conn->prepare('UPDATE subjects SET strand_id = ?, type = ?, grade_level = ?, term = ?, subject_code = ?, subject_name = ? WHERE id = ?');
+        $stmt->execute([$strand_id, $type, $grade_level, $term, $subject_code, $subject_name, $subject_id]);
+        $action = 'UPDATE_SUBJECT';
+    } else {
+        // Insert new subject
+        $stmt = $conn->prepare('INSERT INTO subjects (strand_id, type, grade_level, term, subject_code, subject_name) VALUES (?, ?, ?, ?, ?, ?)');
+        $stmt->execute([$strand_id, $type, $grade_level, $term, $subject_code, $subject_name]);
+        $subject_id = (int) $conn->lastInsertId();
+        $action = 'CREATE_SUBJECT';
+    }
+
+    // Log the subject creation or update utilizing the structured details column
+    $logStmt = $conn->prepare("
+        INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details)
+        VALUES (:user_id, :action, 'subjects', :ip_address, :details)
+    ");
+    $logStmt->execute([
+        'user_id'    => (int) $_SESSION['user_id'],
+        'action'     => $action,
+        'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+        'details'    => json_encode([
+            'subject_id'   => $subject_id,
+            'strand_id'    => $strand_id,
+            'subject_code' => $subject_code,
+            'subject_name' => $subject_name,
+            'grade_level'  => $grade_level,
+            'term'         => $term,
+            'type'         => $type
+        ])
+    ]);
+
+    $conn->commit();
+    header('Location: curriculum_guide.php?msg=success');
+    exit();
+} catch (Exception $e) {
+    if ($conn->inTransaction()) {
+        $conn->rollBack();
+    }
+    error_log('Subject save failed: ' . $e->getMessage());
+    header('Location: curriculum_guide.php?error=save_failed');
+    exit();
+}

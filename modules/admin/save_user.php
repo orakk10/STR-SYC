@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'section_id' => $section_id
         ]);
 
-        $new_user_id = $conn->lastInsertId();
+        $new_user_id = (int)$conn->lastInsertId();
 
         if ($is_teacher && !empty($_POST['section_id'])) {
             $sectionStmt = $conn->prepare('UPDATE sections SET adviser_id = ? WHERE id = ?');
@@ -83,15 +83,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $profileStmt->execute(['user_id' => $new_user_id]);
 
-        // 4. Audit Logging
+        // 4. Audit Logging with Structured JSON Details
         $logStmt = $conn->prepare("
-            INSERT INTO activity_logs (user_id, action, affected_table, ip_address) 
-            VALUES (:uid, :action, 'users', :ip)
+            INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details) 
+            VALUES (:uid, :action, 'users', :ip, :details)
         ");
         $logStmt->execute([
-            'uid'    => $_SESSION['user_id'],
-            'action' => "Created new user: {$username} ({$role})",
-            'ip'     => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+            'uid'     => (int)$_SESSION['user_id'],
+            'action'  => 'CREATE_USER',
+            'ip'      => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+            'details' => json_encode([
+                'new_user_id' => $new_user_id,
+                'username'    => $username,
+                'full_name'   => $full_name,
+                'role'        => $role,
+                'section_id'  => $section_id
+            ])
         ]);
 
         $conn->commit();
@@ -102,6 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($conn->inTransaction()) {
             $conn->rollBack();
         }
+        error_log("User creation failed: " . $e->getMessage());
         header("Location: manage_users.php?msg=error");
         exit();
     }

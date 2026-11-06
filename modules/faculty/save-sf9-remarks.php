@@ -16,7 +16,7 @@ $academic_year = trim($_POST['academic_year'] ?? '');
 $term1         = trim($_POST['term1_comment'] ?? '');
 $term2         = trim($_POST['term2_comment'] ?? '');
 $term3         = trim($_POST['term3_comment'] ?? '');
-$user_id       = $_SESSION['user_id'] ?? null;
+$user_id       = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
 
 if ($student_id <= 0 || empty($academic_year)) {
     echo json_encode(['success' => false, 'message' => 'Missing student ID or academic year.']);
@@ -49,6 +49,22 @@ try {
             'user_id'    => $user_id
         ]);
     }
+
+    // Log the adviser remarks update into the activity logs table
+    $logStmt = $conn->prepare("
+        INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details)
+        VALUES (:user_id, :action, 'sf9_adviser_remarks', :ip_address, :details)
+    ");
+    $logStmt->execute([
+        'user_id'    => $user_id,
+        'action'     => 'UPDATE_SF9_REMARKS',
+        'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+        'details'    => json_encode([
+            'student_id'    => $student_id,
+            'academic_year' => $academic_year,
+            'updated_terms' => array_keys(array_filter($terms, fn($c) => $c !== ''))
+        ])
+    ]);
 
     $conn->commit();
     echo json_encode(['success' => true, 'message' => 'Adviser remarks updated successfully.']);

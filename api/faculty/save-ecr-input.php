@@ -6,6 +6,7 @@ session_start();
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../core/EcrTermLock.php';
 require_once __DIR__ . '/../../core/EcrSubjectTerm.php';
+require_once __DIR__ . '/../../core/ActivityLogger.php'; // <-- Include ActivityLogger
 
 // Check authorization
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'adviser', 'admin'])) {
@@ -180,6 +181,20 @@ try {
     }
 
     $db->commit();
+
+    // RECORD ACTIVITY LOG WITH JSON DETAILS
+    ActivityLogger::log(
+        $db,
+        (int)$_SESSION['user_id'],
+        'SAVE_ECR_INPUT',
+        'ecr_assessment_components',
+        [
+            'assignment_id'   => (int)$data['assignment_id'],
+            'term'            => $termName,
+            'components_saved'=> $count,
+            'ip'              => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+        ]
+    );
 
     echo json_encode([
         'status' => 'success',

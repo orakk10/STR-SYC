@@ -93,6 +93,22 @@ try {
     $deleteArchive = $conn->prepare('DELETE FROM archived_students WHERE id = ?');
     $deleteArchive->execute([$id]);
 
+    // Log the restore action utilizing the structured details column
+    $logStmt = $conn->prepare("
+        INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details)
+        VALUES (:user_id, :action, 'archived_students', :ip_address, :details)
+    ");
+    $logStmt->execute([
+        'user_id'    => (int) $_SESSION['user_id'],
+        'action'     => 'RESTORE_GRADUATE_STUDENT',
+        'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+        'details'    => json_encode([
+            'archived_record_id' => $id,
+            'student_name'       => $row['full_name'],
+            'lrn'                => $row['lrn']
+        ])
+    ]);
+
     $conn->commit();
     header('Location: admin_archive.php?status=restored');
     exit();

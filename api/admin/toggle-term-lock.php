@@ -38,15 +38,20 @@ try {
 
     $statusText = $isLocked ? 'Locked' : 'Unlocked';
 
-    // Log Activity
+    // Log Activity with structured JSON details
     $stmtLog = $db->prepare("
-        INSERT INTO activity_logs (user_id, action, affected_table, ip_address)
-        VALUES (:uid, :action, 'ecr_term_summaries', :ip)
+        INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details)
+        VALUES (:uid, :action, 'ecr_term_summaries', :ip, :details)
     ");
     $stmtLog->execute([
-        'uid'    => $_SESSION['user_id'],
-        'action' => "{$statusText} term summary editing for assignment_id: {$assignmentId}",
-        'ip'     => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+        'uid'     => (int)$_SESSION['user_id'],
+        'action'  => 'TOGGLE_TERM_LOCK',
+        'ip'      => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+        'details' => json_encode([
+            'assignment_id' => $assignmentId,
+            'is_locked'     => $isLocked,
+            'status'        => $statusText
+        ])
     ]);
 
     echo json_encode([

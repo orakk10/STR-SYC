@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../core/DepEdTransmutation.php';
 require_once __DIR__ . '/../../core/EcrDraftStore.php';
 require_once __DIR__ . '/../../core/EcrTermLock.php';
 require_once __DIR__ . '/../../core/EcrSubjectTerm.php';
+require_once __DIR__ . '/../../core/ActivityLogger.php';
 
 // Check authorization
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['faculty', 'adviser', 'admin'])) {
@@ -240,16 +241,19 @@ try {
         }
     }
 
-    // 3. Log Activity
-    $stmtLog = $db->prepare("
-        INSERT INTO activity_logs (user_id, action, ip_address)
-        VALUES (:uid, :action, :ip)
-    ");
-    $stmtLog->execute([
-        'uid'    => $_SESSION['user_id'],
-        'action' => "Saved scores and summaries for assignment_id: {$assignmentId}",
-        'ip'     => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
-    ]);
+    // 3. Log Activity using ActivityLogger
+    ActivityLogger::log(
+        $db,
+        (int)$_SESSION['user_id'],
+        'SAVE_ECR_SCORES',
+        'ecr_student_scores',
+        [
+            'assignment_id' => $assignmentId,
+            'term'          => $termName,
+            'scores_saved'  => $savedScoresCount,
+            'ip'            => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+        ]
+    );
 
     $stmtDeleteDraft = $db->prepare("
         DELETE FROM ecr_score_drafts

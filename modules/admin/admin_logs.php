@@ -67,6 +67,24 @@ $logs = $conn->query($query)->fetchAll(PDO::FETCH_ASSOC);
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
         }
 
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 13px;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        th {
+            background-color: #f8fafc;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
         /* --- BURGER TOGGLE UTILITIES --- */
         .mobile-toggle {
             display: none;
@@ -205,6 +223,7 @@ $logs = $conn->query($query)->fetchAll(PDO::FETCH_ASSOC);
                             <th>Role</th>
                             <th>Specific Action</th>
                             <th>Table</th>
+                            <th>Details</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -213,8 +232,26 @@ $logs = $conn->query($query)->fetchAll(PDO::FETCH_ASSOC);
                             <td style="white-space: nowrap;"><?php echo date('M d, Y h:i A', strtotime($row['created_at'])); ?></td>
                             <td><strong><?php echo htmlspecialchars($row['full_name']); ?></strong></td>
                             <td><span class="role-badge <?php echo strtolower($row['role']); ?>"><?php echo ucfirst($row['role']); ?></span></td>
-                            <td style="max-width: 420px;">⌁ <?php echo htmlspecialchars($row['action']); ?></td>
+                            <td style="max-width: 300px;">⌁ <?php echo htmlspecialchars($row['action']); ?></td>
                             <td><code><?php echo htmlspecialchars($row['affected_table']); ?></code></td>
+                            <td>
+                                <?php if (!empty($row['details'])): ?>
+                                    <?php 
+                                        $decodedDetails = json_decode($row['details'], true);
+                                    ?>
+                                    <?php if (is_array($decodedDetails)): ?>
+                                        <ul style="margin: 0; padding-left: 15px; font-size: 11px; color: #475569;">
+                                            <?php foreach ($decodedDetails as $key => $val): ?>
+                                                <li><strong><?php echo htmlspecialchars($key); ?>:</strong> <?php echo htmlspecialchars(is_array($val) ? json_encode($val) : $val); ?></li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                    <?php else: ?>
+                                        <span style="font-size: 11px; color: #475569;"><?php echo htmlspecialchars($row['details']); ?></span>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <span style="color: #94a3b8; font-style: italic; font-size: 11px;">None</span>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
