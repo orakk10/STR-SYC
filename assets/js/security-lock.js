@@ -297,16 +297,15 @@ function initSingleDeviceCheck() {
                     return;
                 }
 
-                const message = "You have been logged in from another device or location.";
-                showSessionExpiredModal(message);
+                redirectToLogin();
             }
         } catch (err) {
             console.error("Single device check error:", err);
         }
     };
 
-    // 1. Standard background poll every 10 seconds
-    singleDeviceInterval = setInterval(performDeviceCheck, 10000);
+    performDeviceCheck();
+    singleDeviceInterval = setInterval(performDeviceCheck, 5000);
 
     // 2. CRITICAL FOR APKS: Check session immediately when user returns to the app or unlocks screen
     document.addEventListener('visibilitychange', () => {

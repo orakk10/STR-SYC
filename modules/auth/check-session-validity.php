@@ -59,11 +59,20 @@ try {
 
     $db_session = $user['db_session'];
 
-    // If DB session is completely empty, initialize it with current active session
+    // An empty stored session is not an invitation for an old browser to reclaim the account.
     if (empty($db_session)) {
-        $updateStmt = $conn->prepare("UPDATE users SET current_session_id = :session_id WHERE id = :id");
-        $updateStmt->execute(['session_id' => $client_session_id, 'id' => $user_id]);
-        echo json_encode(['valid' => true, 'status' => 'initialized']);
+        @session_start();
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000,
+                $params['path'], $params['domain'],
+                $params['secure'], $params['httponly']
+            );
+        }
+        @session_destroy();
+
+        echo json_encode(['valid' => false, 'reason' => 'device_mismatch']);
         exit;
     }
 
