@@ -11,6 +11,8 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
 $user_id = $_SESSION['user_id'];
 $message = '';
 $message_type = '';
+$temporary_password_prefill = $_SESSION['temporary_password_prefill'] ?? '';
+unset($_SESSION['temporary_password_prefill']);
 
 // --- POST REQUEST PROCESSING HANDLER ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -293,6 +295,23 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
             color: #334155; 
             width: 100%; 
             box-sizing: border-box;
+        }
+        .password-field {
+            position: relative;
+        }
+        .password-field .form-control {
+            padding-right: 64px;
+        }
+        .password-toggle {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            border: 0;
+            background: transparent;
+            color: #2563eb;
+            font-weight: 600;
+            cursor: pointer;
         }
         .form-control:disabled { 
             background: #f1f5f9; 
@@ -586,15 +605,24 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
                         <h3>Change Password Verification</h3>
                         <div class="form-group">
                             <label for="current_password">Current Secure Password</label>
-                            <input type="password" name="current_password" id="current_password" class="form-control" required>
+                            <div class="password-field">
+                                <input type="password" name="current_password" id="current_password" class="form-control" autocomplete="current-password" value="<?php echo htmlspecialchars($temporary_password_prefill, ENT_QUOTES, 'UTF-8'); ?>" required>
+                                <button type="button" class="password-toggle" data-password-toggle="current_password" aria-label="Show current password" aria-pressed="false">Show</button>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label for="new_password">New Selected Password</label>
-                            <input type="password" name="new_password" id="new_password" class="form-control" required>
+                            <div class="password-field">
+                                <input type="password" name="new_password" id="new_password" class="form-control" autocomplete="new-password" required>
+                                <button type="button" class="password-toggle" data-password-toggle="new_password" aria-label="Show new password" aria-pressed="false">Show</button>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label for="confirm_password">Confirm New Password Entry</label>
-                            <input type="password" name="confirm_password" id="confirm_password" class="form-control" required>
+                            <div class="password-field">
+                                <input type="password" name="confirm_password" id="confirm_password" class="form-control" autocomplete="new-password" required>
+                                <button type="button" class="password-toggle" data-password-toggle="confirm_password" aria-label="Show confirm password" aria-pressed="false">Show</button>
+                            </div>
                         </div>
                         <button type="submit" name="change_password" class="btn-action" style="background-color: #0f172a;">🔒 Modify Password</button>
                     </form>
@@ -604,6 +632,17 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
     </div>
 
     <script>
+        document.querySelectorAll('[data-password-toggle]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const input = document.getElementById(button.dataset.passwordToggle);
+                const isVisible = input.type === 'text';
+                input.type = isVisible ? 'password' : 'text';
+                button.textContent = isVisible ? 'Show' : 'Hide';
+                button.setAttribute('aria-label', `${isVisible ? 'Show' : 'Hide'} ${input.name.replace('_', ' ')}`);
+                button.setAttribute('aria-pressed', String(!isVisible));
+            });
+        });
+
         function toggleSidebar() { 
             const sidebar = document.getElementById('sidebar');
             const burger = document.getElementById('mobileBurger');

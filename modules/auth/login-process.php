@@ -14,13 +14,19 @@ if (empty($username) || empty($password)) {
 }
 
 // 1. Authenticate primary credentials
-$stmt = $pdo->prepare("SELECT id, password, role, security_preference FROM users WHERE username = :username AND role <> 'archived' LIMIT 1");
+$stmt = $pdo->prepare("SELECT id, password, role, security_preference, require_reset FROM users WHERE username = :username AND role <> 'archived' LIMIT 1");
 $stmt->execute(['username' => $username]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if ($user && password_verify($password, $user['password'])) {
     // Clear any previous error messages
     unset($_SESSION['error']);
+
+    unset($_SESSION['temporary_password_prefill']);
+    $role = strtolower($user['role'] ?? '');
+    if (!empty($user['require_reset']) && in_array($role, ['student', 'faculty', 'adviser'], true)) {
+        $_SESSION['temporary_password_prefill'] = $password;
+    }
 
     $sec_pref = $user['security_preference'] ?? 'none';
 
@@ -52,10 +58,13 @@ if ($user && password_verify($password, $user['password'])) {
     unset($_SESSION['pending_security_pref']);
 
     // Map role-based redirect destination
-    $role = strtolower($user['role'] ?? '');
     $redirect_url = '../../index.php';
 
-    if ($role === 'student') {
+    if (!empty($_SESSION['temporary_password_prefill']) && $role === 'student') {
+        $redirect_url = '../student/student_profile.php';
+    } elseif (!empty($_SESSION['temporary_password_prefill']) && in_array($role, ['adviser', 'faculty'], true)) {
+        $redirect_url = '../faculty/change_password.php';
+    } elseif ($role === 'student') {
         $redirect_url = '../student/student_dashboard.php';
     } elseif (in_array($role, ['adviser', 'faculty'])) {
         $redirect_url = '../faculty/faculty_dashboard.php';

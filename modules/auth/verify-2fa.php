@@ -94,7 +94,11 @@ try {
         $role = strtolower($_SESSION['role'] ?? '');
         $redirect = '../../index.php';
 
-        if ($role === 'student') {
+        if (!empty($_SESSION['temporary_password_prefill']) && $role === 'student') {
+            $redirect = '../student/student_profile.php';
+        } else if (!empty($_SESSION['temporary_password_prefill']) && in_array($role, ['adviser', 'faculty'], true)) {
+            $redirect = '../faculty/change_password.php';
+        } else if ($role === 'student') {
             $redirect = '../student/student_dashboard.php';
         } else if (in_array($role, ['adviser', 'faculty'])) {
             $redirect = '../faculty/faculty_dashboard.php';

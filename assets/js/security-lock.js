@@ -15,6 +15,8 @@ function getAuthEndpoint(filename) {
 // Idle Timeout Configuration (5 minutes = 300,000 milliseconds)
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
 let idleTimer = null;
+let idleDeadline = 0;
+let idleExpirationStarted = false;
 let singleDeviceInterval = null;
 
 // -------------------------------------------------------------
@@ -231,18 +233,46 @@ if (document.readyState === "complete" || document.readyState === "interactive")
 function initIdleTimer() {
     const activityEvents = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
 
-    const resetTimer = () => {
-        if (idleTimer) clearTimeout(idleTimer);
-        
-        idleTimer = setTimeout(async () => {
+    const checkIdleDeadline = () => {
+        if (idleExpirationStarted) return;
+
+        const remainingTime = idleDeadline - Date.now();
+        if (remainingTime <= 0) {
+            idleExpirationStarted = true;
+            if (idleTimer) clearTimeout(idleTimer);
+            idleTimer = null;
             console.log("Inactivity limit reached. Prompting session expiration...");
-            await lockSessionAndLogout();
-        }, IDLE_TIMEOUT_MS);
+            void lockSessionAndLogout();
+            return;
+        }
+
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(checkIdleDeadline, remainingTime);
+    };
+
+    const resetTimer = () => {
+        if (idleExpirationStarted) return;
+        if (idleDeadline && Date.now() >= idleDeadline) {
+            checkIdleDeadline();
+            return;
+        }
+
+        idleDeadline = Date.now() + IDLE_TIMEOUT_MS;
+        checkIdleDeadline();
     };
 
     activityEvents.forEach(eventType => {
         window.addEventListener(eventType, resetTimer, { passive: true });
     });
+
+    const checkWhenResumed = () => {
+        if (document.visibilityState === 'visible') {
+            checkIdleDeadline();
+        }
+    };
+    document.addEventListener('visibilitychange', checkWhenResumed);
+    window.addEventListener('pageshow', checkWhenResumed);
+    window.addEventListener('focus', checkWhenResumed);
 
     resetTimer();
 }

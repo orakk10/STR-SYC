@@ -662,6 +662,5 @@ if (in_array($user_role, ['super_admin', 'admin', 'super admin'])) {
             }
         });
     </script>
-    <script src="../../assets/js/security-lock.js?v=<?php echo time(); ?>"></script>
 </body>
 </html>

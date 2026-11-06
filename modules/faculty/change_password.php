@@ -14,6 +14,8 @@ $conn = getDBConnection();
 $user_id = (int) $_SESSION['user_id'];
 $message = '';
 $message_type = '';
+$temporary_password_prefill = $_SESSION['temporary_password_prefill'] ?? '';
+unset($_SESSION['temporary_password_prefill']);
 
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -110,6 +112,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-size: 1rem;
         }
 
+        .password-field {
+            position: relative;
+        }
+
+        .password-field input {
+            padding-right: 64px;
+        }
+
+        .password-toggle {
+            position: absolute;
+            top: 50%;
+            right: 8px;
+            transform: translateY(-50%);
+            border: 0;
+            background: transparent;
+            color: #2563eb;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
         .notice, .message {
             padding: 13px 16px;
             margin-bottom: 18px;
@@ -175,15 +197,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
                 <div class="form-group">
                     <label for="current_password">Current password</label>
-                    <input type="password" id="current_password" name="current_password" autocomplete="current-password" required>
+                    <div class="password-field">
+                        <input type="password" id="current_password" name="current_password" autocomplete="current-password" value="<?php echo htmlspecialchars($temporary_password_prefill, ENT_QUOTES, 'UTF-8'); ?>" required>
+                        <button type="button" class="password-toggle" data-password-toggle="current_password" aria-label="Show current password" aria-pressed="false">Show</button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="new_password">New password</label>
-                    <input type="password" id="new_password" name="new_password" minlength="8" autocomplete="new-password" required>
+                    <div class="password-field">
+                        <input type="password" id="new_password" name="new_password" minlength="8" autocomplete="new-password" required>
+                        <button type="button" class="password-toggle" data-password-toggle="new_password" aria-label="Show new password" aria-pressed="false">Show</button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="confirm_password">Confirm new password</label>
-                    <input type="password" id="confirm_password" name="confirm_password" minlength="8" autocomplete="new-password" required>
+                    <div class="password-field">
+                        <input type="password" id="confirm_password" name="confirm_password" minlength="8" autocomplete="new-password" required>
+                        <button type="button" class="password-toggle" data-password-toggle="confirm_password" aria-label="Show confirm password" aria-pressed="false">Show</button>
+                    </div>
                 </div>
                 <div class="actions">
                     <button type="submit" class="btn-action">Save New Password</button>
@@ -192,5 +223,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </form>
         </section>
     </main>
+    <script>
+        document.querySelectorAll('[data-password-toggle]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const input = document.getElementById(button.dataset.passwordToggle);
+                const isVisible = input.type === 'text';
+                input.type = isVisible ? 'password' : 'text';
+                button.textContent = isVisible ? 'Show' : 'Hide';
+                button.setAttribute('aria-label', `${isVisible ? 'Show' : 'Hide'} ${input.name.replace('_', ' ')}`);
+                button.setAttribute('aria-pressed', String(!isVisible));
+            });
+        });
+    </script>
 </body>
 </html>

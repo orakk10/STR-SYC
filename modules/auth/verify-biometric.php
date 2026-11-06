@@ -16,6 +16,7 @@ require_once __DIR__ . '/../../config/database.php';
 
 header('Content-Type: application/json');
 
+$is_pending_login = !isset($_SESSION['user_id']) && isset($_SESSION['pending_user_id']);
 $user_id = $_SESSION['user_id'] ?? $_SESSION['pending_user_id'] ?? null;
 
 if (!$user_id) {
@@ -99,7 +100,11 @@ try {
         $role = strtolower($_SESSION['role'] ?? '');
         $redirect = '../../index.php';
 
-        if ($role === 'student') {
+        if ($is_pending_login && !empty($_SESSION['temporary_password_prefill']) && $role === 'student') {
+            $redirect = '../student/student_profile.php';
+        } else if ($is_pending_login && !empty($_SESSION['temporary_password_prefill']) && in_array($role, ['faculty', 'adviser'], true)) {
+            $redirect = '../faculty/change_password.php';
+        } else if ($role === 'student') {
             $redirect = '../student/student_dashboard.php';
         } else if (in_array($role, ['faculty', 'adviser'])) {
             $redirect = '../faculty/faculty_dashboard.php';

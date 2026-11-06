@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Fetch primary user record including security preference
         $stmt = $db->prepare("
-            SELECT id, username, password, role, full_name, section_id, security_preference 
+            SELECT id, username, password, role, full_name, section_id, security_preference, require_reset
             FROM users 
             WHERE (username = :username OR lrn = :lrn)
               AND role <> 'archived'
@@ -86,6 +86,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($user && password_verify($password, $user['password'])) {
             session_regenerate_id(true);
             $new_session_id = session_id();
+
+            unset($_SESSION['temporary_password_prefill']);
+            $role = strtolower($user['role'] ?? '');
+            if (!empty($user['require_reset']) && in_array($role, ['student', 'faculty', 'adviser'], true)) {
+                $_SESSION['temporary_password_prefill'] = $password;
+            }
 
             // Check if secondary security is required
             $sec_pref = $user['security_preference'] ?? 'none';
@@ -139,6 +145,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $redirectUrl = getDashboardUrl($user['role']);
+            if (!empty($_SESSION['temporary_password_prefill']) && $role === 'student') {
+                $redirectUrl = "../modules/student/student_profile.php";
+            } elseif (!empty($_SESSION['temporary_password_prefill']) && in_array($role, ['faculty', 'adviser'], true)) {
+                $redirectUrl = "../modules/faculty/change_password.php";
+            }
 
             if ($isAjax) {
                 header('Content-Type: application/json');

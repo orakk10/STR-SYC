@@ -310,11 +310,6 @@ if ($section_data) {
                 <li>
                     <a href="ecr-summary.php" class="<?= basename($_SERVER['PHP_SELF']) == 'ecr-summary.php' ? 'active' : '' ?>">ECR Summary</a>
                 </li>
-                <?php if (in_array($user_role, ['faculty', 'adviser'], true)): ?>
-                    <li>
-                        <a href="change_password.php">Change Password</a>
-                    </li>
-                <?php endif; ?>
 
                 <?php if ($is_adviser_or_admin): ?>
                     <!-- Official DepEd Advisory Forms Section -->
