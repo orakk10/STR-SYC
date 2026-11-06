@@ -99,7 +99,18 @@ try {
 
     echo json_encode(['valid' => true]);
 } catch (Exception $e) {
-    // Fail safe to prevent breaking page navigation if database hiccups temporarily
-    echo json_encode(['valid' => true]);
+    error_log("Session validation DB error: " . $e->getMessage());
+    session_start();
+    $_SESSION = [];
+    if (ini_get('session.use_cookies')) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params['path'], $params['domain'],
+            $params['secure'], $params['httponly']
+        );
+    }
+    session_destroy();
+
+    echo json_encode(['valid' => false, 'reason' => 'session_check_failed']);
 }
 exit;

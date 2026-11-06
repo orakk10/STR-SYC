@@ -271,20 +271,35 @@ async function lockSessionAndLogout() {
 function initSingleDeviceCheck() {
     if (singleDeviceInterval) clearInterval(singleDeviceInterval);
 
+    let consecutiveCheckFailures = 0;
+    let isCheckRunning = false;
+
     const performDeviceCheck = async () => {
+        if (isCheckRunning) return;
+        isCheckRunning = true;
+
         try {
             const endpoint = `${getAuthEndpoint('check-session-validity.php')}?_t=${Date.now()}`;
             
             const res = await fetch(endpoint, {
                 method: 'GET',
                 credentials: 'same-origin',
+                cache: 'no-store',
                 headers: {
                     'ngrok-skip-browser-warning': 'true',
                     'Cache-Control': 'no-cache'
                 }
             });
-            
+
+            if (!res.ok || !res.headers.get('content-type')?.includes('application/json')) {
+                throw new Error(`Unexpected session check response (${res.status}).`);
+            }
+
             const data = await res.json();
+            if (typeof data.valid !== 'boolean') {
+                throw new Error('Invalid session check response.');
+            }
+            consecutiveCheckFailures = 0;
 
             if (!data.valid) {
                 // STOP POLLING immediately once session is invalidated
@@ -301,6 +316,14 @@ function initSingleDeviceCheck() {
             }
         } catch (err) {
             console.error("Single device check error:", err);
+            consecutiveCheckFailures++;
+            if (consecutiveCheckFailures >= 2) {
+                clearInterval(singleDeviceInterval);
+                singleDeviceInterval = null;
+                redirectToLogin();
+            }
+        } finally {
+            isCheckRunning = false;
         }
     };
 
