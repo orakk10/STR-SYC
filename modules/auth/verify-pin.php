@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../config/database.php';
 header('Content-Type: application/json');
 
 // 1. Session Check (Supports both pending 2FA login & active user setting checks)
+$is_pending_login = !isset($_SESSION['user_id']) && isset($_SESSION['pending_user_id']);
 $user_id = $_SESSION['user_id'] ?? $_SESSION['pending_user_id'] ?? null;
 
 if (!$user_id) {
@@ -32,8 +33,13 @@ if (($type === 'pin' && empty($pin)) || ($type === 'pattern' && empty($pattern))
 }
 
 try {
-    // 3. Fetch security credentials & role
-    $stmt = $conn->prepare("SELECT role, security_pin_hash, security_pattern_hash FROM users WHERE id = :id LIMIT 1");
+    // 3. Fetch security credentials & user metadata
+    $stmt = $conn->prepare("
+        SELECT username, full_name, section_id, role, security_pin_hash, security_pattern_hash
+        FROM users
+        WHERE id = :id
+        LIMIT 1
+    ");
     $stmt->execute(['id' => $user_id]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -71,18 +77,24 @@ try {
     }
 
     if ($is_verified) {
-        // Elevate pending session to fully authenticated active session
-        $_SESSION['user_id'] = $user_id;
-        if (!empty($_SESSION['pending_role'])) {
-            $_SESSION['role'] = $_SESSION['pending_role'];
-        } else if (!empty($user['role'])) {
-            $_SESSION['role'] = $user['role'];
-        }
+        if ($is_pending_login) {
+            session_regenerate_id(true);
+            $sessionStmt = $conn->prepare("UPDATE users SET current_session_id = :session_id WHERE id = :id");
+            $sessionStmt->execute([
+                'session_id' => session_id(),
+                'id' => $user_id
+            ]);
 
-        // Clear temporary pending 2FA flags
-        unset($_SESSION['pending_user_id']);
-        unset($_SESSION['pending_role']);
-        unset($_SESSION['pending_security_pref']);
+            $_SESSION['user_id'] = $user_id;
+            $_SESSION['username'] = $user['username'] ?? '';
+            $_SESSION['full_name'] = $user['full_name'] ?? '';
+            $_SESSION['section_id'] = $user['section_id'] ?? null;
+            $_SESSION['role'] = $_SESSION['pending_role'] ?? $user['role'];
+
+            unset($_SESSION['pending_user_id']);
+            unset($_SESSION['pending_role']);
+            unset($_SESSION['pending_security_pref']);
+        }
 
         // Determine redirect route based on role
         $role = strtolower($_SESSION['role'] ?? '');

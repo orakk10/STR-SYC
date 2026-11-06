@@ -23,8 +23,15 @@ $user_id = $_SESSION['user_id'] ?? null;
 if ($user_id) {
     try {
         $db = getDBConnection();
-        $stmt = $db->prepare("UPDATE users SET current_session_id = NULL WHERE id = :id");
-        $stmt->execute(['id' => intval($user_id)]);
+        $stmt = $db->prepare("
+            UPDATE users
+            SET current_session_id = NULL
+            WHERE id = :id AND current_session_id = :session_id
+        ");
+        $stmt->execute([
+            'id' => intval($user_id),
+            'session_id' => session_id()
+        ]);
     } catch (Exception $e) {
         error_log("Force logout DB error: " . $e->getMessage());
     }

@@ -55,7 +55,13 @@ if (($_GET['reason'] ?? '') === 'account_archived') {
 
 // 2. Handle Asynchronous (AJAX) or Native POST Submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+    $isAjax = (
+        !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
+        strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest'
+    ) || (
+        !empty($_SERVER['HTTP_ACCEPT']) &&
+        stripos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false
+    );
     
     $identifier = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';

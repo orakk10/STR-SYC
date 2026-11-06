@@ -36,8 +36,15 @@ if ($user && password_verify($password, $user['password'])) {
     }
 
     // No secondary security configured — complete login directly
+    session_regenerate_id(true);
     $_SESSION['user_id'] = $user['id'];
     $_SESSION['role'] = $user['role'];
+
+    $sessionStmt = $pdo->prepare("UPDATE users SET current_session_id = :session_id WHERE id = :id");
+    $sessionStmt->execute([
+        'session_id' => session_id(),
+        'id' => $user['id']
+    ]);
 
     // Clear lingering 2FA pending keys
     unset($_SESSION['pending_user_id']);

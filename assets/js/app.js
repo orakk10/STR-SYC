@@ -45,9 +45,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 // POST directly to the current page URL to prevent path errors
                 const response = await fetch(window.location.href, {
                     method: 'POST',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
                     body: formData
                 });
+
+                // Some mobile webviews may follow the login redirect instead of returning JSON.
+                if (response.redirected) {
+                    window.location.href = response.url;
+                    return;
+                }
+
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    throw new Error('Unexpected login response.');
+                }
 
                 const data = await response.json();
 
