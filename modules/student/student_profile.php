@@ -17,44 +17,28 @@ unset($_SESSION['temporary_password_prefill']);
 // --- POST REQUEST PROCESSING HANDLER ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
-    // Action 1: Update Personal Info & Extended Profile Card Fields
+    // Action 1: Update Parent / Guardian Info Only
     if (isset($_POST['update_info'])) {
-        $full_name = trim($_POST['full_name']);
-        
-        // Grab new extended profile values safely
-        $birthdate = !empty($_POST['birthdate']) ? $_POST['birthdate'] : null;
-        $gender = !empty($_POST['gender']) ? $_POST['gender'] : 'N/A';
-        $address = trim($_POST['address']);
-        $contact_no = trim($_POST['contact_no']);
         $guardian_name = trim($_POST['guardian_name']);
         $guardian_contact = trim($_POST['guardian_contact']);
-        $specialization = trim($_POST['specialization']);
         
-        if (!empty($full_name)) {
-            // Start a quick transaction block to ensure both database tables sync seamlessly
+        if (!empty($guardian_name)) {
+            // Start a quick transaction block to ensure database sync runs smoothly
             $conn->beginTransaction();
             
             try {
-                // Update Main Users Table Info
-                $update_user = $conn->prepare("UPDATE users SET full_name = ? WHERE id = ?");
-                $update_user->execute([$full_name, $user_id]);
-                
-                // Save or update entries inside student_profiles table structure
-                $profile_sync = $conn->prepare("INSERT INTO student_profiles (user_id, birthdate, gender, address, contact_no, guardian_name, guardian_contact, specialization) 
-                                                VALUES (?, ?, ?, ?, ?, ?, ?, ?) 
+                // Save or update guardian entries inside student_profiles table structure
+                // Notice that other fields are intentionally omitted or kept intact via COALESCE / existing values
+                $profile_sync = $conn->prepare("INSERT INTO student_profiles (user_id, guardian_name, guardian_contact) 
+                                                VALUES (?, ?, ?) 
                                                 ON DUPLICATE KEY UPDATE 
-                                                    birthdate = VALUES(birthdate), 
-                                                    gender = VALUES(gender), 
-                                                    address = VALUES(address), 
-                                                    contact_no = VALUES(contact_no), 
                                                     guardian_name = VALUES(guardian_name), 
-                                                    guardian_contact = VALUES(guardian_contact), 
-                                                    specialization = VALUES(specialization)");
+                                                    guardian_contact = VALUES(guardian_contact)");
                 
-                $profile_sync->execute([$user_id, $birthdate, $gender, $address, $contact_no, $guardian_name, $guardian_contact, $specialization]);
+                $profile_sync->execute([$user_id, $guardian_name, $guardian_contact]);
                 
                 $conn->commit();
-                $message = "Personal profile fields and information updated successfully!";
+                $message = "Parent/Guardian contact information updated successfully!";
                 $message_type = "success";
             } catch (Exception $e) {
                 $conn->rollBack();
@@ -62,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message_type = "error";
             }
         } else {
-            $message = "Full name field cannot be empty.";
+            $message = "Parent / Guardian Name field cannot be empty.";
             $message_type = "error";
         }
     }
@@ -313,9 +297,9 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
             font-weight: 600;
             cursor: pointer;
         }
-        .form-control:disabled { 
+        .form-control:disabled, .form-control[readonly] { 
             background: #f1f5f9; 
-            color: #94a3b8; 
+            color: #64748b; 
             cursor: not-allowed; 
         }
         
@@ -392,7 +376,6 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
         }
 
        @media (max-width: 1024px) {
-
             html,
             body {
                 margin: 0;
@@ -413,7 +396,6 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
                 position: relative;
             }
 
-            /* Mobile sidebar */
             .sidebar {
                 position: fixed;
                 top: 0;
@@ -429,28 +411,23 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
                 left: 0;
             }
 
-            /* Burger button */
             .mobile-toggle {
                 display: block;
                 position: relative;
                 z-index: 1000;
             }
 
-            /* Main page */
             main.content {
                 display: block;
                 margin-left: 0 !important;
                 width: 100%;
                 max-width: 100%;
-                height: auto !important;
                 min-height: 100vh;
                 padding: 15px;
                 padding-top: 20px;
                 box-sizing: border-box;
-                overflow: visible !important;
             }
 
-            /* Profile cards */
             .profile-container {
                 display: grid;
                 grid-template-columns: 1fr;
@@ -464,7 +441,6 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
                 box-sizing: border-box;
             }
 
-            /* Forms */
             .form-grid {
                 grid-template-columns: 1fr;
             }
@@ -473,7 +449,6 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
                 grid-column: span 1;
             }
 
-            /* Sidebar close button */
             #sidebar.active .sidebar-close {
                 display: block;
             }
@@ -507,7 +482,7 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
 
             <header class="content-header" style="margin-bottom: 20px;">
                 <h1 style="margin: 0 0 5px 0;">Account Settings</h1>
-                <p style="margin: 0; color: #64748b;">Manage your user profile fields, personal documentation coordinates, and system credentials.</p>
+                <p style="margin: 0; color: #64748b;">Manage your parent/guardian details and system credentials.</p>
             </header>
 
             <?php if (!empty($message)): ?>
@@ -548,7 +523,7 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
                         <div class="form-grid">
                             <div class="form-group">
                                 <label>Full Name</label>
-                                <input type="text" name="full_name" class="form-control" value="<?php echo htmlspecialchars($student_data['full_name']); ?>" required>
+                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($student_data['full_name']); ?>" disabled>
                             </div>
                             <div class="form-group">
                                 <label>Assigned Section Context</label>
@@ -559,11 +534,11 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
                         <div class="form-grid">
                             <div class="form-group">
                                 <label for="birthdate">Birthdate</label>
-                                <input type="date" name="birthdate" id="birthdate" class="form-control" value="<?php echo htmlspecialchars($student_data['birthdate'] ?? ''); ?>">
+                                <input type="date" class="form-control" value="<?php echo htmlspecialchars($student_data['birthdate'] ?? ''); ?>" disabled>
                             </div>
                             <div class="form-group">
                                 <label for="gender">Gender Orientation</label>
-                                <select name="gender" id="gender" class="form-control">
+                                <select class="form-control" disabled>
                                     <option value="N/A" <?php echo (empty($student_data['gender']) || ($student_data['gender'] ?? '') === 'N/A') ? 'selected' : ''; ?>>N/A</option>
                                     <option value="Male" <?php echo (($student_data['gender'] ?? '') === 'Male') ? 'selected' : ''; ?>>Male</option>
                                     <option value="Female" <?php echo (($student_data['gender'] ?? '') === 'Female') ? 'selected' : ''; ?>>Female</option>
@@ -574,23 +549,23 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
                         <div class="form-grid">
                             <div class="form-group">
                                 <label for="contact_no">Contact Number</label>
-                                <input type="text" name="contact_no" id="contact_no" class="form-control" placeholder="e.g. 09123456789" value="<?php echo htmlspecialchars($student_data['contact_no'] ?? ''); ?>">
+                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($student_data['contact_no'] ?? ''); ?>" disabled>
                             </div>
                             <div class="form-group">
                                 <label for="specialization">Specialization / Focus Track</label>
-                                <input type="text" name="specialization" id="specialization" class="form-control" placeholder="e.g. Mobile App Development" value="<?php echo htmlspecialchars($student_data['specialization'] ?? ''); ?>">
+                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($student_data['specialization'] ?? ''); ?>" disabled>
                             </div>
                         </div>
 
                         <div class="form-group full-width">
                             <label for="address">Residential Address</label>
-                            <input type="text" name="address" id="address" class="form-control" placeholder="Complete Street, Barangay, City, Province" value="<?php echo htmlspecialchars($student_data['address'] ?? ''); ?>">
+                            <input type="text" class="form-control" value="<?php echo htmlspecialchars($student_data['address'] ?? ''); ?>" disabled>
                         </div>
 
                         <div class="form-grid" style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px;">
                             <div class="form-group">
                                 <label for="guardian_name">Parent / Guardian Name</label>
-                                <input type="text" name="guardian_name" id="guardian_name" class="form-control" value="<?php echo htmlspecialchars($student_data['guardian_name'] ?? ''); ?>">
+                                <input type="text" name="guardian_name" id="guardian_name" class="form-control" value="<?php echo htmlspecialchars($student_data['guardian_name'] ?? ''); ?>" required>
                             </div>
                             <div class="form-group">
                                 <label for="guardian_contact">Guardian Contact Number</label>
