@@ -19,6 +19,29 @@ ensureEcrDraftTable($pdo);
 $user_id   = $_SESSION['user_id'];
 $user_role = $_SESSION['role'];
 
+// Variables for dynamic navigation sidebar
+$user_role_clean = strtolower($_SESSION['role'] ?? 'faculty');
+$is_adviser_or_admin = in_array($user_role_clean, ['adviser', 'admin'], true);
+$current_page = basename($_SERVER['PHP_SELF']);
+
+// Fetch pending avatars count for adviser badge if applicable
+$pending_avatar_count = 0;
+if ($is_adviser_or_admin) {
+    if (strtolower($user_role) === 'admin') {
+        $avatar_count_query = $pdo->query("SELECT COUNT(*) as total FROM users WHERE avatar_status = 'pending'");
+        $pending_avatar_count = (int) ($avatar_count_query->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+    } else {
+        $avatar_count_query = $pdo->prepare("
+            SELECT COUNT(*) as total 
+            FROM users u
+            JOIN sections s ON u.section_id = s.id
+            WHERE s.adviser_id = ? AND u.avatar_status = 'pending'
+        ");
+        $avatar_count_query->execute([$user_id]);
+        $pending_avatar_count = (int) ($avatar_count_query->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+    }
+}
+
 // 3. Term & Assignment Query Parameters
 $term = isset($_GET['term']) ? (int)$_GET['term'] : 1;
 if (!in_array($term, [1, 2, 3])) {
@@ -27,15 +50,10 @@ if (!in_array($term, [1, 2, 3])) {
 
 $assignment_id = isset($_GET['assignment_id']) ? (int)$_GET['assignment_id'] : 0;
 
-// Variables for dynamic navigation sidebar
 $nav_assignment_param = !empty($assignment_id) ? "?assignment_id={$assignment_id}" : "";
 $nav_term_param = !empty($assignment_id) 
     ? "?assignment_id={$assignment_id}&term=" . ($term ?? 1) 
     : "?term=" . ($term ?? 1);
-
-$user_role_clean = strtolower($_SESSION['role'] ?? 'faculty');
-$is_adviser_or_admin = in_array($user_role_clean, ['adviser', 'admin'], true);
-$current_page = basename($_SERVER['PHP_SELF']);
 
 // Helper: DepEd DO 8, s. 2015 Subject Weights Mapper
 function getComponentWeights(?string $type): array {
@@ -346,6 +364,17 @@ if ($section_id > 0) {
 
         .sidebar::-webkit-scrollbar-thumb:hover {
             background-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .nav-badge {
+            background: #ef4444;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 10px;
+            float: right;
+            margin-top: 2px;
         }
 
         .ecr-card-master {
@@ -744,6 +773,14 @@ if ($section_id > 0) {
                         Advisory Forms
                     </li>
                     <li>
+                        <a href="review_avatars.php" class="<?= $current_page == 'review_avatars.php' ? 'active' : '' ?>">
+                            Review Avatars 
+                            <?php if ($pending_avatar_count > 0): ?>
+                                <span class="nav-badge"><?= $pending_avatar_count ?></span>
+                            <?php endif; ?>
+                        </a>
+                    </li>
+                    <li>
                         <a href="sf9-reportcard.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'sf9-reportcard.php' ? 'active' : '' ?>">
                             SF9 (Report Card)
                         </a>
@@ -970,7 +1007,7 @@ if ($section_id > 0) {
                                         <td class="ws-cell cell-calc" data-category="WW" style="font-weight: 600;">0.00</td>
 
                                         <!-- Dynamic Performance Tasks Inputs -->
-                                        <?php foreach ($pt_list as $task_num =>$comp): ?>
+                                        <?php foreach ($pt_list as $task_num => $comp): ?>
                                             <td>
                                                 <input type="number" min="0" max="100" class="score-input" 
                                                        data-category="PT" 
@@ -985,7 +1022,7 @@ if ($section_id > 0) {
                                         <td class="ws-cell cell-calc" data-category="PT" style="font-weight: 600;">0.00</td>
 
                                         <!-- Dynamic Quarterly Exam Inputs -->
-                                        <?php foreach ($qa_list as $task_num =>$comp): ?>
+                                        <?php foreach ($qa_list as $task_num => $comp): ?>
                                             <td>
                                                 <input type="number" min="0" max="100" class="score-input" 
                                                        data-category="QA" 
@@ -1019,14 +1056,14 @@ if ($section_id > 0) {
                                     <td colspan="<?= $total_grid_columns ?>" style="padding: 10px !important; color: #94a3b8;">No female students registered in this section.</td>
                                 </tr>
                             <?php else: ?>
-                                <?php foreach ($females as $index =>$student): ?>
+                                <?php foreach ($females as $index => $student): ?>
                                     <tr class="student-row" data-student-id="<?= $student['id'] ?>">
                                         <td class="col-sticky-name" title="<?= htmlspecialchars($student['name']) ?>">
                                             <?= ($index + 1) . '. ' . htmlspecialchars($student['name']) ?>
                                         </td>
                                         
                                         <!-- Dynamic Written Works Inputs -->
-                                        <?php foreach ($ww_list as $task_num =>$comp): ?>
+                                        <?php foreach ($ww_list as $task_num => $comp): ?>
                                             <td>
                                                 <input type="number" min="0" max="100" class="score-input" 
                                                        data-category="WW" 
@@ -1041,7 +1078,7 @@ if ($section_id > 0) {
                                         <td class="ws-cell cell-calc" data-category="WW" style="font-weight: 600;">0.00</td>
 
                                         <!-- Dynamic Performance Tasks Inputs -->
-                                        <?php foreach ($pt_list as $task_num =>$comp): ?>
+                                        <?php foreach ($pt_list as $task_num => $comp): ?>
                                             <td>
                                                 <input type="number" min="0" max="100" class="score-input" 
                                                        data-category="PT" 
@@ -1056,7 +1093,7 @@ if ($section_id > 0) {
                                         <td class="ws-cell cell-calc" data-category="PT" style="font-weight: 600;">0.00</td>
 
                                         <!-- Dynamic Quarterly Exam Inputs -->
-                                        <?php foreach ($qa_list as $task_num =>$comp): ?>
+                                        <?php foreach ($qa_list as $task_num => $comp): ?>
                                             <td>
                                                 <input type="number" min="0" max="100" class="score-input" 
                                                        data-category="QA" 

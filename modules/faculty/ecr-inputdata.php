@@ -22,6 +22,24 @@ $user_role_clean = strtolower($_SESSION['role'] ?? 'faculty');
 $is_adviser_or_admin = in_array($user_role_clean, ['adviser', 'admin'], true);
 $current_page = basename($_SERVER['PHP_SELF']);
 
+// Fetch pending avatars count for adviser badge if applicable
+$pending_avatar_count = 0;
+if ($is_adviser_or_admin) {
+    if (strtolower($user_role) === 'admin') {
+        $avatar_count_query = $pdo->query("SELECT COUNT(*) as total FROM users WHERE avatar_status = 'pending'");
+        $pending_avatar_count = (int) ($avatar_count_query->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+    } else {
+        $avatar_count_query = $pdo->prepare("
+            SELECT COUNT(*) as total 
+            FROM users u
+            JOIN sections s ON u.section_id = s.id
+            WHERE s.adviser_id = ? AND u.avatar_status = 'pending'
+        ");
+        $avatar_count_query->execute([$user_id]);
+        $pending_avatar_count = (int) ($avatar_count_query->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+    }
+}
+
 // 3. Query Selected Term & Assignment
 $term = isset($_GET['term']) ? (int)$_GET['term'] : null;
 if ($term !== null && !in_array($term, [1, 2, 3], true)) { $term = 1; }
@@ -79,33 +97,33 @@ $is_tech_track = (stripos($strand_identifier, 'TVL') !== false || stripos($stran
 // 6. Fetch Teacher Name
 $teacher_stmt = $pdo->prepare("SELECT full_name FROM users WHERE id = :user_id");
 $teacher_stmt->execute(['user_id' => $user_id]);
-$teacher_name =$teacher_stmt->fetchColumn() ?: 'Unassigned Teacher';
+$teacher_name = $teacher_stmt->fetchColumn() ?: 'Unassigned Teacher';
 
 // 7. Fetch Active Student Roster by Gender for Selected Assignment Section
-$male_students = [];$female_students = [];
+$male_students = []; $female_students = [];
 
 if ($section_id > 0) {
     // Fetch Male Roster
-    $m_stmt =$pdo->prepare("
+    $m_stmt = $pdo->prepare("
         SELECT u.id, u.username AS lrn, u.full_name 
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
         WHERE u.section_id = :section_id AND u.role = 'student' AND (sp.gender = 'Male' OR sp.gender IS NULL)
         ORDER BY u.full_name ASC
     ");
-    $m_stmt->execute(['section_id' =>$section_id]);
-    $male_students =$m_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $m_stmt->execute(['section_id' => $section_id]);
+    $male_students = $m_stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Fetch Female Roster
-    $f_stmt =$pdo->prepare("
+    $f_stmt = $pdo->prepare("
         SELECT u.id, u.username AS lrn, u.full_name 
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
         WHERE u.section_id = :section_id AND u.role = 'student' AND sp.gender = 'Female'
         ORDER BY u.full_name ASC
     ");
-    $f_stmt->execute(['section_id' =>$section_id]);
-    $female_students =$f_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $f_stmt->execute(['section_id' => $section_id]);
+    $female_students = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // 8. Fetch Configured Assessment Counts & Scores from DB
@@ -113,16 +131,16 @@ $term_str = "Term " . $term;
 $db_components = ['WW' => [], 'PT' => [], 'QA' => []];
 
 if ($assignment_id > 0) {
-    $comp_stmt =$pdo->prepare("
+    $comp_stmt = $pdo->prepare("
         SELECT category, task_number, highest_possible_score
         FROM ecr_assessment_components
         WHERE assignment_id = :assignment_id AND term = :term
         ORDER BY category ASC, task_number ASC
     ");
-    $comp_stmt->execute(['assignment_id' => $assignment_id, 'term' =>$term_str]);
-    $rows =$comp_stmt->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($rows as$r) {
-        $db_components[$r['category']][$r['task_number']] =$r['highest_possible_score'];
+    $comp_stmt->execute(['assignment_id' => $assignment_id, 'term' => $term_str]);
+    $rows = $comp_stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as $r) {
+        $db_components[$r['category']][$r['task_number']] = $r['highest_possible_score'];
     }
 }
 
@@ -179,6 +197,17 @@ if ($assignment_id > 0) {
         #sidebar:not(.active) ~ main.content {
             margin-left: 0;
             width: 100%;
+        }
+
+        .nav-badge {
+            background: #ef4444;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 10px;
+            float: right;
+            margin-top: 2px;
         }
 
         .ecr-card {
@@ -436,6 +465,14 @@ if ($assignment_id > 0) {
                         Advisory Forms
                     </li>
                     <li>
+                        <a href="review_avatars.php" class="<?= $current_page == 'review_avatars.php' ? 'active' : '' ?>">
+                            Review Avatars 
+                            <?php if ($pending_avatar_count > 0): ?>
+                                <span class="nav-badge"><?= $pending_avatar_count ?></span>
+                            <?php endif; ?>
+                        </a>
+                    </li>
+                    <li>
                         <a href="sf9-reportcard.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'sf9-reportcard.php' ? 'active' : '' ?>">
                             SF9 (Report Card)
                         </a>
@@ -481,8 +518,8 @@ if ($assignment_id > 0) {
                                         <?php if (empty($my_assignments)): ?>
                                             <option value="0">No active subject load assigned</option>
                                         <?php else: ?>
-                                            <?php foreach ($my_assignments as$assign): ?>
-                                                <option value="<?= $assign['assignment_id'] ?>" <?= $assign['assignment_id'] ==$assignment_id ? 'selected' : '' ?>>
+                                            <?php foreach ($my_assignments as $assign): ?>
+                                                <option value="<?= $assign['assignment_id'] ?>" <?= $assign['assignment_id'] == $assignment_id ? 'selected' : '' ?>>
                                                     Grade <?= htmlspecialchars($assign['grade_level'] . ' - ' . $assign['section_name']) ?> | <?= htmlspecialchars($assign['subject_name']) ?>
                                                 </option>
                                             <?php endforeach; ?>
@@ -518,7 +555,7 @@ if ($assignment_id > 0) {
                                 </div>
                                 <div class="field-group">
                                     <label>SECTION:</label>
-                                    <input type="text" value="<?= htmlspecialchars(($active_assignment['grade_level'] ?? '') ? 'Grade ' . $active_assignment['grade_level'] . ' - ' .$active_assignment['section_name'] : 'Unassigned') ?>" class="form-input" readonly>
+                                    <input type="text" value="<?= htmlspecialchars(($active_assignment['grade_level'] ?? '') ? 'Grade ' . $active_assignment['grade_level'] . ' - ' . $active_assignment['section_name'] : 'Unassigned') ?>" class="form-input" readonly>
                                 </div>
                             </div>
                         </div>
@@ -606,7 +643,7 @@ if ($assignment_id > 0) {
                                     <div class="gender-tag male-tag">MALE LEARNERS (<?= count($male_students) ?> Enrolled)</div>
                                     <div class="roster-list">
                                         <?php if (!empty($male_students)): ?>
-                                            <?php foreach ($male_students as $idx =>$student): ?>
+                                            <?php foreach ($male_students as $idx => $student): ?>
                                                 <div class="roster-entry">
                                                     <span class="entry-index"><?= $idx + 1 ?></span>
                                                     <input type="text" value="<?= htmlspecialchars($student['full_name']) ?> (LRN: <?= htmlspecialchars($student['lrn']) ?>)" class="roster-field" readonly>
@@ -623,7 +660,7 @@ if ($assignment_id > 0) {
                                     <div class="gender-tag female-tag">FEMALE LEARNERS (<?= count($female_students) ?> Enrolled)</div>
                                     <div class="roster-list">
                                         <?php if (!empty($female_students)): ?>
-                                            <?php foreach ($female_students as $idx =>$student): ?>
+                                            <?php foreach ($female_students as $idx => $student): ?>
                                                 <div class="roster-entry">
                                                     <span class="entry-index"><?= $idx + 1 ?></span>
                                                     <input type="text" value="<?= htmlspecialchars($student['full_name']) ?> (LRN: <?= htmlspecialchars($student['lrn']) ?>)" class="roster-field" readonly>

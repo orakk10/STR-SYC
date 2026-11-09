@@ -28,18 +28,36 @@ if (empty($_SESSION['csrf_token'])) {
 }
 $csrf_token = $_SESSION['csrf_token'];
 
+// Variables for dynamic navigation sidebar
+$user_role_clean = strtolower($_SESSION['role'] ?? 'faculty');
+$is_adviser_or_admin = in_array($user_role_clean, ['adviser', 'admin'], true);
+$current_page = basename($_SERVER['PHP_SELF']);
+
+// Fetch pending avatars count for adviser badge if applicable
+$pending_avatar_count = 0;
+if ($is_adviser_or_admin) {
+    if (strtolower($user_role) === 'admin') {
+        $avatar_count_query = $pdo->query("SELECT COUNT(*) as total FROM users WHERE avatar_status = 'pending'");
+        $pending_avatar_count = (int) ($avatar_count_query->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+    } else {
+        $avatar_count_query = $pdo->prepare("
+            SELECT COUNT(*) as total 
+            FROM users u
+            JOIN sections s ON u.section_id = s.id
+            WHERE s.adviser_id = ? AND u.avatar_status = 'pending'
+        ");
+        $avatar_count_query->execute([$user_id]);
+        $pending_avatar_count = (int) ($avatar_count_query->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+    }
+}
+
 // 3. Subject Assignment & Section Query Parameters
 $assignment_id = isset($_GET['assignment_id']) ? (int)$_GET['assignment_id'] : 0;
 
-// Variables for dynamic navigation sidebar
 $nav_assignment_param = !empty($assignment_id) ? "?assignment_id={$assignment_id}" : "";
 $nav_term_param = !empty($assignment_id) 
     ? "?assignment_id={$assignment_id}&term=" . ($term ?? 1) 
     : "?term=" . ($term ?? 1);
-
-$user_role_clean = strtolower($_SESSION['role'] ?? 'faculty');
-$is_adviser_or_admin = in_array($user_role_clean, ['adviser', 'admin'], true);
-$current_page = basename($_SERVER['PHP_SELF']);
 
 // Fetch Active Faculty Subject Load
 $assignments_stmt = $pdo->prepare("
@@ -221,6 +239,17 @@ if ($section_id > 0) {
         #sidebar:not(.active) ~ main.content {
             margin-left: 0;
             width: 100%;
+        }
+
+        .nav-badge {
+            background: #ef4444;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 10px;
+            float: right;
+            margin-top: 2px;
         }
 
         .ecr-card-master {
@@ -687,6 +716,14 @@ if ($section_id > 0) {
                     <!-- Official DepEd Advisory Forms Section -->
                     <li class="menu-divider" style="padding: 12px 16px 4px 16px; font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">
                         Advisory Forms
+                    </li>
+                    <li>
+                        <a href="review_avatars.php" class="<?= $current_page == 'review_avatars.php' ? 'active' : '' ?>">
+                            Review Avatars 
+                            <?php if ($pending_avatar_count > 0): ?>
+                                <span class="nav-badge"><?= $pending_avatar_count ?></span>
+                            <?php endif; ?>
+                        </a>
                     </li>
                     <li>
                         <a href="sf9-reportcard.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'sf9-reportcard.php' ? 'active' : '' ?>">

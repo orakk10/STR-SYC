@@ -28,7 +28,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             try {
                 // Save or update guardian entries inside student_profiles table structure
-                // Notice that other fields are intentionally omitted or kept intact via COALESCE / existing values
                 $profile_sync = $conn->prepare("INSERT INTO student_profiles (user_id, guardian_name, guardian_contact) 
                                                 VALUES (?, ?, ?) 
                                                 ON DUPLICATE KEY UPDATE 
@@ -84,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
-    // Action 3: Profile Photo Validation & Target Upload Engine
+    // Action 3: Profile Photo Upload for Adviser Moderation
     elseif (isset($_POST['upload_avatar'])) {
         if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
             $file_tmp = $_FILES['avatar']['tmp_name'];
@@ -97,7 +96,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (in_array($file_ext, $allowed_exts)) {
                 if ($file_size <= $max_size) {
-                    // Build local system target path directory safely
                     $upload_dir = 'uploads/profile_pics/';
                     if (!is_dir($upload_dir)) {
                         mkdir($upload_dir, 0755, true);
@@ -107,18 +105,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $target_destination = $upload_dir . $new_filename;
                     
                     if (move_uploaded_file($file_tmp, $target_destination)) {
-                        // Delete previous asset references if present
-                        $old_pic_stmt = $conn->prepare("SELECT profile_image FROM users WHERE id = ?");
-                        $old_pic_stmt->execute([$user_id]);
-                        $old_res = $old_pic_stmt->fetch(PDO::FETCH_ASSOC);
-                        if (!empty($old_res['profile_image']) && file_exists($old_res['profile_image'])) {
-                            @unlink($old_res['profile_image']);
-                        }
-                        
-                        $img_stmt = $conn->prepare("UPDATE users SET profile_image = ? WHERE id = ?");
+                        // Store in pending queue for adviser review
+                        $img_stmt = $conn->prepare("UPDATE users SET pending_profile_image = ?, avatar_status = 'pending' WHERE id = ?");
                         $img_stmt->execute([$target_destination, $user_id]);
                         
-                        $message = "Profile picture updated successfully!";
+                        $message = "Profile picture submitted successfully! It is pending adviser review and approval.";
                         $message_type = "success";
                     } else {
                         $message = "Error writing binary file resource to disk storage directory.";
@@ -139,8 +130,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch Latest Student Record Info + Extended Metadata from Profile Relationship Table
-$query = "SELECT u.full_name, u.username as lrn, u.profile_image, u.require_reset, s.section_name, s.grade_level, str.strand_name,
+// Fetch Latest Student Record Info + Extended Metadata
+$query = "SELECT u.full_name, u.username as lrn, u.profile_image, u.pending_profile_image, u.avatar_status, u.require_reset, s.section_name, s.grade_level, str.strand_name,
                  sp.birthdate, sp.gender, sp.address, sp.contact_no, sp.guardian_name, sp.guardian_contact, sp.specialization
           FROM users u 
           LEFT JOIN sections s ON u.section_id = s.id 
@@ -162,299 +153,47 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Profile | STRAND-SYNC</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
-        <link rel="stylesheet" href="../../assets/css/security-lock.css">
+    <link rel="stylesheet" href="../../assets/css/security-lock.css">
     <script src="../../assets/js/security-lock.js" defer></script>
     <style>
-        /* Base Viewport Layout Setup */
-        body { 
-            margin: 0;
-            padding: 0;
-            overflow-x: hidden;
-            overflow-y: auto; 
-        }
-        .dashboard-wrapper { 
-            display: flex; 
-            min-height: 100vh;
-            height: auto;
-            width: 100%;
-            overflow: visible;
-            position: relative;
-        }
-
-        /* Fluid Content Area Configuration */
-        main.content { 
-            flex-grow: 1; 
-            margin-left: 260px; 
-            padding: 30px; 
-            width: 100%; 
-            max-width: 100%; 
-            min-height: 100vh;
-            box-sizing: border-box; 
-            display: flex; 
-            flex-direction: column; 
-            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-        }
-
-        /* Profile Layout Content Framework */
-        .profile-container { 
-            display: grid; 
-            grid-template-columns: 1fr 2fr; 
-            gap: 30px; margin-top: 20px; 
-        }
-        .profile-card, .form-card { 
-            background: white; 
-            border-radius: 12px; 
-            border: 1px solid #e2e8f0; 
-            padding: 25px; 
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05); 
-            height: max-content; 
-        }
-        
-        .avatar-wrapper { 
-            text-align: center; 
-            margin-bottom: 20px; 
-        }
-        .avatar-preview { 
-            width: 150px; 
-            height: 150px; 
-            border-radius: 50%; 
-            object-fit: cover; 
-            border: 4px solid #3b82f6; 
-            margin-bottom: 15px; 
-            background: #f8fafc; 
-        }
-        
-        .form-section { 
-            margin-bottom: 30px; 
-            padding-bottom: 20px; 
-            border-bottom: 1px solid #f1f5f9; 
-        }
-        .form-section:last-child { 
-            border-bottom: none; 
-            margin-bottom: 0; 
-            padding-bottom: 0; 
-        }
-        .form-section h3 { 
-            margin: 0 0 15px 0; 
-            color: #1e293b; 
-            font-size: 1.1rem; 
-            border-left: 4px solid #2563eb; 
-            padding-left: 10px; 
-        }
-        
-        /* Grid layout for cleaner rendering of multiple fields */
-        .form-grid { 
-            display: grid; 
-            grid-template-columns: 1fr 1fr; 
-            gap: 15px; 
-            margin-bottom: 15px;
-        }
-        @media (max-width: 640px) { 
-            .form-grid { grid-template-columns: 1fr; } 
-        }
-
-        .form-group { 
-            margin-bottom: 15px; 
-            display: flex; 
-            flex-direction: column; 
-            gap: 5px; 
-        }
-        .form-group.full-width { 
-            grid-column: span 2; 
-        }
-        @media (max-width: 640px) { 
-            .form-group.full-width { grid-column: span 1; } 
-        }
-
-        .form-group label { 
-            font-size: 0.85rem; 
-            font-weight: 600; 
-            color: #64748b; 
-        }
-        .form-control { 
-            padding: 10px 12px; 
-            border: 1px solid #cbd5e1; 
-            border-radius: 6px; 
-            font-size: 0.95rem; 
-            color: #334155; 
-            width: 100%; 
-            box-sizing: border-box;
-        }
-        .password-field {
-            position: relative;
-        }
-        .password-field .form-control {
-            padding-right: 64px;
-        }
-        .password-toggle {
-            position: absolute;
-            right: 8px;
-            top: 50%;
-            transform: translateY(-50%);
-            border: 0;
-            background: transparent;
-            color: #2563eb;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .form-control:disabled, .form-control[readonly] { 
-            background: #f1f5f9; 
-            color: #64748b; 
-            cursor: not-allowed; 
-        }
-        
-        .btn-action { 
-            background: #2563eb; 
-            color: white; 
-            border: none; 
-            padding: 10px 18px; 
-            border-radius: 6px; 
-            font-weight: 600; 
-            font-size: 0.85rem; 
-            cursor: pointer; 
-            display: inline-flex; 
-            align-items: center; 
-            gap: 8px; 
-            transition: background 0.2s; 
-        }
-        .btn-action:hover { 
-            background: #1d4ed8; 
-        }
-
-        /* Status Alert Panels */
-        .alert { 
-            padding: 12px 16px; 
-            border-radius: 8px; 
-            font-size: 0.9rem; 
-            font-weight: 500; 
-            margin-bottom: 20px; 
-        }
-        .alert-success { 
-            background: #dcfce7; 
-            color: #15803d; 
-            border: 1px solid #bbf7d0; 
-        }
-        .alert-error { 
-            background: #fee2e2; 
-            color: #b91c1c; 
-            border: 1px solid #fca5a5; 
-        }
-        .alert-warning {
-            background: #fffbeb;
-            color: #92400e;
-            border: 1px solid #fcd34d;
-        }
-
-        /* --- BURGER TOGGLE UTILITIES --- */
-        .mobile-toggle { 
-            display: none; 
-            transition: opacity 0.2s ease, visibility 0.2s ease; 
-            z-index: 999; background: #2563eb; 
-            color: white; border: none; 
-            padding: 8px 12px; 
-            border-radius: 6px; 
-            font-size: 1.1rem; 
-            cursor: pointer; 
-            line-height: 1; 
-            margin-bottom: 15px; 
-            align-self: flex-start; 
-        }
-        .mobile-toggle.hidden { 
-            opacity: 0; 
-            visibility: hidden; 
-            pointer-events: none;
-        }
-        .sidebar-close { 
-            display: none; 
-            background: none; 
-            border: none; 
-            color: white; 
-            font-size: 1.5rem; 
-            cursor: pointer; 
-            padding: 0 5px; 
-            line-height: 1; 
-        }
-
-       @media (max-width: 1024px) {
-            html,
-            body {
-                margin: 0;
-                padding: 0;
-                width: 100%;
-                min-height: 100%;
-                height: auto;
-                overflow-x: hidden;
-                overflow-y: auto;
-            }
-
-            .dashboard-wrapper {
-                display: block;
-                width: 100%;
-                min-height: 100vh;
-                height: auto;
-                overflow: visible;
-                position: relative;
-            }
-
-            .sidebar {
-                position: fixed;
-                top: 0;
-                left: -260px;
-                width: 260px;
-                height: 100vh;
-                z-index: 1050;
-                transition: left 0.3s ease;
-                overflow-y: auto;
-            }
-
-            .sidebar.active {
-                left: 0;
-            }
-
-            .mobile-toggle {
-                display: block;
-                position: relative;
-                z-index: 1000;
-            }
-
-            main.content {
-                display: block;
-                margin-left: 0 !important;
-                width: 100%;
-                max-width: 100%;
-                min-height: 100vh;
-                padding: 15px;
-                padding-top: 20px;
-                box-sizing: border-box;
-            }
-
-            .profile-container {
-                display: grid;
-                grid-template-columns: 1fr;
-                gap: 20px;
-                width: 100%;
-            }
-
-            .profile-card,
-            .form-card {
-                width: 100%;
-                box-sizing: border-box;
-            }
-
-            .form-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .form-group.full-width {
-                grid-column: span 1;
-            }
-
-            #sidebar.active .sidebar-close {
-                display: block;
-            }
-        }
-        #sidebar:not(.active) ~ main.content { 
-            margin-left: 0; width: 100%; 
+        body { margin: 0; padding: 0; overflow-x: hidden; overflow-y: auto; }
+        .dashboard-wrapper { display: flex; min-height: 100vh; height: auto; width: 100%; overflow: visible; position: relative; }
+        main.content { flex-grow: 1; margin-left: 260px; padding: 30px; width: 100%; max-width: 100%; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .profile-container { display: grid; grid-template-columns: 1fr 2fr; gap: 30px; margin-top: 20px; }
+        .profile-card, .form-card { background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); height: max-content; }
+        .avatar-wrapper { text-align: center; margin-bottom: 20px; }
+        .avatar-preview { width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 4px solid #3b82f6; margin-bottom: 15px; background: #f8fafc; }
+        .form-section { margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #f1f5f9; }
+        .form-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .form-section h3 { margin: 0 0 15px 0; color: #1e293b; font-size: 1.1rem; border-left: 4px solid #2563eb; padding-left: 10px; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+        @media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } }
+        .form-group { margin-bottom: 15px; display: flex; flex-direction: column; gap: 5px; }
+        .form-group.full-width { grid-column: span 2; }
+        @media (max-width: 640px) { .form-group.full-width { grid-column: span 1; } }
+        .form-group label { font-size: 0.85rem; font-weight: 600; color: #64748b; }
+        .form-control { padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem; color: #334155; width: 100%; box-sizing: border-box; }
+        .password-field { position: relative; }
+        .password-field .form-control { padding-right: 64px; }
+        .password-toggle { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: #2563eb; font-weight: 600; cursor: pointer; }
+        .form-control:disabled, .form-control[readonly] { background: #f1f5f9; color: #64748b; cursor: not-allowed; }
+        .btn-action { background: #2563eb; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: background 0.2s; }
+        .btn-action:hover { background: #1d4ed8; }
+        .alert { padding: 12px 16px; border-radius: 8px; font-size: 0.9rem; font-weight: 500; margin-bottom: 20px; }
+        .alert-success { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+        .alert-error { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+        .alert-warning { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+        .mobile-toggle { display: none; z-index: 999; background: #2563eb; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-size: 1.1rem; cursor: pointer; margin-bottom: 15px; align-self: flex-start; }
+        .mobile-toggle.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+        .sidebar-close { display: none; background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; padding: 0 5px; }
+        @media (max-width: 1024px) {
+            .dashboard-wrapper { display: block; }
+            .sidebar { position: fixed; top: 0; left: -260px; width: 260px; height: 100vh; z-index: 1050; transition: left 0.3s ease; overflow-y: auto; }
+            .sidebar.active { left: 0; }
+            .mobile-toggle { display: block; position: relative; z-index: 1000; }
+            main.content { margin-left: 0 !important; width: 100%; padding: 15px; }
+            .profile-container { grid-template-columns: 1fr; }
+            #sidebar.active .sidebar-close { display: block; }
         }
     </style>
 </head>
@@ -504,15 +243,19 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
                         <img src="<?php echo $avatar_src; ?>" alt="Avatar" class="avatar-preview">
                         <h2 style="margin: 10px 0 5px 0; font-size: 1.2rem;"><?php echo htmlspecialchars($student_data['full_name']); ?></h2>
                         <p style="margin: 0; font-size: 0.85rem; color: #64748b; font-weight: 600;">LRN: <?php echo htmlspecialchars($student_data['lrn']); ?></p>
+                        
+                        <?php if (($student_data['avatar_status'] ?? '') === 'pending'): ?>
+                            <span style="display: inline-block; margin-top: 8px; font-size: 0.75rem; background: #fffbeb; color: #b45309; border: 1px solid #fde68a; padding: 3px 8px; border-radius: 4px; font-weight: 600;">⏳ Photo Pending Adviser Approval</span>
+                        <?php endif; ?>
                     </div>
 
                     <form action="student_profile.php" method="POST" enctype="multipart/form-data" style="margin-top: 20px; border-top: 1px solid #f1f5f9; padding-top: 20px;">
                         <div class="form-group">
-                            <label for="avatar">Upload New Avatar Photo</label>
-                            <input type="file" name="avatar" id="avatar" accept="image/*" class="form-control" style="padding: 5px;">
+                            <label for="avatarInput">Upload New Avatar Photo</label>
+                            <input type="file" name="avatar" id="avatarInput" accept="image/*" class="form-control" style="padding: 5px;">
                             <small style="color: #94a3b8; font-size: 0.75rem; margin-top: 3px;">Max size 2MB. Format limits: JPG, PNG, WEBP.</small>
                         </div>
-                        <button type="submit" name="upload_avatar" class="btn-action" style="width: 100%; justify-content: center;">🖼️ Save Photo</button>
+                        <button type="submit" name="upload_avatar" class="btn-action" style="width: 100%; justify-content: center;">🖼️ Submit Photo for Review</button>
                     </form>
                 </div>
 
@@ -607,6 +350,21 @@ $avatar_src = !empty($student_data['profile_image']) ? $student_data['profile_im
     </div>
 
     <script>
+        // Instant Image Preview Handler
+        document.getElementById('avatarInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const previewImg = document.querySelector('.avatar-preview');
+                    if (previewImg) {
+                        previewImg.src = e.target.result;
+                    }
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
         document.querySelectorAll('[data-password-toggle]').forEach((button) => {
             button.addEventListener('click', () => {
                 const input = document.getElementById(button.dataset.passwordToggle);

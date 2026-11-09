@@ -113,13 +113,23 @@ foreach ($teaching_load_result as $load) {
     }
 }
 
-// 4. Fetch Enrolled Student Count for Advisory Section
+// 4. Fetch Enrolled Student Count for Advisory Section & Pending Avatar Count
 $student_count = 0;
+$pending_avatar_count = 0;
 if ($section_data) {
     $sec_id = $section_data['id'];
     $count_query = $pdo->prepare("SELECT COUNT(*) as total FROM users WHERE section_id = :sec_id AND role = 'student'");
     $count_query->execute(['sec_id' => $sec_id]);
     $student_count = $count_query->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+    $avatar_count_query = $pdo->prepare("
+        SELECT COUNT(*) as total 
+        FROM users u
+        JOIN sections s ON u.section_id = s.id
+        WHERE s.adviser_id = :adviser_id AND u.avatar_status = 'pending'
+    ");
+    $avatar_count_query->execute(['adviser_id' => $user_id]);
+    $pending_avatar_count = (int) ($avatar_count_query->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
 }
 ?>
 <!DOCTYPE html>
@@ -193,6 +203,17 @@ if ($section_data) {
 
         .sidebar::-webkit-scrollbar-thumb:hover {
             background-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .nav-badge {
+            background: #ef4444;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 10px;
+            float: right;
+            margin-top: 2px;
         }
 
         .btn-table-action {
@@ -315,6 +336,14 @@ if ($section_data) {
                     <!-- Official DepEd Advisory Forms Section -->
                     <li class="menu-divider" style="padding: 12px 16px 4px 16px; font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">
                         Advisory Forms
+                    </li>
+                    <li>
+                        <a href="review_avatars.php" class="<?= basename($_SERVER['PHP_SELF']) == 'review_avatars.php' ? 'active' : '' ?>">
+                            Review Avatars 
+                            <?php if ($pending_avatar_count > 0): ?>
+                                <span class="nav-badge"><?= $pending_avatar_count ?></span>
+                            <?php endif; ?>
+                        </a>
                     </li>
                     <li>
                         <a href="sf9-reportcard.php" class="<?= basename($_SERVER['PHP_SELF']) == 'sf9-reportcard.php' ? 'active' : '' ?>">

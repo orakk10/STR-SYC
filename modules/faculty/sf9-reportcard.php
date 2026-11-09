@@ -11,9 +11,30 @@ if (!isset($_SESSION['user_id']) || !in_array(strtolower($_SESSION['role'] ?? ''
 $user_id = (int) $_SESSION['user_id'];
 $user_role = strtolower($_SESSION['role']);
 $is_admin = $user_role === 'admin';
+$is_adviser_or_admin = in_array($user_role, ['adviser', 'admin'], true);
 
 require_once __DIR__ . '/../../config/database.php';
 $conn = getDBConnection();
+
+/* ==========================================
+   0. FETCH PENDING AVATARS COUNT
+   ========================================== */
+$pending_avatar_count = 0;
+if ($is_adviser_or_admin) {
+    if ($is_admin) {
+        $avatar_count_query = $conn->query("SELECT COUNT(*) as total FROM users WHERE avatar_status = 'pending'");
+        $pending_avatar_count = (int) ($avatar_count_query->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+    } else {
+        $avatar_count_query = $conn->prepare("
+            SELECT COUNT(*) as total 
+            FROM users u
+            JOIN sections s ON u.section_id = s.id
+            WHERE s.adviser_id = ? AND u.avatar_status = 'pending'
+        ");
+        $avatar_count_query->execute([$user_id]);
+        $pending_avatar_count = (int) ($avatar_count_query->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+    }
+}
 
 /* ==========================================
    1. FETCH STUDENT ROSTER
@@ -579,6 +600,20 @@ main.content {
 #sidebar:not(.active) ~ main.content {
     margin-left: 0;
     width: 100%;
+}
+
+/* =========================================
+   NAV BADGE
+========================================= */
+.nav-badge {
+    background: #ef4444;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 10px;
+    float: right;
+    margin-top: 2px;
 }
 
 /* =========================================
@@ -1422,20 +1457,31 @@ table.attendance-table td.text-left {
 
             <li><a href="ecr-summary.php">ECR Summary</a></li>
 
-            <li class="menu-divider"
-                style="padding:12px 16px 4px;font-size:0.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;">
+            <?php if ($is_adviser_or_admin): ?>
+                <li class="menu-divider"
+                    style="padding:12px 16px 4px;font-size:0.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;">
 
-                Advisory Forms
+                    Advisory Forms
 
-            </li>
+                </li>
 
-            <li>
-                <a href="<?= htmlspecialchars($sf9_page) ?>" class="active">
-                    SF9 (Report Card)
-                </a>
-            </li>
+                <li>
+                    <a href="review_avatars.php" class="<?= basename($_SERVER['PHP_SELF']) == 'review_avatars.php' ? 'active' : '' ?>">
+                        Review Avatars 
+                        <?php if ($pending_avatar_count > 0): ?>
+                            <span class="nav-badge"><?= $pending_avatar_count ?></span>
+                        <?php endif; ?>
+                    </a>
+                </li>
 
-            <li><a href="sf10-record.php">SF10 (Permanent Record)</a></li>
+                <li>
+                    <a href="<?= htmlspecialchars($sf9_page) ?>" class="active">
+                        SF9 (Report Card)
+                    </a>
+                </li>
+
+                <li><a href="sf10-record.php">SF10 (Permanent Record)</a></li>
+            <?php endif; ?>
 
             <li><a href="../../manifest/logout.php" class="logout">Logout</a></li>
 

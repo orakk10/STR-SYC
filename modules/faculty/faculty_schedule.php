@@ -11,6 +11,23 @@ if (
     exit();
 }
 
+$user_id = (int) $_SESSION['user_id'];
+$user_role = strtolower($_SESSION['role'] ?? 'faculty');
+$is_adviser_or_admin = in_array($user_role, ['adviser', 'admin'], true);
+
+// Fetch pending avatars count for adviser badge if applicable
+$pending_avatar_count = 0;
+if ($is_adviser_or_admin) {
+    $avatar_count_query = $conn->prepare("
+        SELECT COUNT(*) as total 
+        FROM users u
+        JOIN sections s ON u.section_id = s.id
+        WHERE s.adviser_id = ? AND u.avatar_status = 'pending'
+    ");
+    $avatar_count_query->execute([$user_id]);
+    $pending_avatar_count = (int) ($avatar_count_query->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+}
+
 $schedule_stmt = $conn->prepare("
     SELECT DISTINCT
         sch.day_of_week,
@@ -30,7 +47,7 @@ $schedule_stmt = $conn->prepare("
     ORDER BY FIELD(sch.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'),
              sch.start_time ASC
 ");
-$schedule_stmt->execute(['faculty_id' => $_SESSION['user_id']]);
+$schedule_stmt->execute(['faculty_id' => $user_id]);
 
 $schedule_data = [];
 foreach ($schedule_stmt->fetchAll(PDO::FETCH_ASSOC) as $class) {
@@ -45,8 +62,6 @@ $nav_term_param = !empty($assignment_id)
     ? "?assignment_id={$assignment_id}&term=" . ($term ?? 1) 
     : "?term=" . ($term ?? 1);
 
-$user_role = strtolower($_SESSION['role'] ?? 'faculty');
-$is_adviser_or_admin = in_array($user_role, ['adviser', 'admin'], true);
 $current_page = basename($_SERVER['PHP_SELF']);
 ?>
 <!DOCTYPE html>
@@ -149,6 +164,17 @@ $current_page = basename($_SERVER['PHP_SELF']);
             text-align: center;
         }
 
+        .nav-badge {
+            background: #ef4444;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 10px;
+            float: right;
+            margin-top: 2px;
+        }
+
         .mobile-toggle {
             display: none;
             transition: opacity 0.2s ease, visibility 0.2s ease;
@@ -163,6 +189,12 @@ $current_page = basename($_SERVER['PHP_SELF']);
             line-height: 1;
             margin-bottom: 15px;
             align-self: flex-start;
+        }
+
+        .mobile-toggle.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
         }
 
         .sidebar-close {
@@ -283,6 +315,14 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         Advisory Forms
                     </li>
                     <li>
+                        <a href="review_avatars.php" class="<?= $current_page == 'review_avatars.php' ? 'active' : '' ?>">
+                            Review Avatars 
+                            <?php if ($pending_avatar_count > 0): ?>
+                                <span class="nav-badge"><?= $pending_avatar_count ?></span>
+                            <?php endif; ?>
+                        </a>
+                    </li>
+                    <li>
                         <a href="sf9-reportcard.php<?= $nav_assignment_param ?>" class="<?= $current_page == 'sf9-reportcard.php' ? 'active' : '' ?>">
                             SF9 (Report Card)
                         </a>
@@ -338,7 +378,16 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
     <script>
         function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('active');
+            const sidebar = document.getElementById('sidebar');
+            const burger = document.getElementById('mobileBurger');
+            sidebar.classList.toggle('active');
+            if (burger) {
+                if (sidebar.classList.contains('active')) {
+                    burger.classList.add('hidden');
+                } else {
+                    burger.classList.remove('hidden');
+                }
+            }
         }
     </script>
 </body>
