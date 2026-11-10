@@ -66,6 +66,30 @@ $assignments_stmt = $pdo->prepare("
     JOIN subjects sub ON sa.subject_id = sub.id
     JOIN sections sec ON sa.section_id = sec.id
     WHERE sa.faculty_id = :faculty_id
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'assignment' AND ra.resource_id = sa.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'subject' AND ra.resource_id = sub.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'section' AND ra.resource_id = sec.id
+      )
+      AND (
+          sec.strand_id IS NULL OR NOT EXISTS (
+              SELECT 1 FROM resource_archives ra
+              WHERE ra.resource_type = 'strand' AND ra.resource_id = sec.strand_id
+          )
+      )
+      AND (
+          sub.strand_id IS NULL OR NOT EXISTS (
+              SELECT 1 FROM resource_archives ra
+              WHERE ra.resource_type = 'strand' AND ra.resource_id = sub.strand_id
+          )
+      )
     ORDER BY sec.grade_level ASC, sec.section_name ASC, sub.subject_name ASC
 ");
 $assignments_stmt->execute(['faculty_id' => $user_id]);
@@ -542,11 +566,102 @@ if ($section_id > 0) {
             box-sizing: border-box;
         }
 
-        @media (max-width: 1024px) {
+         @media (max-width: 1024px) {
+            html,
+            body:has(.dashboard-wrapper) {
+                height: auto;
+                min-height: 100%;
+                overflow-x: hidden;
+                overflow-y: auto;
+            }
+
+            .dashboard-wrapper {
+                height: auto;
+                min-height: 100vh;
+                width: 100%;
+                overflow: visible;
+            }
+
             main.content {
                 margin-left: 0 !important;
                 width: 100% !important;
-                padding: 15px;
+                min-width: 0;
+                min-height: 100vh;
+                height: auto;
+                overflow: visible;
+                padding: 60px 10px 12px;
+            }
+
+            .ecr-card-master {
+                flex: 0 0 auto;
+                height: auto;
+                min-height: calc(100vh - 72px);
+                overflow: visible;
+            }
+
+            .ecr-header-toolbar {
+                align-items: flex-start;
+                flex-wrap: wrap;
+                gap: 10px;
+                padding: 12px;
+            }
+
+            .header-title-group h1 {
+                flex-wrap: wrap;
+                font-size: 1rem;
+                padding-left: 0;
+            }
+
+            .ecr-control-strip {
+                align-items: stretch;
+                flex-direction: column;
+                gap: 10px;
+                padding: 10px 12px;
+            }
+
+            .selector-box {
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            .selector-box select {
+                flex: 1 1 100%;
+                min-width: 0;
+                max-width: 100%;
+            }
+
+            .roster-info-pill {
+                white-space: normal;
+            }
+
+            .ecr-tab-bar {
+                overflow-x: auto;
+                padding: 0 8px;
+                white-space: nowrap;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .tab-link {
+                flex: 0 0 auto;
+                padding: 10px 12px;
+            }
+
+            .table-viewport-container {
+                flex: 0 0 auto;
+                max-height: none;
+                overflow-x: auto;
+                overflow-y: visible;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            table.ecr-grid {
+                width: max-content;
+                min-width: 900px;
+            }
+
+            .col-sticky-name {
+                width: 160px;
+                min-width: 160px;
             }
         }
 

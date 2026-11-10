@@ -34,9 +34,56 @@ if ($section_id) {
             u.full_name AS teacher_name
         FROM schedules sch
         JOIN subjects sub ON sch.subject_id = sub.id
-        LEFT JOIN subject_assignments sa ON (sa.subject_id = sub.id AND sa.section_id = ?)
+        LEFT JOIN subject_assignments sa
+            ON (sa.subject_id = sub.id AND sa.section_id = ?)
+            AND NOT EXISTS (
+                SELECT 1 FROM resource_archives assignment_archive
+                WHERE assignment_archive.resource_type = 'assignment'
+                    AND assignment_archive.resource_id = sa.id
+            )
         LEFT JOIN users u ON sa.faculty_id = u.id
         WHERE sch.section_id = ?
+            AND NOT EXISTS (
+                SELECT 1 FROM resource_archives schedule_archive
+                WHERE schedule_archive.resource_type = 'schedule'
+                    AND schedule_archive.resource_id = sch.id
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM resource_archives section_archive
+                WHERE section_archive.resource_type = 'section'
+                    AND section_archive.resource_id = sch.section_id
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM resource_archives subject_archive
+                WHERE subject_archive.resource_type = 'subject'
+                    AND subject_archive.resource_id = sch.subject_id
+            )
+            AND NOT EXISTS (
+                SELECT 1
+                FROM sections archived_strand_section
+                INNER JOIN resource_archives strand_archive
+                    ON strand_archive.resource_type = 'strand'
+                    AND strand_archive.resource_id = archived_strand_section.strand_id
+                WHERE archived_strand_section.id = sch.section_id
+            )
+            AND NOT EXISTS (
+                SELECT 1
+                FROM subjects archived_strand_subject
+                INNER JOIN resource_archives strand_archive
+                    ON strand_archive.resource_type = 'strand'
+                    AND strand_archive.resource_id = archived_strand_subject.strand_id
+                WHERE archived_strand_subject.id = sch.subject_id
+            )
+            AND EXISTS (
+                SELECT 1 FROM subject_assignments active_assignment
+                WHERE active_assignment.subject_id = sch.subject_id
+                    AND active_assignment.section_id = sch.section_id
+                    AND NOT EXISTS (
+                        SELECT 1 FROM resource_archives assignment_archive
+                        WHERE assignment_archive.resource_type = 'assignment'
+                            AND assignment_archive.resource_id = active_assignment.id
+                    )
+            )
         ORDER BY FIELD(day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), start_time ASC
     ";
     
@@ -56,7 +103,7 @@ $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Class Schedule | STRAND-SYNC</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>

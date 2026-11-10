@@ -221,6 +221,35 @@ $students = $conn->query($query_str)->fetchAll();
             -webkit-overflow-scrolling: touch;
         }
 
+        .table-pagination {
+            display: flex;
+            flex: 0 0 auto;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding-top: 16px;
+        }
+
+        .table-pagination p {
+            margin: 0;
+            color: var(--slate-600);
+            font-size: 0.9rem;
+        }
+
+        .table-pagination button {
+            padding: 8px 12px;
+            border: 1px solid var(--slate-200);
+            border-radius: 6px;
+            background: #fff;
+            color: var(--slate-700);
+            cursor: pointer;
+        }
+
+        .table-pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         table {
             width: 100%;
             border-collapse: separate;
@@ -605,6 +634,13 @@ $students = $conn->query($query_str)->fetchAll();
                         </tbody>
                     </table>
                 </div>
+                <div class="table-pagination" aria-label="Master list pagination">
+                    <p id="studentPageInfo" aria-live="polite"></p>
+                    <div>
+                        <button type="button" id="previousStudentPage" onclick="changeStudentPage(-1)">Previous</button>
+                        <button type="button" id="nextStudentPage" onclick="changeStudentPage(1)">Next</button>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
@@ -626,14 +662,16 @@ $students = $conn->query($query_str)->fetchAll();
         // ============================================================================
         // REAL-TIME SEARCH ENGINE AND FILTERING
         // ============================================================================
+        const studentsPerPage = 15;
+        let currentStudentPage = 0;
+        let filteredStudentRows = [];
+
         document.getElementById('exportStudentsButton').addEventListener('click', function () {
-            const visibleRows = Array.from(document.querySelectorAll('#masterStudentTable tbody tr.student-row'))
-                .filter(row => row.style.display !== 'none');
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = 'admin_export_students.php';
 
-            visibleRows.forEach(row => {
+            filteredStudentRows.forEach(row => {
                 const studentId = document.createElement('input');
                 studentId.type = 'hidden';
                 studentId.name = 'student_ids[]';
@@ -656,7 +694,7 @@ $students = $conn->query($query_str)->fetchAll();
 
             const rows = document.querySelectorAll('.student-row');
             const fallbackRow = document.getElementById('noResultsFallbackRow');
-            let visibleCounts = 0;
+            filteredStudentRows = [];
 
             rows.forEach(row => {
                 const studentName = row.getAttribute('data-name');
@@ -675,17 +713,42 @@ $students = $conn->query($query_str)->fetchAll();
                 const matchCurriculum = (curriculumVal === "") || (studentCurriculum === curriculumVal);
 
                 if (matchSearch && matchGrade && matchSection && matchStrand && matchAcademicYear && matchCurriculum) {
-                    row.style.display = "";
-                    visibleCounts++;
+                    filteredStudentRows.push(row);
                 } else {
                     row.style.display = "none";
                 }
             });
 
+            currentStudentPage = 0;
+            renderStudentPage();
             if (rows.length > 0) {
-                fallbackRow.style.display = (visibleCounts === 0) ? "" : "none";
+                fallbackRow.style.display = filteredStudentRows.length === 0 ? "" : "none";
             }
         }
+
+        function changeStudentPage(pageChange) {
+            currentStudentPage += pageChange;
+            renderStudentPage();
+        }
+
+        function renderStudentPage() {
+            const pageCount = Math.ceil(filteredStudentRows.length / studentsPerPage);
+            currentStudentPage = Math.max(0, Math.min(currentStudentPage, pageCount - 1));
+            const firstRow = currentStudentPage * studentsPerPage;
+
+            filteredStudentRows.forEach((row, index) => {
+                row.style.display = index >= firstRow && index < firstRow + studentsPerPage ? "" : "none";
+            });
+
+            const shownStart = filteredStudentRows.length === 0 ? 0 : firstRow + 1;
+            const shownEnd = Math.min(firstRow + studentsPerPage, filteredStudentRows.length);
+            document.getElementById('studentPageInfo').textContent =
+                `Showing ${shownStart}-${shownEnd} of ${filteredStudentRows.length} students`;
+            document.getElementById('previousStudentPage').disabled = currentStudentPage === 0;
+            document.getElementById('nextStudentPage').disabled = currentStudentPage >= pageCount - 1;
+        }
+
+        filterMasterList();
 
         function handleImport(input) {
             if (!input.files[0]) return;

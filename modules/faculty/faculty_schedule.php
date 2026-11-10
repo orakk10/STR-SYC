@@ -44,6 +44,27 @@ $schedule_stmt = $conn->prepare("
         ON sa.subject_id = sch.subject_id
         AND sa.section_id = sch.section_id
         AND sa.faculty_id = :faculty_id
+    WHERE NOT EXISTS (
+        SELECT 1 FROM resource_archives archive
+        WHERE archive.resource_type = 'schedule' AND archive.resource_id = sch.id
+    )
+      AND NOT EXISTS (
+        SELECT 1 FROM resource_archives archive
+        WHERE archive.resource_type = 'assignment' AND archive.resource_id = sa.id
+    )
+      AND NOT EXISTS (
+        SELECT 1 FROM resource_archives archive
+        WHERE archive.resource_type = 'section' AND archive.resource_id = sec.id
+    )
+      AND NOT EXISTS (
+        SELECT 1 FROM resource_archives archive
+        WHERE archive.resource_type = 'subject' AND archive.resource_id = sub.id
+    )
+      AND NOT EXISTS (
+        SELECT 1 FROM resource_archives archive
+        WHERE archive.resource_type = 'strand'
+            AND archive.resource_id IN (sec.strand_id, sub.strand_id)
+    )
     ORDER BY FIELD(sch.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'),
              sch.start_time ASC
 ");

@@ -20,9 +20,9 @@ SET time_zone = "+00:00";
 --
 -- Database: `strand-sync-app-db`
 --
-
 -- --------------------------------------------------------
-
+CREATE DATABASE IF NOT EXISTS `strand-sync-app-db` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+USE `strand-sync-app-db`;
 --
 -- Table structure for table `account_archives`
 --
@@ -30,6 +30,18 @@ SET time_zone = "+00:00";
 CREATE TABLE `account_archives` (
   `user_id` int(11) NOT NULL,
   `original_role` enum('admin','adviser','student','faculty','alumni') NOT NULL,
+  `archived_by` int(11) DEFAULT NULL,
+  `archived_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Table structure for table `resource_archives`
+--
+
+CREATE TABLE `resource_archives` (
+  `id` int(11) NOT NULL,
+  `resource_type` enum('strand','subject','section','assignment','schedule') NOT NULL,
+  `resource_id` int(11) NOT NULL,
   `archived_by` int(11) DEFAULT NULL,
   `archived_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -46,6 +58,7 @@ CREATE TABLE `activity_logs` (
   `action` text NOT NULL,
   `affected_table` varchar(50) DEFAULT NULL,
   `ip_address` varchar(45) DEFAULT NULL,
+  `details` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -1367,6 +1380,8 @@ CREATE TABLE `users` (
   `password` varchar(255) NOT NULL,
   `full_name` varchar(100) NOT NULL,
   `profile_image` varchar(255) DEFAULT NULL,
+  `pending_profile_image` varchar(255) DEFAULT NULL,
+  `avatar_status` enum('approved','pending','rejected') DEFAULT 'approved',
   `email` varchar(100) DEFAULT NULL,
   `role` enum('super_admin','admin','adviser','student','faculty','alumni','archived') NOT NULL,
   `current_session_id` varchar(255) DEFAULT NULL,
@@ -1455,6 +1470,14 @@ INSERT INTO `user_biometric_credentials` (`id`, `user_id`, `credential_id`, `pub
 ALTER TABLE `account_archives`
   ADD PRIMARY KEY (`user_id`),
   ADD KEY `fk_account_archives_archived_by` (`archived_by`);
+
+--
+-- Indexes for table `resource_archives`
+--
+ALTER TABLE `resource_archives`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_resource_archives_resource` (`resource_type`,`resource_id`),
+  ADD KEY `fk_resource_archives_archived_by` (`archived_by`);
 
 --
 -- Indexes for table `activity_logs`
@@ -1682,6 +1705,13 @@ ALTER TABLE `user_biometric_credentials`
 ALTER TABLE `account_archives`
   ADD CONSTRAINT `fk_account_archives_archived_by` FOREIGN KEY (`archived_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_account_archives_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `resource_archives`
+--
+ALTER TABLE `resource_archives`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT,
+  ADD CONSTRAINT `fk_resource_archives_archived_by` FOREIGN KEY (`archived_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Constraints for table `activity_logs`

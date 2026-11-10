@@ -55,6 +55,30 @@ $assignments_stmt = $pdo->prepare("
     JOIN sections sec ON sa.section_id = sec.id
     LEFT JOIN strands st ON sec.strand_id = st.id
     WHERE sa.faculty_id = :faculty_id
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'assignment' AND ra.resource_id = sa.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'subject' AND ra.resource_id = sub.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'section' AND ra.resource_id = sec.id
+      )
+      AND (
+          sec.strand_id IS NULL OR NOT EXISTS (
+              SELECT 1 FROM resource_archives ra
+              WHERE ra.resource_type = 'strand' AND ra.resource_id = sec.strand_id
+          )
+      )
+      AND (
+          sub.strand_id IS NULL OR NOT EXISTS (
+              SELECT 1 FROM resource_archives ra
+              WHERE ra.resource_type = 'strand' AND ra.resource_id = sub.strand_id
+          )
+      )
     ORDER BY sec.grade_level ASC, sec.section_name ASC, sub.subject_name ASC
 ");
 $assignments_stmt->execute(['faculty_id' => $user_id]);

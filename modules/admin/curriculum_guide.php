@@ -9,6 +9,10 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit();
 }
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 // 2. Active Curriculum Filter Selection
 $curriculum_version = $_GET['version'] ?? 'Strengthened';
 if (!in_array($curriculum_version, ['Legacy', 'Strengthened'])) {
@@ -16,13 +20,31 @@ if (!in_array($curriculum_version, ['Legacy', 'Strengthened'])) {
 }
 
 // 3. Fetch Strands for Dropdowns
-$strands_list = $conn->query("SELECT id, strand_name FROM strands ORDER BY strand_name ASC")->fetchAll();
+$strands_list = $conn->query("
+    SELECT s.id, s.strand_name
+    FROM strands s
+    WHERE NOT EXISTS (
+        SELECT 1 FROM resource_archives ra
+        WHERE ra.resource_type = 'strand' AND ra.resource_id = s.id
+    )
+    ORDER BY s.strand_name ASC
+")->fetchAll();
 
 // 4. Fetch Subjects Filtered by Selected Curriculum Version
 $query = "SELECT s.*, COALESCE(st.strand_name, 'Universal Core / All Tracks') AS strand_name 
           FROM subjects s 
           LEFT JOIN strands st ON s.strand_id = st.id 
-          WHERE s.curriculum_version = :version 
+          WHERE s.curriculum_version = :version
+            AND NOT EXISTS (
+                SELECT 1 FROM resource_archives ra
+                WHERE ra.resource_type = 'subject' AND ra.resource_id = s.id
+            )
+            AND (
+                s.strand_id IS NULL OR NOT EXISTS (
+                    SELECT 1 FROM resource_archives ra
+                    WHERE ra.resource_type = 'strand' AND ra.resource_id = s.strand_id
+                )
+            )
           ORDER BY strand_name ASC, s.grade_level ASC, s.`term` ASC";
 
 $stmt = $conn->prepare($query);
@@ -233,6 +255,11 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
                 <h1>Curriculum Guide</h1>
                 <p>Manage and view subjects across different DepEd curriculum structures.</p>
             </header>
+            <?php if (($_GET['msg'] ?? '') === 'archived'): ?>
+                <div class="alert alert-success">Subject archived and sent to the super admin for review.</div>
+            <?php elseif (($_GET['error'] ?? '') === 'archive_failed'): ?>
+                <div class="alert alert-error">The subject could not be archived. Please try again.</div>
+            <?php endif; ?>
 
             <!-- Curriculum Version Switcher -->
             <div class="version-switcher">
@@ -303,7 +330,13 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
                                                             <td class="sub-actions">
                                                                 <div class="action-group">
                                                                     <button class="action-btn edit-btn" onclick='openEditModal(<?php echo htmlspecialchars(json_encode($s, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG), ENT_QUOTES, "UTF-8"); ?>)'>✎</button>
-                                                                    <button class="action-btn delete-btn" onclick="deleteSubject(<?php echo $s['id']; ?>)">🗑</button>
+                                                                    <form method="POST" action="archive_resource.php" onsubmit="return confirm('Archive this subject? The super admin can restore or permanently delete it.');">
+                                                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                                                        <input type="hidden" name="resource_type" value="subject">
+                                                                        <input type="hidden" name="resource_id" value="<?= (int) $s['id'] ?>">
+                                                                        <input type="hidden" name="version" value="<?= htmlspecialchars($curriculum_version, ENT_QUOTES, 'UTF-8') ?>">
+                                                                        <button type="submit" class="action-btn delete-btn" aria-label="Archive subject">🗑</button>
+                                                                    </form>
                                                                 </div>
                                                             </td>
                                                         </tr>
@@ -490,12 +523,6 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
             
             adaptTermOptions(data.curriculum_version || 'Strengthened', data.term || '1st');
             openModal('subjectModal');
-        }
-
-        function deleteSubject(id) { 
-            if(confirm("Permanently delete this subject?")) {
-                window.location.href = `delete_subject.php?id=${id}&version=<?= $curriculum_version ?>`; 
-            }
         }
 
         // Initialize Touch Gestures

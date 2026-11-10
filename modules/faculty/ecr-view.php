@@ -82,6 +82,30 @@ $assignments_stmt = $pdo->prepare("
     LEFT JOIN strands section_strand ON sec.strand_id = section_strand.id
     LEFT JOIN strands subject_strand ON sub.strand_id = subject_strand.id
     WHERE sa.faculty_id = :faculty_id
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'assignment' AND ra.resource_id = sa.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'subject' AND ra.resource_id = sub.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'section' AND ra.resource_id = sec.id
+      )
+      AND (
+          sec.strand_id IS NULL OR NOT EXISTS (
+              SELECT 1 FROM resource_archives ra
+              WHERE ra.resource_type = 'strand' AND ra.resource_id = sec.strand_id
+          )
+      )
+      AND (
+          sub.strand_id IS NULL OR NOT EXISTS (
+              SELECT 1 FROM resource_archives ra
+              WHERE ra.resource_type = 'strand' AND ra.resource_id = sub.strand_id
+          )
+      )
     ORDER BY sec.grade_level ASC, sec.section_name ASC, sub.subject_name ASC
 ");
 $assignments_stmt->execute(['faculty_id' => $user_id]);
@@ -696,20 +720,110 @@ if ($section_id > 0) {
             border-radius: 4px;
         }
 
-        @media (max-width: 1024px) {
-            body { overflow: auto; }
+       @media (max-width: 1024px) {
+            html,
+            body:has(.dashboard-wrapper) {
+                height: auto;
+                min-height: 100%;
+                overflow-x: hidden;
+                overflow-y: auto;
+            }
+
+            .dashboard-wrapper {
+                height: auto;
+                min-height: 100vh;
+                width: 100%;
+                overflow: visible;
+            }
             
             main.content { 
                 margin-left: 0 !important; 
-                width: 100%; 
-                height: auto; 
+                width: 100% !important;
+                min-width: 0;
+                min-height: 100vh;
+                height: auto;
                 overflow: visible;
-                padding: 15px;
+                padding: 60px 10px 12px;
             }
 
-            .table-container { 
-                overflow-y: visible; 
-                max-height: none; 
+            .ecr-card-master {
+                flex: 0 0 auto;
+                height: auto;
+                min-height: calc(100vh - 72px);
+                overflow: visible;
+            }
+
+            .ecr-header-toolbar {
+                padding: 12px;
+            }
+
+            .header-title-group h1 {
+                flex-wrap: wrap;
+                font-size: 1rem;
+            }
+
+            .ecr-control-strip {
+                align-items: stretch;
+                padding: 10px 12px;
+                gap: 10px;
+            }
+
+            .selector-box {
+                flex: 1 1 100%;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            .selector-box select {
+                flex: 1 1 100%;
+                min-width: 0;
+                max-width: 100%;
+            }
+
+            .control-action-buttons {
+                flex: 1 1 100%;
+                flex-wrap: wrap;
+            }
+
+            .control-action-buttons .btn-action {
+                flex: 1 1 130px;
+            }
+
+            .assignment-context {
+                gap: 8px;
+            }
+
+            .ecr-tab-bar {
+                overflow-x: auto;
+                padding: 0 8px;
+                white-space: nowrap;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .tab-link {
+                flex: 0 0 auto;
+                padding: 10px 12px;
+            }
+
+            .table-viewport-container {
+                flex: 0 0 auto;
+                max-height: none;
+                overflow-x: auto;
+                overflow-y: visible;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            table.ecr-grid {
+                width: max-content;
+                min-width: 100%;
+            }
+
+            .col-sticky-name {
+                width: 150px;
+                min-width: 150px;
+                max-width: 150px;
+                white-space: normal;
+                overflow-wrap: anywhere;
             }
 
             #sidebar.active .sidebar-close {

@@ -9,6 +9,10 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit();
 }
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 $message = "";
 
 // Helper function to map subject type to DepEd grading weights
@@ -68,12 +72,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['save_assignment'])) {
     if (!$faculty_id || !$section_id || !$subject_id) {
         $message = "missing_fields";
     } else {
-        $section_stmt = $conn->prepare('
+        $section_stmt = $conn->prepare("
             SELECT id, grade_level, strand_id, academic_year, curriculum_version
             FROM sections
             WHERE id = ?
+              AND NOT EXISTS (
+                  SELECT 1 FROM resource_archives ra
+                  WHERE ra.resource_type = 'section' AND ra.resource_id = sections.id
+              )
+              AND (
+                  sections.strand_id IS NULL OR NOT EXISTS (
+                      SELECT 1 FROM resource_archives ra
+                      WHERE ra.resource_type = 'strand' AND ra.resource_id = sections.strand_id
+                  )
+              )
             LIMIT 1
-        ');
+        ");
         $section_stmt->execute([(int) $section_id]);
         $target_section = $section_stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -83,7 +97,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['save_assignment'])) {
             $message = "invalid_strand";
         } else {
             if ($subject_strand_id !== null) {
-                $strand_stmt = $conn->prepare('SELECT id FROM strands WHERE id = ? LIMIT 1');
+                $strand_stmt = $conn->prepare("
+                    SELECT s.id FROM strands s
+                    WHERE s.id = ?
+                      AND NOT EXISTS (
+                          SELECT 1 FROM resource_archives ra
+                          WHERE ra.resource_type = 'strand' AND ra.resource_id = s.id
+                      )
+                    LIMIT 1
+                ");
                 $strand_stmt->execute([$subject_strand_id]);
                 if (!$strand_stmt->fetchColumn()) {
                     $message = "invalid_strand";
@@ -93,14 +115,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['save_assignment'])) {
             $subject_terms = getSubjectTermsForAssignment($semester);
             $subject_sql = '
                 SELECT id
-                FROM subjects
+                FROM subjects sub
                 WHERE id = ?
                     AND curriculum_version = ?
                     AND (grade_level = ? OR grade_level IS NULL)
                     AND ' . ($subject_strand_id === null
                         ? 'strand_id IS NULL'
                         : '(strand_id = ? OR strand_id IS NULL)') . '
-                    AND `term` IN (' . implode(', ', array_fill(0, count($subject_terms), '?')) . ')';
+                    AND `term` IN (' . implode(', ', array_fill(0, count($subject_terms), '?')) . ')
+                    AND NOT EXISTS (
+                        SELECT 1 FROM resource_archives ra
+                        WHERE ra.resource_type = \'subject\' AND ra.resource_id = sub.id
+                    )
+                    AND (
+                        sub.strand_id IS NULL OR NOT EXISTS (
+                            SELECT 1 FROM resource_archives ra
+                            WHERE ra.resource_type = \'strand\' AND ra.resource_id = sub.strand_id
+                        )
+                    )';
             $subject_params = [
                 (int) $subject_id,
                 $target_section['curriculum_version'],
@@ -126,6 +158,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['save_assignment'])) {
                                 SELECT id, faculty_id
                                 FROM subject_assignments
                                 WHERE section_id = ? AND subject_id = ? AND academic_year = ? AND (semester = ? OR semester = 'Full Year')
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM resource_archives ra
+                                      WHERE ra.resource_type = 'assignment' AND ra.resource_id = subject_assignments.id
+                                  )
                             ");
                             $check_stmt->execute([$section_id, $subject_id, $academic_year, $semester]);
                             $existing = $check_stmt->fetch(PDO::FETCH_ASSOC);
@@ -154,29 +190,48 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['save_assignment'])) {
     }
 }
 
-// 3. Handle Delete Assignment
-if (isset($_GET['delete'])) {
-    $id = intval($_GET['delete']);
-    $del_stmt = $conn->prepare("DELETE FROM subject_assignments WHERE id = ?");
-    $del_stmt->execute([$id]);
-    header("Location: manage_assignments.php?academic_year=" . urlencode($active_ay) . "&semester=" . urlencode($active_sem) . "&filter_section=" . urlencode($_GET['filter_section'] ?? '') . "&msg=deleted");
-    exit();
-}
-
 // 4. Fetch Dropdown Selection Options
 $faculty_members = $conn->query("SELECT id, full_name FROM users WHERE role IN ('faculty', 'adviser') ORDER BY full_name ASC")->fetchAll(PDO::FETCH_ASSOC);
-$strands = $conn->query("SELECT id, strand_name, strand_code FROM strands ORDER BY strand_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+$strands = $conn->query("
+    SELECT s.id, s.strand_name, s.strand_code
+    FROM strands s
+    WHERE NOT EXISTS (
+        SELECT 1 FROM resource_archives ra
+        WHERE ra.resource_type = 'strand' AND ra.resource_id = s.id
+    )
+    ORDER BY s.strand_name ASC
+")->fetchAll(PDO::FETCH_ASSOC);
 $filter_sections_stmt = $conn->prepare("
     SELECT id, section_name, grade_level, strand_id, academic_year, curriculum_version
     FROM sections
     WHERE academic_year = ?
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'section' AND ra.resource_id = sections.id
+      )
+      AND (
+          sections.strand_id IS NULL OR NOT EXISTS (
+              SELECT 1 FROM resource_archives ra
+              WHERE ra.resource_type = 'strand' AND ra.resource_id = sections.strand_id
+          )
+      )
     ORDER BY grade_level ASC, section_name ASC
 ");
 $filter_sections_stmt->execute([$active_ay]);
 $filter_sections = $filter_sections_stmt->fetchAll(PDO::FETCH_ASSOC);
 $subjects = $conn->query("
     SELECT id, subject_name, subject_code, type, curriculum_version, strand_id, grade_level, `term`
-    FROM subjects
+    FROM subjects sub
+    WHERE NOT EXISTS (
+        SELECT 1 FROM resource_archives ra
+        WHERE ra.resource_type = 'subject' AND ra.resource_id = sub.id
+    )
+      AND (
+          sub.strand_id IS NULL OR NOT EXISTS (
+              SELECT 1 FROM resource_archives ra
+              WHERE ra.resource_type = 'strand' AND ra.resource_id = sub.strand_id
+          )
+      )
     ORDER BY curriculum_version DESC, subject_name ASC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -215,6 +270,30 @@ $query_str = "
     JOIN sections sec ON sa.section_id = sec.id
     JOIN subjects sub ON sa.subject_id = sub.id
     WHERE sa.academic_year = :ay
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'assignment' AND ra.resource_id = sa.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'section' AND ra.resource_id = sec.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'subject' AND ra.resource_id = sub.id
+      )
+      AND (
+          sub.strand_id IS NULL OR NOT EXISTS (
+              SELECT 1 FROM resource_archives ra
+              WHERE ra.resource_type = 'strand' AND ra.resource_id = sub.strand_id
+          )
+      )
+      AND (
+          sec.strand_id IS NULL OR NOT EXISTS (
+              SELECT 1 FROM resource_archives ra
+              WHERE ra.resource_type = 'strand' AND ra.resource_id = sec.strand_id
+          )
+      )
 ";
 
 $params = ['ay' => $active_ay];
@@ -367,7 +446,8 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <?php if($message == "invalid_strand"): ?><div class="status-msg msg-warning">⚠ Select a valid subject strand.</div><?php endif; ?>
                     <?php if($message == "invalid_term"): ?><div class="status-msg msg-warning">⚠ Select a valid academic term.</div><?php endif; ?>
                     <?php if($message == "invalid_subject"): ?><div class="status-msg msg-warning">⚠ Select a subject that matches the target section's curriculum, grade, strand, and term.</div><?php endif; ?>
-                    <?php if(isset($_GET['msg']) && $_GET['msg'] == 'deleted'): ?><div class="status-msg msg-success">✔ Assignment removed successfully.</div><?php endif; ?>
+                    <?php if(($_GET['msg'] ?? '') === 'archived'): ?><div class="status-msg msg-success">✔ Assignment archived and sent to the super admin for review.</div><?php endif; ?>
+                    <?php if(($_GET['msg'] ?? '') === 'archive_failed'): ?><div class="status-msg msg-warning">⚠ The assignment could not be archived. Please try again.</div><?php endif; ?>
 
                     <form method="POST">
                         <div class="form-group">
@@ -529,7 +609,15 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                             <?= htmlspecialchars($row['semester']) ?>
                                         </td>
                                         <td style="padding: 10px; text-align: center;">
-                                            <a href="?delete=<?= $row['id']; ?>&academic_year=<?= urlencode($active_ay) ?>&semester=<?= urlencode($active_sem) ?>&filter_section=<?= urlencode((string) $filter_section) ?>" class="delete-btn" onclick="return confirm('Remove this subject assignment?')">Remove</a>
+                                            <form method="POST" action="archive_resource.php" onsubmit="return confirm('Archive this teaching assignment? The super admin can restore or permanently delete it.');">
+                                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                                <input type="hidden" name="resource_type" value="assignment">
+                                                <input type="hidden" name="resource_id" value="<?= (int) $row['id'] ?>">
+                                                <input type="hidden" name="academic_year" value="<?= htmlspecialchars($active_ay, ENT_QUOTES, 'UTF-8') ?>">
+                                                <input type="hidden" name="semester" value="<?= htmlspecialchars($active_sem, ENT_QUOTES, 'UTF-8') ?>">
+                                                <input type="hidden" name="filter_section" value="<?= (int) $filter_section ?>">
+                                                <button type="submit" class="delete-btn">Archive</button>
+                                            </form>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>

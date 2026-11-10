@@ -9,8 +9,20 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit();
 }
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 // 2. Fetch All Strands
-$strands_list = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")->fetchAll();
+$strands_list = $conn->query("
+    SELECT s.*
+    FROM strands s
+    WHERE NOT EXISTS (
+        SELECT 1 FROM resource_archives ra
+        WHERE ra.resource_type = 'strand' AND ra.resource_id = s.id
+    )
+    ORDER BY s.strand_name ASC
+")->fetchAll();
 ?>
 
 <!DOCTYPE html>
@@ -285,11 +297,15 @@ $strands_list = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")->
                 <p>Define and manage Senior High School tracks</p>
             </header>
 
-            <?php if(isset($_GET['success'])): ?>
+            <?php if(($_GET['msg'] ?? '') === 'archived'): ?>
+                <div class="alert alert-success">Strand archived and sent to the super admin for review.</div>
+            <?php elseif(isset($_GET['success'])): ?>
                 <div class="alert alert-success"><?php echo htmlspecialchars($_GET['success']); ?></div>
             <?php endif; ?>
 
-            <?php if(isset($_GET['error'])): ?>
+            <?php if(($_GET['error'] ?? '') === 'archive_failed'): ?>
+                <div class="alert alert-error">The strand could not be archived. Please try again.</div>
+            <?php elseif(isset($_GET['error'])): ?>
                 <div class="alert alert-error"><?php echo htmlspecialchars($_GET['error']); ?></div>
             <?php endif; ?>
 
@@ -304,6 +320,7 @@ $strands_list = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")->
                             <th class="col-id">ID</th>
                             <th class="col-name">Strand Name</th>
                             <th class="col-desc">Description</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -320,7 +337,12 @@ $strands_list = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")->
                                 <td class="col-actions">
                                     <div class="action-cell-wrapper">
                                         <button class="btn-edit" onclick='openEditModal(<?php echo json_encode($row); ?>)'>Edit</button>
-                                        <button class="btn-delete" onclick="confirmDelete(<?php echo $row['id']; ?>, '<?php echo addslashes($row['strand_name']); ?>')">Delete</button>
+                                        <form method="POST" action="archive_resource.php" onsubmit="return confirm('Archive this strand? The super admin can restore or permanently delete it.');">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                            <input type="hidden" name="resource_type" value="strand">
+                                            <input type="hidden" name="resource_id" value="<?= (int) $row['id'] ?>">
+                                            <button type="submit" class="btn-delete">Archive</button>
+                                        </form>
                                     </div>
                                 </td>
                             </tr>
@@ -398,12 +420,6 @@ $strands_list = $conn->query("SELECT * FROM strands ORDER BY strand_name ASC")->
             openModal('strandModal');
         }
 
-        // Delete Confirmation Utility
-        function confirmDelete(id, name) {
-            if (confirm("Are you sure you want to delete the '" + name + "' strand? This may affect sections assigned to it.")) {
-                window.location.href = "delete_strand.php?id=" + id;
-            }
-        }
     </script>
 </body>
 </html>

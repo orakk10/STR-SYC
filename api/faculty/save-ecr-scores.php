@@ -66,8 +66,28 @@ try {
 
     // Serialize summary writes for this assignment, including first-time inserts.
     $stmtAssignmentLock = $db->prepare("
-        SELECT id FROM subject_assignments
-        WHERE id = :assignment_id
+        SELECT sa.id
+        FROM subject_assignments sa
+        JOIN sections sec ON sec.id = sa.section_id
+        JOIN subjects sub ON sub.id = sa.subject_id
+        WHERE sa.id = :assignment_id
+            AND NOT EXISTS (
+                SELECT 1 FROM resource_archives ra
+                WHERE ra.resource_type = 'assignment' AND ra.resource_id = sa.id
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM resource_archives ra
+                WHERE ra.resource_type = 'section' AND ra.resource_id = sec.id
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM resource_archives ra
+                WHERE ra.resource_type = 'subject' AND ra.resource_id = sub.id
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM resource_archives ra
+                WHERE ra.resource_type = 'strand'
+                    AND ra.resource_id IN (sec.strand_id, sub.strand_id)
+            )
         FOR UPDATE
     ");
     $stmtAssignmentLock->execute(['assignment_id' => $assignmentId]);

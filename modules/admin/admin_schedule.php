@@ -9,6 +9,10 @@ if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'adm
     exit();
 }
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 $message = "";
 
 // 2. Handle Form Submission with Room & Section Conflict Check
@@ -41,6 +45,30 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_schedule'])) {
                 ON sa.section_id = sec.id
                 AND sa.academic_year = sec.academic_year
             WHERE sec.id = :section_id AND sa.subject_id = :subject_id
+                AND NOT EXISTS (
+                    SELECT 1 FROM resource_archives ra
+                    WHERE ra.resource_type = 'section' AND ra.resource_id = sec.id
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM resource_archives ra
+                    WHERE ra.resource_type = 'assignment' AND ra.resource_id = sa.id
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM resource_archives ra
+                    WHERE ra.resource_type = 'subject' AND ra.resource_id = sa.subject_id
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM resource_archives ra
+                    WHERE ra.resource_type = 'strand' AND ra.resource_id = sec.strand_id
+                )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM subjects active_subject
+                    INNER JOIN resource_archives subject_strand_archive
+                        ON subject_strand_archive.resource_type = 'strand'
+                        AND subject_strand_archive.resource_id = active_subject.strand_id
+                    WHERE active_subject.id = sa.subject_id
+                )
             LIMIT 1
         ");
         $assignment_stmt->execute([
@@ -63,9 +91,49 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_schedule'])) {
                         WHERE scheduled_section.id = sch.section_id
                             AND scheduled_assignment.subject_id = sch.subject_id
                             AND scheduled_assignment.faculty_id = :faculty_id_select
+                            AND NOT EXISTS (
+                                SELECT 1 FROM resource_archives ra
+                                WHERE ra.resource_type = 'section' AND ra.resource_id = scheduled_section.id
+                            )
+                            AND NOT EXISTS (
+                                SELECT 1 FROM resource_archives ra
+                                WHERE ra.resource_type = 'strand' AND ra.resource_id = scheduled_section.strand_id
+                            )
+                            AND NOT EXISTS (
+                                SELECT 1 FROM resource_archives ra
+                                WHERE ra.resource_type = 'assignment' AND ra.resource_id = scheduled_assignment.id
+                            )
                     ) AS faculty_conflict
                 FROM schedules sch
                 WHERE sch.day_of_week = :day
+                    AND NOT EXISTS (
+                        SELECT 1 FROM resource_archives ra
+                        WHERE ra.resource_type = 'schedule' AND ra.resource_id = sch.id
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM resource_archives ra
+                        WHERE ra.resource_type = 'section' AND ra.resource_id = sch.section_id
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM resource_archives ra
+                        WHERE ra.resource_type = 'subject' AND ra.resource_id = sch.subject_id
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM sections archived_strand_section
+                        INNER JOIN resource_archives strand_archive
+                            ON strand_archive.resource_type = 'strand'
+                            AND strand_archive.resource_id = archived_strand_section.strand_id
+                        WHERE archived_strand_section.id = sch.section_id
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM subjects archived_strand_subject
+                        INNER JOIN resource_archives strand_archive
+                            ON strand_archive.resource_type = 'strand'
+                            AND strand_archive.resource_id = archived_strand_subject.strand_id
+                        WHERE archived_strand_subject.id = sch.subject_id
+                    )
                     AND (
                         sch.section_id = :section_id
                         OR sch.room_number = :room
@@ -78,6 +146,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_schedule'])) {
                             WHERE scheduled_section.id = sch.section_id
                                 AND scheduled_assignment.subject_id = sch.subject_id
                                 AND scheduled_assignment.faculty_id = :faculty_id_match
+                                AND NOT EXISTS (
+                                    SELECT 1 FROM resource_archives ra
+                                    WHERE ra.resource_type = 'section' AND ra.resource_id = scheduled_section.id
+                                )
+                                AND NOT EXISTS (
+                                    SELECT 1 FROM resource_archives ra
+                                    WHERE ra.resource_type = 'strand' AND ra.resource_id = scheduled_section.strand_id
+                                )
+                                AND NOT EXISTS (
+                                    SELECT 1 FROM resource_archives ra
+                                    WHERE ra.resource_type = 'assignment' AND ra.resource_id = scheduled_assignment.id
+                                )
                         )
                     )
                     AND sch.start_time < :end_time AND sch.end_time > :start_time
@@ -120,24 +200,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_schedule'])) {
                     ]);
                     $schedule_id = (int)$conn->lastInsertId();
 
-                    // Log Activity with structured JSON details
                     $logStmt = $conn->prepare("
-                        INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details)
-                        VALUES (:user_id, :action, 'schedules', :ip_address, :details)
+                        INSERT INTO activity_logs (user_id, action, affected_table, ip_address)
+                        VALUES (:user_id, :action, 'schedules', :ip_address)
                     ");
                     $logStmt->execute([
                         'user_id'    => (int)$_SESSION['user_id'],
-                        'action'     => 'CREATE_SCHEDULE',
+                        'action'     => "Created schedule {$schedule_id} for section {$section_id}, subject {$subject_id}.",
                         'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
-                        'details'    => json_encode([
-                            'schedule_id' => $schedule_id,
-                            'section_id'  => $section_id,
-                            'subject_id'  => $subject_id,
-                            'day'         => $day,
-                            'start_time'  => $start,
-                            'end_time'    => $end,
-                            'room_number' => $room
-                        ])
                     ]);
 
                     $conn->commit();
@@ -154,66 +224,115 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_schedule'])) {
     }
 }
 
-// 3. Handle Delete
-if (isset($_GET['delete'])) {
-    $id = (int) $_GET['delete'];
-    if ($id > 0) {
-        try {
-            $conn->beginTransaction();
-
-            // Fetch schedule details prior to deletion for logging metadata
-            $fetchSch = $conn->prepare("SELECT * FROM schedules WHERE id = :id");
-            $fetchSch->execute([':id' => $id]);
-            $deletedSched = $fetchSch->fetch(PDO::FETCH_ASSOC);
-
-            $stmt = $conn->prepare("DELETE FROM schedules WHERE id = :id");
-            $stmt->execute([':id' => $id]);
-
-            if ($deletedSched) {
-                $logStmt = $conn->prepare("
-                    INSERT INTO activity_logs (user_id, action, affected_table, ip_address, details)
-                    VALUES (:user_id, :action, 'schedules', :ip_address, :details)
-                ");
-                $logStmt->execute([
-                    'user_id'    => (int)$_SESSION['user_id'],
-                    'action'     => 'DELETE_SCHEDULE',
-                    'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
-                    'details'    => json_encode([
-                        'schedule_id' => $id,
-                        'section_id'  => $deletedSched['section_id'],
-                        'subject_id'  => $deletedSched['subject_id'],
-                        'day'         => $deletedSched['day_of_week'],
-                        'room_number' => $deletedSched['room_number']
-                    ])
-                ]);
-            }
-
-            $conn->commit();
-        } catch (Exception $e) {
-            if ($conn->inTransaction()) {
-                $conn->rollBack();
-            }
-            error_log("Schedule deletion failed: " . $e->getMessage());
-        }
-    }
-    header("Location: admin_schedule.php?msg=deleted");
-    exit();
-}
-
 // 4. Data for Stats & Select Inputs
-$total_classes = (int) $conn->query("SELECT COUNT(*) FROM schedules")->fetchColumn();
-$total_rooms   = (int) $conn->query("SELECT COUNT(DISTINCT room_number) FROM schedules")->fetchColumn();
-$sections = $conn->query("SELECT id, section_name FROM sections ORDER BY section_name")->fetchAll(PDO::FETCH_ASSOC);
+$activeSchedulesFilter = "
+    NOT EXISTS (
+        SELECT 1 FROM resource_archives ra
+        WHERE ra.resource_type = 'schedule' AND ra.resource_id = schedules.id
+    )
+    AND EXISTS (
+        SELECT 1
+        FROM sections active_section
+        WHERE active_section.id = schedules.section_id
+            AND NOT EXISTS (
+                SELECT 1 FROM resource_archives ra
+                WHERE ra.resource_type = 'section' AND ra.resource_id = active_section.id
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM resource_archives ra
+                WHERE ra.resource_type = 'strand' AND ra.resource_id = active_section.strand_id
+            )
+    )
+    AND EXISTS (
+        SELECT 1
+        FROM subjects active_subject
+        WHERE active_subject.id = schedules.subject_id
+            AND NOT EXISTS (
+                SELECT 1 FROM resource_archives ra
+                WHERE ra.resource_type = 'subject' AND ra.resource_id = active_subject.id
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM resource_archives ra
+                WHERE ra.resource_type = 'strand' AND ra.resource_id = active_subject.strand_id
+            )
+    )
+    AND EXISTS (
+        SELECT 1
+        FROM subject_assignments active_assignment
+        WHERE active_assignment.section_id = schedules.section_id
+            AND active_assignment.subject_id = schedules.subject_id
+            AND NOT EXISTS (
+                SELECT 1 FROM resource_archives ra
+                WHERE ra.resource_type = 'assignment' AND ra.resource_id = active_assignment.id
+            )
+    )";
+$total_classes = (int) $conn->query("SELECT COUNT(*) FROM schedules WHERE {$activeSchedulesFilter}")->fetchColumn();
+$total_rooms   = (int) $conn->query("SELECT COUNT(DISTINCT room_number) FROM schedules WHERE {$activeSchedulesFilter}")->fetchColumn();
+$sections = $conn->query("
+    SELECT s.id, s.section_name
+    FROM sections s
+    WHERE NOT EXISTS (
+        SELECT 1 FROM resource_archives ra
+        WHERE ra.resource_type = 'section' AND ra.resource_id = s.id
+    )
+    AND (
+        s.strand_id IS NULL OR NOT EXISTS (
+            SELECT 1 FROM resource_archives ra
+            WHERE ra.resource_type = 'strand' AND ra.resource_id = s.strand_id
+        )
+    )
+    ORDER BY s.section_name
+")->fetchAll(PDO::FETCH_ASSOC);
 
 // 5. Fetch Table Data with Filters
 $filter_section = isset($_GET['filter_section']) ? (int) $_GET['filter_section'] : null;
 $sched_query = "SELECT sch.*, s.section_name, sub.subject_name, sub.subject_code 
                 FROM schedules sch 
                 JOIN sections s ON sch.section_id = s.id 
-                JOIN subjects sub ON sch.subject_id = sub.id";
+                JOIN subjects sub ON sch.subject_id = sub.id
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM resource_archives ra
+                    WHERE ra.resource_type = 'schedule' AND ra.resource_id = sch.id
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM resource_archives ra
+                    WHERE ra.resource_type = 'section' AND ra.resource_id = s.id
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM resource_archives ra
+                    WHERE ra.resource_type = 'strand' AND ra.resource_id = s.strand_id
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM resource_archives ra
+                    WHERE ra.resource_type = 'subject' AND ra.resource_id = sub.id
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM resource_archives ra
+                    WHERE ra.resource_type = 'strand' AND ra.resource_id = s.strand_id
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM resource_archives ra
+                    WHERE ra.resource_type = 'strand' AND ra.resource_id = sub.strand_id
+                )
+                AND (
+                    sub.strand_id IS NULL OR NOT EXISTS (
+                        SELECT 1 FROM resource_archives ra
+                        WHERE ra.resource_type = 'strand' AND ra.resource_id = sub.strand_id
+                    )
+                )
+                AND EXISTS (
+                    SELECT 1
+                    FROM subject_assignments sa
+                    WHERE sa.section_id = sch.section_id
+                        AND sa.subject_id = sch.subject_id
+                        AND NOT EXISTS (
+                            SELECT 1 FROM resource_archives ra
+                            WHERE ra.resource_type = 'assignment' AND ra.resource_id = sa.id
+                        )
+                )";
 $params = [];
 if ($filter_section > 0) {
-    $sched_query .= " WHERE sch.section_id = :section_id";
+    $sched_query .= " AND sch.section_id = :section_id";
     $params[':section_id'] = $filter_section;
 }
 $sched_query .= " ORDER BY FIELD(day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), start_time ASC";
@@ -509,6 +628,7 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
                     <?php if($message == "invalid_day"): ?><div class="status-msg msg-conflict">⚠ Select a valid day for the schedule.</div><?php endif; ?>
                     <?php if($message == "invalid_room"): ?><div class="status-msg msg-conflict">⚠ Room number must be 50 characters or fewer.</div><?php endif; ?>
                     <?php if($message == "missing_fields"): ?><div class="status-msg msg-conflict">⚠ Complete all required schedule fields.</div><?php endif; ?>
+                    <?php if(($_GET['msg'] ?? '') === 'archived'): ?><div class="status-msg msg-success">✔ Schedule archived and sent to the super admin for review.</div><?php endif; ?>
                     
                     <form method="POST">
                         <div class="form-group">
@@ -571,7 +691,15 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <td><?= htmlspecialchars($row['subject_name']); ?></td>
                                     <td><?= date("g:i A", strtotime($row['start_time'])); ?> - <?= date("g:i A", strtotime($row['end_time'])); ?></td>
                                     <td><span style="background:#f1f5f9; padding:4px 8px; border-radius:4px;"><?= htmlspecialchars($row['room_number']); ?></span></td>
-                                    <td><a href="?delete=<?= (int) $row['id']; ?>" class="delete-btn" onclick="return confirm('Remove this schedule?')">Delete</a></td>
+                                    <td>
+                                        <form method="POST" action="archive_resource.php" onsubmit="return confirm('Archive this schedule? The super admin can restore or permanently delete it.');">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                            <input type="hidden" name="resource_type" value="schedule">
+                                            <input type="hidden" name="resource_id" value="<?= (int) $row['id'] ?>">
+                                            <input type="hidden" name="filter_section" value="<?= (int) $filter_section ?>">
+                                            <button type="submit" class="delete-btn">Archive</button>
+                                        </form>
+                                    </td>
                                 </tr>
                                 <?php endforeach; ?>
                             <?php else: ?>

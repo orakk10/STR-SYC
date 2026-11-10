@@ -25,6 +25,30 @@ $stmt = $conn->prepare("
         AND sa.academic_year = sec.academic_year
     INNER JOIN subjects sub ON sub.id = sa.subject_id
     WHERE sec.id = ?
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'section' AND ra.resource_id = sec.id
+      )
+      AND (
+          sec.strand_id IS NULL OR NOT EXISTS (
+              SELECT 1 FROM resource_archives ra
+              WHERE ra.resource_type = 'strand' AND ra.resource_id = sec.strand_id
+          )
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'assignment' AND ra.resource_id = sa.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'subject' AND ra.resource_id = sub.id
+      )
+      AND (
+          sub.strand_id IS NULL OR NOT EXISTS (
+              SELECT 1 FROM resource_archives ra
+              WHERE ra.resource_type = 'strand' AND ra.resource_id = sub.strand_id
+          )
+      )
     ORDER BY sub.subject_name ASC
 ");
 $stmt->execute([$section_id]);

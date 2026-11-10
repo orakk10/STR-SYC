@@ -44,13 +44,6 @@ $query = "SELECT
           ORDER BY u.reset_requested DESC, u.role DESC, u.full_name ASC";
 $users_list = $conn->query($query)->fetchAll();
 
-$account_archive_list = $conn->query("
-    SELECT aa.user_id, aa.original_role, aa.archived_at, u.username, u.lrn, u.full_name
-    FROM account_archives aa
-    INNER JOIN users u ON u.id = aa.user_id
-    ORDER BY aa.archived_at DESC, u.full_name ASC
-")->fetchAll(PDO::FETCH_ASSOC);
-
 $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sections ORDER BY grade_level ASC, section_name ASC")->fetchAll();
 ?>
 
@@ -102,22 +95,39 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
         }
 
+        .table-pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .table-pagination p {
+            margin: 0;
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+
+        .table-pagination button {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: white;
+            color: #1e293b;
+            cursor: pointer;
+        }
+
+        .table-pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .row-needs-reset { background-color: #fffbeb !important; border-left: 5px solid #f59e0b !important; }
         .badge-reset { background: #f59e0b; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left: 5px; }
         .btn-ignore-reset { background: #64748b; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2000; }
         .modal-content { background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; }
-        .archive-modal-content { max-width: 1000px; }
-        .archive-modal-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
-        .archive-modal-header h2 { margin: 0; }
-        .archive-modal-description { color: #64748b; margin: 6px 0 18px; }
-        .archive-search { width: 100%; max-width: 360px; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 14px; }
-        .archive-table-scroll { max-height: 55vh; overflow: auto; }
-        .archive-table { width: 100%; border-collapse: collapse; }
-        .archive-table th, .archive-table td { padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
-        .archive-empty { text-align: center !important; color: #64748b; padding: 30px !important; }
-        .archive-restore-button { background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 8px 12px; cursor: pointer; }
-        .btn-account-archive { background: #475569; color: white; border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; }
         .hidden { display: none !important; }
         .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
         .profile-grid .full-width { grid-column: span 2; }
@@ -252,18 +262,16 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
             <header class="content-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h1>User Management</h1>
                 <div style="display: flex; gap: 10px; align-items: center;">
-                    <button type="button" class="btn-account-archive" onclick="openModal('accountArchiveModal')">Account Archive (<?php echo count($account_archive_list); ?>)</button>
                     <button class="btn-add-user" onclick="openModal('addUserModal')">+ Add New User</button>
                 </div>
             </header>
+            <p style="color: #64748b; margin: -12px 0 20px;">Archived accounts are sent to the super admin for review.</p>
 
             <?php if(isset($_GET['msg'])): ?>
-                <div class="alert alert-<?php echo (strpos($_GET['msg'], 'success') !== false || in_array($_GET['msg'], ['account_archived', 'account_restored'], true)) ? 'success' : 'error'; ?>">
+                <div class="alert alert-<?php echo (strpos($_GET['msg'], 'success') !== false || $_GET['msg'] === 'account_archived') ? 'success' : 'error'; ?>">
                     <?php 
                         if($_GET['msg'] == 'success') echo "Action completed successfully!";
-                        else if($_GET['msg'] == 'account_archived') echo "Account archived successfully. Its records are preserved and it can be restored from Account Archive.";
-                        else if($_GET['msg'] == 'account_restored') echo "Account restored successfully.";
-                        else if($_GET['msg'] == 'account_restore_error') echo "The account could not be restored. No changes were made.";
+                        else if($_GET['msg'] == 'account_archived') echo "Account archived successfully and sent to the super admin for review.";
                         else if($_GET['msg'] == 'error_age') echo "Error: User must be at least 16 years old.";
                         else if($_GET['msg'] == 'error_self_archive') echo "Error: You cannot archive your own account.";
                         else echo "An error occurred. Please try again.";
@@ -301,8 +309,6 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
                             <td>
                                 <strong><?php echo htmlspecialchars($row['full_name']); ?></strong>
                                 <?php if($row['reset_requested'] == 1): ?><span class="badge-reset">REQ</span><?php endif; ?>
-                                <br>
-                                <button type="button" class="btn-view-profile" onclick="viewProfile(<?php echo $row['id']; ?>)" style="font-size: 0.75rem; padding: 2px 5px; cursor: pointer; margin-top: 4px;">Edit Info</button>
                             </td>
                             <td><?php echo htmlspecialchars($row['username']); ?></td>
                             <td><span class="role-badge <?php echo strtolower($row['role']); ?>"><?php echo ucfirst($row['role']); ?></span></td>
@@ -320,16 +326,24 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
                                 <?php endif; ?>
                             </td>
                             <td>
+                                <button type="button" class="btn-edit" onclick="viewProfile(<?php echo $row['id']; ?>)">Edit Info</button>
                                 <button class="btn-edit" onclick="resetPassword(<?php echo $row['id']; ?>)">Reset</button>
                                 <?php if ((int) $row['reset_requested'] === 1): ?>
                                     <button type="button" class="btn-ignore-reset" onclick="cancelResetRequest(<?php echo (int) $row['id']; ?>)">Cancel Request</button>
                                 <?php endif; ?>
-                                <button class="btn-delete" onclick="archiveUser(<?php echo (int) $row['id']; ?>)">Remove</button>
+                                <button class="btn-delete" onclick="archiveUser(<?php echo (int) $row['id']; ?>)">Archive</button>
                             </td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+                <div class="table-pagination" aria-label="User table pagination">
+                    <p id="userPageInfo" aria-live="polite"></p>
+                    <div>
+                        <button type="button" id="previousUserPage" onclick="changeUserPage(-1)">Previous</button>
+                        <button type="button" id="nextUserPage" onclick="changeUserPage(1)">Next</button>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
@@ -407,63 +421,10 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
         </div>
     </div>
 
-    <div id="accountArchiveModal" class="modal-overlay <?php echo in_array($_GET['msg'] ?? '', ['account_restored', 'account_restore_error'], true) ? '' : 'hidden'; ?>">
-        <section class="modal-content archive-modal-content" role="dialog" aria-modal="true" aria-labelledby="accountArchiveTitle">
-            <div class="archive-modal-header">
-                <h2 id="accountArchiveTitle">Account Archive</h2>
-                <button type="button" onclick="closeModal('accountArchiveModal')" aria-label="Close account archive">✕</button>
-            </div>
-            <p class="archive-modal-description">Removed accounts are kept separately from graduate records. Restoring an account returns its original role and access.</p>
-            <input type="search" id="accountArchiveSearch" class="archive-search" placeholder="Search archived accounts..." oninput="filterAccountArchive()">
-            <div class="archive-table-scroll">
-                <table class="archive-table">
-                    <thead>
-                        <tr>
-                            <th>Full Name</th>
-                            <th>Username / LRN</th>
-                            <th>Original Role</th>
-                            <th>Archived</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="accountArchiveTableBody">
-                        <?php if ($account_archive_list): ?>
-                            <?php foreach ($account_archive_list as $archived_account): ?>
-                                <tr>
-                                    <td><?php echo htmlspecialchars($archived_account['full_name'], ENT_QUOTES, 'UTF-8'); ?></td>
-                                    <td><?php echo htmlspecialchars($archived_account['lrn'] ?: $archived_account['username'], ENT_QUOTES, 'UTF-8'); ?></td>
-                                    <td><?php echo htmlspecialchars(ucfirst($archived_account['original_role']), ENT_QUOTES, 'UTF-8'); ?></td>
-                                    <td><?php echo htmlspecialchars($archived_account['archived_at'], ENT_QUOTES, 'UTF-8'); ?></td>
-                                    <td>
-                                        <form action="restore_account.php" method="POST" onsubmit="return confirm('Restore this account and allow the user to sign in again?')">
-                                            <input type="hidden" name="user_id" value="<?php echo (int) $archived_account['user_id']; ?>">
-                                            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
-                                            <input type="hidden" name="return_to" value="manage_users">
-                                            <button type="submit" class="archive-restore-button">Restore</button>
-                                        </form>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php else: ?>
-                            <tr><td class="archive-empty" colspan="5">No archived accounts.</td></tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </section>
-    </div>
-
     <script>
         function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 
-        function filterAccountArchive() {
-            const search = document.getElementById('accountArchiveSearch').value.toLowerCase();
-            document.querySelectorAll('#accountArchiveTableBody tr').forEach(row => {
-                row.style.display = row.innerText.toLowerCase().includes(search) ? '' : 'none';
-            });
-        }
-        
         function toggleSidebar() { 
             const sidebar = document.getElementById('sidebar');
             const burger = document.getElementById('mobileBurger');
@@ -493,16 +454,48 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
             }
         }
 
+        const usersPerPage = 15;
+        let currentUserPage = 0;
+
         function filterTable() {
+            currentUserPage = 0;
+            renderUserTable();
+        }
+
+        function changeUserPage(pageChange) {
+            currentUserPage += pageChange;
+            renderUserTable();
+        }
+
+        function renderUserTable() {
             const search = document.getElementById('userSearch').value.toLowerCase();
             const roleFilter = document.getElementById('roleFilter').value.toLowerCase();
-            const rows = document.querySelectorAll("#userTableBody tr");
-            rows.forEach(row => {
+            const rows = Array.from(document.querySelectorAll("#userTableBody tr"));
+            const matchingRows = rows.filter(row => {
                 const text = row.innerText.toLowerCase();
                 const role = row.cells[2].innerText.toLowerCase();
-                row.style.display = (text.includes(search) && (roleFilter === "" || role.includes(roleFilter))) ? "" : "none";
+                return text.includes(search) && (roleFilter === "" || role.includes(roleFilter));
             });
+            const pageCount = Math.ceil(matchingRows.length / usersPerPage);
+            currentUserPage = Math.max(0, Math.min(currentUserPage, pageCount - 1));
+            const firstRow = currentUserPage * usersPerPage;
+
+            rows.forEach(row => {
+                row.style.display = 'none';
+            });
+            matchingRows.slice(firstRow, firstRow + usersPerPage).forEach(row => {
+                row.style.display = '';
+            });
+
+            const shownStart = matchingRows.length === 0 ? 0 : firstRow + 1;
+            const shownEnd = Math.min(firstRow + usersPerPage, matchingRows.length);
+            document.getElementById('userPageInfo').textContent =
+                `Showing ${shownStart}-${shownEnd} of ${matchingRows.length} users`;
+            document.getElementById('previousUserPage').disabled = currentUserPage === 0;
+            document.getElementById('nextUserPage').disabled = currentUserPage >= pageCount - 1;
         }
+
+        filterTable();
 
         const csrfToken = <?php echo json_encode($_SESSION['csrf_token'], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
 

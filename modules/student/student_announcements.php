@@ -37,7 +37,7 @@ $all_ann = $stmt_all->fetchAll(PDO::FETCH_ASSOC);
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Announcements | STRAND-SYNC</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <style>
@@ -49,7 +49,7 @@ $all_ann = $stmt_all->fetchAll(PDO::FETCH_ASSOC);
 
         .dashboard-wrapper { 
             display: flex; 
-            height: 100vh; 
+            min-height: 100vh;
             width: 100%;
             overflow: hidden;
             position: relative;

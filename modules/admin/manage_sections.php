@@ -9,12 +9,24 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit();
 }
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 // 2. Active Filter Options
 $active_ay = $_GET['academic_year'] ?? '2026-2027';
 $active_version = $_GET['curriculum_version'] ?? 'Strengthened';
 
 // 3. Fetch Selection Options for Modals and Filters
-$strands = $conn->query("SELECT id, strand_name FROM strands ORDER BY strand_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+$strands = $conn->query("
+    SELECT s.id, s.strand_name
+    FROM strands s
+    WHERE NOT EXISTS (
+        SELECT 1 FROM resource_archives ra
+        WHERE ra.resource_type = 'strand' AND ra.resource_id = s.id
+    )
+    ORDER BY s.strand_name ASC
+")->fetchAll(PDO::FETCH_ASSOC);
 $advisers = $conn->query("SELECT id, full_name FROM users WHERE role IN ('adviser', 'faculty') ORDER BY full_name ASC")->fetchAll(PDO::FETCH_ASSOC);
 
 // 4. Fetch Filtered Active Sections List
@@ -28,6 +40,14 @@ $query = "
     LEFT JOIN strands st ON s.strand_id = st.id
     LEFT JOIN users u ON s.adviser_id = u.id
     WHERE s.academic_year = :ay AND s.curriculum_version = :version
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'section' AND ra.resource_id = s.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM resource_archives ra
+          WHERE ra.resource_type = 'strand' AND ra.resource_id = s.strand_id
+      )
     ORDER BY s.grade_level ASC, s.section_name ASC
 ";
 
@@ -144,13 +164,14 @@ $sections_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     'assigned' => 'Section assignments updated successfully.',
                     'saved' => 'Section created successfully.',
                     'updated' => 'Section updated successfully.',
-                    'deleted' => 'Section deleted successfully.',
+                    'archived' => 'Section archived and sent to the super admin for review.',
                 ];
                 $error_messages = [
                     'invalid_request' => 'Invalid request. Please submit the section form again.',
                     'missing_required_fields' => 'Please complete all required section fields.',
                     'missing_data' => 'The section details are invalid. Please review and try again.',
                     'invalid_id' => 'The section could not be found.',
+                    'archive_failed' => 'The section could not be archived. Please try again.',
                 ];
                 $success_message = $success_messages[$_GET['msg'] ?? ''] ?? null;
                 $error_message = $error_messages[$_GET['error'] ?? ''] ?? null;
@@ -217,7 +238,14 @@ $sections_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         Subjects
                                     </a>
 
-                                    <button class="btn-action btn-delete" onclick="confirmDelete(<?php echo $row['id']; ?>, '<?php echo addslashes($row['section_name']); ?>')">Delete</button>
+                                    <form method="POST" action="archive_resource.php" style="display:inline" onsubmit="return confirm('Archive this section? The super admin can restore or permanently delete it.');">
+                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                        <input type="hidden" name="resource_type" value="section">
+                                        <input type="hidden" name="resource_id" value="<?= (int) $row['id'] ?>">
+                                        <input type="hidden" name="academic_year" value="<?= htmlspecialchars($active_ay, ENT_QUOTES, 'UTF-8') ?>">
+                                        <input type="hidden" name="curriculum_version" value="<?= htmlspecialchars($active_version, ENT_QUOTES, 'UTF-8') ?>">
+                                        <button type="submit" class="btn-action btn-delete">Archive</button>
+                                    </form>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
@@ -339,11 +367,6 @@ $sections_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
             openModal('sectionModal');
         }
 
-        function confirmDelete(id, name) {
-            if (confirm("Are you sure you want to delete section '" + name + "'? Associated student enrollments will be affected.")) {
-                window.location.href = "delete_section.php?id=" + id + "&academic_year=<?= urlencode($active_ay) ?>&curriculum_version=<?= urlencode($active_version) ?>";
-            }
-        }
     </script>
 </body>
 </html>
