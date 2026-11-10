@@ -316,7 +316,7 @@ require __DIR__ . '/_super_admin_header.php';
                                         </div>
                                     </form>
                                 </dialog>
-                                <form method="POST" action="admin_management.php" onsubmit="return confirm('Archive this admin account? It will be sent to the archive review queue.');">
+                                <form method="POST" action="admin_management.php" data-confirm-title="Confirm Archive" data-confirm-label="Archive" data-confirm-variant="danger" data-confirm-message="Archive this admin account? It will be sent to the archive review queue.">
                                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="action" value="archive">
                                     <input type="hidden" name="admin_id" value="<?= (int) $admin['id'] ?>">

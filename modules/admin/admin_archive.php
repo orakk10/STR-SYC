@@ -406,7 +406,7 @@ $grade12_sections = $conn->query("
                     <h3 style="margin: 0; font-size: 1.2rem;">Run End-of-Year Archive</h3>
                     <p style="margin: 5px 0 0; opacity: 0.8; font-size: 0.9rem;">This archives currently active Grade 12 students as alumni. Each graduate’s batch year is taken from their section’s academic year; Grade 11 students remain active.</p>
                 </div>
-                <form action="process_archive.php" method="POST" onsubmit="return confirm('Archive all currently active Grade 12 students as alumni using each section academic year?')">
+                <form action="process_archive.php" method="POST" data-confirm-title="Confirm Archiving" data-confirm-label="Start Archiving" data-confirm-variant="danger" data-confirm-message="Archive all currently active Grade 12 students as alumni using each section academic year?">
                     <button type="submit" name="trigger_archive" class="btn-run-archive">📦 Start Archiving</button>
                 </form>
             </div>
@@ -416,7 +416,7 @@ $grade12_sections = $conn->query("
                     <h2>Promote Grade 11 Students</h2>
                     <p>Choose the current Grade 11 section and its Grade 12 destination. Students must be verified for every subject assignment before they can move.</p>
                 </div>
-                <form class="promotion-controls" action="process_promote.php" method="POST" onsubmit="return confirm('Promote only students verified for every subject assignment to the selected Grade 12 section?')">
+                <form class="promotion-controls" action="process_promote.php" method="POST" data-confirm-title="Confirm Promotion" data-confirm-label="Promote" data-confirm-message="Promote only students verified for every subject assignment to the selected Grade 12 section?">
                     <select id="sourceSection" name="source_section_id" required>
                         <option value="">Select Grade 11 section</option>
                         <?php foreach ($grade11_sections as $section): ?>
@@ -486,7 +486,7 @@ $grade12_sections = $conn->query("
                                 <td><span class="strand-cell"><?php echo htmlspecialchars($row['strand_name'] ?? 'Unassigned', ENT_QUOTES, 'UTF-8'); ?></span></td>
                                 <td><span class="batch-year-tag"><?php echo htmlspecialchars((string)($row['batch_year'] ?? 'N/A'), ENT_QUOTES, 'UTF-8'); ?></span></td>
                                 <td style="text-align: right;">
-                                    <form action="process_restore.php" method="POST" onsubmit="return confirm('Restore this student account to active student status?')">
+                                    <form action="process_restore.php" method="POST" data-confirm-title="Confirm Restore" data-confirm-label="Restore" data-confirm-message="Restore this student account to active student status?">
                                         <input type="hidden" name="id" value="<?php echo (int)$row['id']; ?>">
                                         <button type="submit" class="btn-restore-action">🔄 Restore</button>
                                     </form>
@@ -502,6 +502,7 @@ $grade12_sections = $conn->query("
         </main>
     </div>
 
+    <script src="../../assets/js/admin-form-confirmation.js"></script>
     <script>
         const sourceSection = document.getElementById('sourceSection');
         const destinationSection = document.getElementById('destinationSection');

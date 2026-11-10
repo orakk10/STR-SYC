@@ -330,7 +330,7 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
                                                             <td class="sub-actions">
                                                                 <div class="action-group">
                                                                     <button class="action-btn edit-btn" onclick='openEditModal(<?php echo htmlspecialchars(json_encode($s, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG), ENT_QUOTES, "UTF-8"); ?>)'>✎</button>
-                                                                    <form method="POST" action="archive_resource.php" onsubmit="return confirm('Archive this subject? The super admin can restore or permanently delete it.');">
+                                                                    <form method="POST" action="archive_resource.php" data-confirm-title="Confirm Archive" data-confirm-label="Archive" data-confirm-variant="danger" data-confirm-message="Archive this subject? The super admin can restore or permanently delete it.">
                                                                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                                                                         <input type="hidden" name="resource_type" value="subject">
                                                                         <input type="hidden" name="resource_id" value="<?= (int) $s['id'] ?>">
@@ -429,6 +429,7 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
         </div>
     </div>
 
+    <script src="../../assets/js/admin-form-confirmation.js"></script>
     <script>
         function toggleSidebar() { 
             const sidebar = document.getElementById('sidebar');

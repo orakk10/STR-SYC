@@ -1,5 +1,6 @@
         </main>
     </div>
+    <script src="../../assets/js/admin-form-confirmation.js"></script>
     <script>
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');

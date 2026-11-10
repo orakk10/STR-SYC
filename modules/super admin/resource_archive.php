@@ -74,12 +74,12 @@ require __DIR__ . '/_super_admin_header.php';
                             <td data-label="Archived"><?= htmlspecialchars($resource['archived_at'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td data-label="Archived by"><?= htmlspecialchars($resource['archived_by_name'] ?? 'Unknown', ENT_QUOTES, 'UTF-8') ?></td>
                             <td data-label="Actions">
-                                <form method="POST" action="restore_resource.php" onsubmit="return confirm('Restore this archived item?');">
+                                <form method="POST" action="restore_resource.php" data-confirm-title="Confirm Restore" data-confirm-label="Restore" data-confirm-message="Restore this archived item?">
                                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="archive_id" value="<?= (int) $resource['id'] ?>">
                                     <button type="submit" class="btn-edit">Restore</button>
                                 </form>
-                                <form method="POST" action="permanently_delete_resource.php" onsubmit="return confirm('Permanently delete this archived item and its dependent records? This cannot be undone.');">
+                                <form method="POST" action="permanently_delete_resource.php" data-confirm-title="Confirm Permanent Deletion" data-confirm-label="Permanently Delete" data-confirm-variant="danger" data-confirm-message="Permanently delete this archived item and its dependent records? This cannot be undone.">
                                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="archive_id" value="<?= (int) $resource['id'] ?>">
                                     <button type="submit" class="btn-delete delete-button">Delete</button>

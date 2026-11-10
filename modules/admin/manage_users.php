@@ -123,6 +123,88 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
             cursor: not-allowed;
         }
 
+        .users-table { width: 100%; min-width: 900px; table-layout: fixed; border-collapse: collapse; }
+        .users-table th,
+        .users-table td { vertical-align: middle; }
+        .users-table th:last-child { text-align: center; }
+        .users-table td:last-child {
+            display: table-cell !important;
+            text-align: center;
+            white-space: normal;
+        }
+        .user-row-actions {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .user-row-actions button,
+        .modal-footer button,
+        .table-pagination button,
+        .user-page-action {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 34px;
+            padding: 6px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #f1f5f9;
+            color: #475569;
+            font: inherit;
+            font-size: 0.78rem;
+            font-weight: 700;
+            line-height: 1.2;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .user-row-actions button { min-width: 68px; }
+        .user-row-actions button:hover,
+        .modal-footer button:hover,
+        .table-pagination button:not(:disabled):hover,
+        .user-page-action:hover { background: #e2e8f0; }
+        .user-row-actions .btn-edit { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+        .user-row-actions .btn-edit:hover { background: #dbeafe; }
+        .user-row-actions .btn-delete { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+        .user-row-actions .btn-delete:hover { background: #fee2e2; }
+        .user-row-actions .btn-ignore-reset { background: #f1f5f9; color: #475569; border-color: #cbd5e1; }
+        .btn-add-user {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 36px;
+            padding: 7px 12px;
+            border: 1px solid #1d4ed8;
+            border-radius: 6px;
+            background: #2563eb;
+            color: #fff;
+            font: inherit;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .btn-add-user:hover { background: #1d4ed8; }
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+            margin-top: 20px;
+        }
+        .modal-footer button:not(.btn-add-user) { min-width: 68px; }
+        .modal-footer button.btn-add-user {
+            min-width: 104px;
+            border-color: #1d4ed8;
+            background: #2563eb;
+            color: #fff;
+        }
+        .modal-footer button.btn-add-user:hover { background: #1d4ed8; }
+        .table-pagination > div { display: flex; gap: 8px; }
+        .table-pagination button:disabled { cursor: not-allowed; }
+
         .row-needs-reset { background-color: #fffbeb !important; border-left: 5px solid #f59e0b !important; }
         .badge-reset { background: #f59e0b; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left: 5px; }
         .btn-ignore-reset { background: #64748b; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
@@ -293,7 +375,14 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
                     </div>
                 </div>
 
-                <table>
+                <table class="users-table">
+                    <colgroup>
+                        <col style="width: 21%;">
+                        <col style="width: 17%;">
+                        <col style="width: 11%;">
+                        <col style="width: 29%;">
+                        <col style="width: 22%;">
+                    </colgroup>
                     <thead>
                         <tr>
                             <th>Full Name</th>
@@ -326,12 +415,14 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
                                 <?php endif; ?>
                             </td>
                             <td>
+                                <div class="user-row-actions">
                                 <button type="button" class="btn-edit" onclick="viewProfile(<?php echo $row['id']; ?>)">Edit Info</button>
-                                <button class="btn-edit" onclick="resetPassword(<?php echo $row['id']; ?>)">Reset</button>
+                                <button type="button" class="btn-edit" onclick="resetPassword(<?php echo $row['id']; ?>)">Reset</button>
                                 <?php if ((int) $row['reset_requested'] === 1): ?>
                                     <button type="button" class="btn-ignore-reset" onclick="cancelResetRequest(<?php echo (int) $row['id']; ?>)">Cancel Request</button>
                                 <?php endif; ?>
-                                <button class="btn-delete" onclick="archiveUser(<?php echo (int) $row['id']; ?>)">Archive</button>
+                                <button type="button" class="btn-delete" onclick="archiveUser(<?php echo (int) $row['id']; ?>)">Archive</button>
+                                </div>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -340,8 +431,8 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
                 <div class="table-pagination" aria-label="User table pagination">
                     <p id="userPageInfo" aria-live="polite"></p>
                     <div>
-                        <button type="button" id="previousUserPage" onclick="changeUserPage(-1)">Previous</button>
-                        <button type="button" id="nextUserPage" onclick="changeUserPage(1)">Next</button>
+                        <button type="button" class="user-page-action" id="previousUserPage" onclick="changeUserPage(-1)">Previous</button>
+                        <button type="button" class="user-page-action" id="nextUserPage" onclick="changeUserPage(1)">Next</button>
                     </div>
                 </div>
             </div>
@@ -375,7 +466,7 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
                     </div>
                     <div class="full-width"><label>Temporary Password</label><input type="password" name="password" required value="strand1234"></div>
                 </div>
-                <div class="modal-footer" style="margin-top: 20px; text-align: right;">
+                <div class="modal-footer">
                     <button type="button" onclick="closeModal('addUserModal')">Cancel</button>
                     <button type="submit" class="btn-add-user">Create User</button>
                 </div>
@@ -413,7 +504,7 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
                     <label>Professional Specialization</label>
                     <input type="text" name="specialization" id="prof_spec" placeholder="e.g., Mathematics, Social Sciences, STEM Coordinator">
                 </div>
-                <div class="modal-footer" style="margin-top: 20px; text-align: right;">
+                <div class="modal-footer">
                     <button type="button" onclick="closeModal('profileModal')">Close</button>
                     <button type="submit" class="btn-add-user">Save Changes</button>
                 </div>
@@ -421,6 +512,7 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
         </div>
     </div>
 
+    <script src="../../assets/js/admin-form-confirmation.js"></script>
     <script>
         function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }

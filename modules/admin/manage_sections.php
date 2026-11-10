@@ -238,7 +238,7 @@ $sections_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         Subjects
                                     </a>
 
-                                    <form method="POST" action="archive_resource.php" style="display:inline" onsubmit="return confirm('Archive this section? The super admin can restore or permanently delete it.');">
+                                    <form method="POST" action="archive_resource.php" style="display:inline" data-confirm-title="Confirm Archive" data-confirm-label="Archive" data-confirm-variant="danger" data-confirm-message="Archive this section? The super admin can restore or permanently delete it.">
                                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                                         <input type="hidden" name="resource_type" value="section">
                                         <input type="hidden" name="resource_id" value="<?= (int) $row['id'] ?>">
@@ -327,6 +327,7 @@ $sections_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
 
+    <script src="../../assets/js/admin-form-confirmation.js"></script>
     <script>
         function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }

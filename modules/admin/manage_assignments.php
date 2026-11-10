@@ -60,6 +60,7 @@ $active_sem = in_array($requested_semester, $allowed_semesters, true) ? $request
 
 // 2. Handle Form Submission (Save or Update Assignment)
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['save_assignment'])) {
+    $assignment_id = filter_var($_POST['assignment_id'] ?? 0, FILTER_VALIDATE_INT);
     $faculty_id    = $_POST['faculty_id'] ?? null;
     $section_id    = $_POST['section_id'] ?? null;
     $subject_id    = $_POST['subject_id'] ?? null;
@@ -69,9 +70,39 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['save_assignment'])) {
     $academic_year = $active_ay;
     $semester      = $active_sem;
 
-    if (!$faculty_id || !$section_id || !$subject_id) {
+    if (
+        empty($_SESSION['csrf_token'])
+        || !hash_equals($_SESSION['csrf_token'], (string) ($_POST['csrf_token'] ?? ''))
+    ) {
+        $message = "invalid_request";
+    } elseif ($assignment_id === false || $assignment_id < 0) {
+        $message = "invalid_assignment";
+    } elseif ($assignment_id > 0) {
+        $assignment_stmt = $conn->prepare("
+            SELECT id
+            FROM subject_assignments
+            WHERE id = ?
+              AND NOT EXISTS (
+                  SELECT 1 FROM resource_archives ra
+                  WHERE ra.resource_type = 'assignment' AND ra.resource_id = subject_assignments.id
+              )
+            LIMIT 1
+        ");
+        $assignment_stmt->execute([$assignment_id]);
+        if (!$assignment_stmt->fetchColumn()) {
+            $message = "invalid_assignment";
+        }
+    }
+
+    if ($message === "" && (!$faculty_id || !$section_id || !$subject_id)) {
         $message = "missing_fields";
-    } else {
+    } elseif ($message === "") {
+        $faculty_stmt = $conn->prepare("SELECT id FROM users WHERE id = ? AND role IN ('faculty', 'adviser') LIMIT 1");
+        $faculty_stmt->execute([(int) $faculty_id]);
+        if (!$faculty_stmt->fetchColumn()) {
+            $message = "invalid_faculty";
+        }
+
         $section_stmt = $conn->prepare("
             SELECT id, grade_level, strand_id, academic_year, curriculum_version
             FROM sections
@@ -91,11 +122,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['save_assignment'])) {
         $section_stmt->execute([(int) $section_id]);
         $target_section = $section_stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$target_section || $target_section['academic_year'] !== $academic_year) {
+        if ($message === "" && (!$target_section || $target_section['academic_year'] !== $academic_year)) {
             $message = "invalid_section";
-        } elseif ($subject_strand_id !== null && $subject_strand_id <= 0) {
+        } elseif ($message === "" && $subject_strand_id !== null && $subject_strand_id <= 0) {
             $message = "invalid_strand";
-        } else {
+        } elseif ($message === "") {
             if ($subject_strand_id !== null) {
                 $strand_stmt = $conn->prepare("
                     SELECT s.id FROM strands s
@@ -153,20 +184,54 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['save_assignment'])) {
                         $message = "invalid_subject";
                     } else {
                         try {
-                            // Check if the subject is already assigned to this section for the selected term.
-                            $check_stmt = $conn->prepare("
+                            $duplicate_sql = "
                                 SELECT id, faculty_id
                                 FROM subject_assignments
-                                WHERE section_id = ? AND subject_id = ? AND academic_year = ? AND (semester = ? OR semester = 'Full Year')
+                                WHERE section_id = ? AND subject_id = ? AND academic_year = ?
+                                  AND (? = 'Full Year' OR semester = ? OR semester = 'Full Year')
                                   AND NOT EXISTS (
                                       SELECT 1 FROM resource_archives ra
                                       WHERE ra.resource_type = 'assignment' AND ra.resource_id = subject_assignments.id
                                   )
-                            ");
-                            $check_stmt->execute([$section_id, $subject_id, $academic_year, $semester]);
+                            ";
+                            $duplicate_params = [$section_id, $subject_id, $academic_year, $semester, $semester];
+                            if ($assignment_id > 0) {
+                                $duplicate_sql .= " AND id <> ?";
+                                $duplicate_params[] = $assignment_id;
+                            }
+                            $check_stmt = $conn->prepare($duplicate_sql);
+                            $check_stmt->execute($duplicate_params);
                             $existing = $check_stmt->fetch(PDO::FETCH_ASSOC);
 
-                            if ($existing) {
+                            if ($assignment_id > 0 && $existing) {
+                                $message = "duplicate_assignment";
+                            } elseif ($assignment_id > 0) {
+                                $update_stmt = $conn->prepare("
+                                    UPDATE subject_assignments
+                                    SET faculty_id = ?, section_id = ?, subject_id = ?, academic_year = ?, semester = ?
+                                    WHERE id = ?
+                                      AND NOT EXISTS (
+                                          SELECT 1 FROM resource_archives ra
+                                          WHERE ra.resource_type = 'assignment' AND ra.resource_id = subject_assignments.id
+                                      )
+                                ");
+                                $update_stmt->execute([$faculty_id, $section_id, $subject_id, $academic_year, $semester, $assignment_id]);
+                                if ($update_stmt->rowCount() > 0) {
+                                    $message = "assignment_updated";
+                                } else {
+                                    $still_active_stmt = $conn->prepare("
+                                        SELECT id FROM subject_assignments
+                                        WHERE id = ?
+                                          AND NOT EXISTS (
+                                              SELECT 1 FROM resource_archives ra
+                                              WHERE ra.resource_type = 'assignment' AND ra.resource_id = subject_assignments.id
+                                          )
+                                        LIMIT 1
+                                    ");
+                                    $still_active_stmt->execute([$assignment_id]);
+                                    $message = $still_active_stmt->fetchColumn() ? "assignment_updated" : "invalid_assignment";
+                                }
+                            } elseif ($existing) {
                                 // Update assigned faculty
                                 $update_stmt = $conn->prepare("UPDATE subject_assignments SET faculty_id = ? WHERE id = ?");
                                 $update_stmt->execute([$faculty_id, $existing['id']]);
@@ -204,7 +269,7 @@ $strands = $conn->query("
 $filter_sections_stmt = $conn->prepare("
     SELECT id, section_name, grade_level, strand_id, academic_year, curriculum_version
     FROM sections
-    WHERE academic_year = ?
+    WHERE academic_year IN (?, ?)
       AND NOT EXISTS (
           SELECT 1 FROM resource_archives ra
           WHERE ra.resource_type = 'section' AND ra.resource_id = sections.id
@@ -215,10 +280,14 @@ $filter_sections_stmt = $conn->prepare("
               WHERE ra.resource_type = 'strand' AND ra.resource_id = sections.strand_id
           )
       )
-    ORDER BY grade_level ASC, section_name ASC
+    ORDER BY academic_year DESC, grade_level ASC, section_name ASC
 ");
-$filter_sections_stmt->execute([$active_ay]);
-$filter_sections = $filter_sections_stmt->fetchAll(PDO::FETCH_ASSOC);
+$filter_sections_stmt->execute($allowed_years);
+$assignment_sections = $filter_sections_stmt->fetchAll(PDO::FETCH_ASSOC);
+$filter_sections = array_values(array_filter(
+    $assignment_sections,
+    static fn (array $section): bool => $section['academic_year'] === $active_ay
+));
 $subjects = $conn->query("
     SELECT id, subject_name, subject_code, type, curriculum_version, strand_id, grade_level, `term`
     FROM subjects sub
@@ -261,10 +330,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && array_key_exists('subject_strand_id
     }
 }
 $query_str = "
-    SELECT sa.id, sa.academic_year, sa.semester,
+    SELECT sa.id, sa.faculty_id, sa.section_id, sa.subject_id, sa.academic_year, sa.semester,
            u.full_name AS teacher_name,
            sec.section_name, sec.grade_level,
-           sub.subject_name, sub.subject_code, sub.type AS subject_type, sub.curriculum_version
+           sub.subject_name, sub.subject_code, sub.type AS subject_type, sub.curriculum_version, sub.strand_id AS subject_strand_id
     FROM subject_assignments sa
     JOIN users u ON sa.faculty_id = u.id
     JOIN sections sec ON sa.section_id = sec.id
@@ -366,8 +435,23 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .msg-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
         .msg-warning { background: #fffbe3; color: #b45309; border: 1px solid #fde68a; }
 
-        .delete-btn { color: #ef4444; text-decoration: none; font-weight: 700; font-size: 0.82rem; }
-        .delete-btn:hover { text-decoration: underline; }
+        .assignments-table { width: 100%; min-width: 760px; table-layout: fixed; border-collapse: collapse; font-size: 0.85rem; }
+        .assignments-table th,
+        .assignments-table td { padding: 10px; text-align: left; vertical-align: middle; overflow-wrap: anywhere; }
+        .assignments-table th:last-child,
+        .assignments-table td:last-child { text-align: center; }
+        .assignment-actions { display: flex; justify-content: center; align-items: center; gap: 8px; white-space: nowrap; }
+        .assignment-actions form { display: inline-flex; margin: 0; }
+        .assignment-action-btn {
+            display: inline-flex; justify-content: center; align-items: center;
+            min-width: 64px; padding: 6px 10px; border: 1px solid transparent;
+            border-radius: 6px; font: inherit; font-size: 0.78rem; font-weight: 700;
+            line-height: 1.2; text-decoration: none; cursor: pointer; transition: background-color 0.2s, border-color 0.2s;
+        }
+        .assignment-action-edit { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
+        .assignment-action-edit:hover { background: #dbeafe; }
+        .assignment-action-archive { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
+        .assignment-action-archive:hover { background: #fee2e2; }
 
         .weight-pill {
             display: inline-block; font-size: 0.72rem; background: #e0e7ff;
@@ -400,7 +484,7 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             .table-container { height: auto; overflow-x: auto; overflow-y: visible; }
             .table-container > div:first-child form { flex-wrap: wrap; max-width: 100%; }
             .table-container > div:first-child form select { flex: 1 1 130px; min-width: 0; max-width: 100%; }
-            .table-container table { min-width: 700px; }
+            .table-container .assignments-table { min-width: 760px; }
             #sidebar.active .sidebar-header h3 { margin-bottom: 0; }
             #sidebar.active .sidebar-close { display: flex; align-items: center; justify-content: center; flex: 0 0 36px; width: 36px; height: 36px; position: relative; z-index: 1002; }
         }
@@ -438,10 +522,16 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <div class="admin-layout">
                 <!-- Assign Form Card -->
                 <div class="card">
-                    <h3 style="margin-top: 0; color: #1e293b;">Assign Subject Load</h3>
+                    <h3 id="assignmentFormTitle" style="margin-top: 0; color: #1e293b;">Assign Subject Load</h3>
                     <?php if($message == "success"): ?><div class="status-msg msg-success">✔ Subject assignment saved!</div><?php endif; ?>
                     <?php if($message == "updated"): ?><div class="status-msg msg-warning">⚡ Subject reassigned to new teacher!</div><?php endif; ?>
+                    <?php if($message == "assignment_updated"): ?><div class="status-msg msg-success">✔ Subject assignment updated!</div><?php endif; ?>
                     <?php if($message == "missing_fields"): ?><div class="status-msg msg-warning">⚠ Please select all required fields.</div><?php endif; ?>
+                    <?php if($message == "invalid_request"): ?><div class="status-msg msg-warning">⚠ The request could not be verified. Please refresh the page and try again.</div><?php endif; ?>
+                    <?php if($message == "invalid_assignment"): ?><div class="status-msg msg-warning">⚠ This assignment is no longer available to edit.</div><?php endif; ?>
+                    <?php if($message == "invalid_faculty"): ?><div class="status-msg msg-warning">⚠ Select a valid faculty member or adviser.</div><?php endif; ?>
+                    <?php if($message == "duplicate_assignment"): ?><div class="status-msg msg-warning">⚠ This subject is already assigned to the selected section and term.</div><?php endif; ?>
+                    <?php if($message == "error"): ?><div class="status-msg msg-warning">⚠ The assignment could not be saved. Please try again.</div><?php endif; ?>
                     <?php if($message == "invalid_section"): ?><div class="status-msg msg-warning">⚠ Select a section that belongs to the chosen academic year.</div><?php endif; ?>
                     <?php if($message == "invalid_strand"): ?><div class="status-msg msg-warning">⚠ Select a valid subject strand.</div><?php endif; ?>
                     <?php if($message == "invalid_term"): ?><div class="status-msg msg-warning">⚠ Select a valid academic term.</div><?php endif; ?>
@@ -449,10 +539,12 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <?php if(($_GET['msg'] ?? '') === 'archived'): ?><div class="status-msg msg-success">✔ Assignment archived and sent to the super admin for review.</div><?php endif; ?>
                     <?php if(($_GET['msg'] ?? '') === 'archive_failed'): ?><div class="status-msg msg-warning">⚠ The assignment could not be archived. Please try again.</div><?php endif; ?>
 
-                    <form method="POST">
+                    <form id="assignmentForm" method="POST">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="assignment_id" id="assignmentId" value="">
                         <div class="form-group">
                             <label>Academic Year</label>
-                            <select name="academic_year" required>
+                            <select name="academic_year" id="assignmentAcademicYear" required>
                                 <option value="2026-2027" <?= $active_ay === '2026-2027' ? 'selected' : '' ?>>SY 2026-2027 (MATATAG / 3-Term)</option>
                                 <option value="2025-2026" <?= $active_ay === '2025-2026' ? 'selected' : '' ?>>SY 2025-2026 (Legacy / 2-Sem)</option>
                             </select>
@@ -476,7 +568,7 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                         <div class="form-group">
                             <label>Assigned Teacher</label>
-                            <select name="faculty_id" required>
+                            <select name="faculty_id" id="assignmentFaculty" required>
                                 <option value="">Select Teacher</option>
                                 <?php foreach ($faculty_members as $fac): ?>
                                     <option value="<?= $fac['id']; ?>"><?= htmlspecialchars($fac['full_name']); ?></option>
@@ -488,12 +580,14 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <label>Target Section</label>
                             <select name="section_id" id="targetSection" required>
                                 <option value="">Select Section</option>
-                                <?php foreach ($filter_sections as $sec): ?>
+                                <?php foreach ($assignment_sections as $sec): ?>
                                     <option
                                         value="<?= $sec['id']; ?>"
+                                        data-academic-year="<?= htmlspecialchars($sec['academic_year'], ENT_QUOTES, 'UTF-8') ?>"
                                         data-grade="<?= htmlspecialchars((string) $sec['grade_level']); ?>"
                                         data-strand-id="<?= htmlspecialchars((string) ($sec['strand_id'] ?? '')); ?>"
                                         data-curriculum="<?= htmlspecialchars($sec['curriculum_version']); ?>"
+                                        <?= $sec['academic_year'] !== $active_ay ? 'hidden disabled' : ''; ?>
                                         <?= $assignment_section_id === (int) $sec['id'] ? 'selected' : ''; ?>
                                     >
                                         Grade <?= htmlspecialchars($sec['grade_level'] . ' - ' . $sec['section_name']); ?>
@@ -542,7 +636,8 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             </small>
                         </div>
 
-                        <button type="submit" name="save_assignment" class="btn-primary">Assign Teaching Load</button>
+                        <button type="submit" name="save_assignment" id="assignmentSubmit" class="btn-primary">Assign Teaching Load</button>
+                        <button type="button" id="cancelAssignmentEdit" class="btn-primary" style="display: none; margin-top: 8px; background: #64748b;">Cancel Edit</button>
                     </form>
                 </div>
 
@@ -577,14 +672,21 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         </form>
                     </div>
 
-                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                    <table class="assignments-table">
+                        <colgroup>
+                            <col style="width: 15%;">
+                            <col style="width: 17%;">
+                            <col style="width: 31%;">
+                            <col style="width: 13%;">
+                            <col style="width: 24%;">
+                        </colgroup>
                         <thead>
                             <tr style="border-bottom: 2px solid #e2e8f0; text-align: left; background: #f8fafc;">
                                 <th style="padding: 10px;">Teacher</th>
                                 <th style="padding: 10px;">Section</th>
                                 <th style="padding: 10px;">Subject & Weights</th>
                                 <th style="padding: 10px;">Term</th>
-                                <th style="padding: 10px; text-align: center;">Action</th>
+                                <th style="padding: 10px; text-align: center;">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -609,15 +711,29 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                             <?= htmlspecialchars($row['semester']) ?>
                                         </td>
                                         <td style="padding: 10px; text-align: center;">
-                                            <form method="POST" action="archive_resource.php" onsubmit="return confirm('Archive this teaching assignment? The super admin can restore or permanently delete it.');">
-                                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
-                                                <input type="hidden" name="resource_type" value="assignment">
-                                                <input type="hidden" name="resource_id" value="<?= (int) $row['id'] ?>">
-                                                <input type="hidden" name="academic_year" value="<?= htmlspecialchars($active_ay, ENT_QUOTES, 'UTF-8') ?>">
-                                                <input type="hidden" name="semester" value="<?= htmlspecialchars($active_sem, ENT_QUOTES, 'UTF-8') ?>">
-                                                <input type="hidden" name="filter_section" value="<?= (int) $filter_section ?>">
-                                                <button type="submit" class="delete-btn">Archive</button>
-                                            </form>
+                                            <div class="assignment-actions">
+                                                <button
+                                                    type="button"
+                                                    class="assignment-action-btn assignment-action-edit"
+                                                    data-edit-assignment
+                                                    data-assignment-id="<?= (int) $row['id'] ?>"
+                                                    data-faculty-id="<?= (int) $row['faculty_id'] ?>"
+                                                    data-section-id="<?= (int) $row['section_id'] ?>"
+                                                    data-subject-id="<?= (int) $row['subject_id'] ?>"
+                                                    data-subject-strand-id="<?= htmlspecialchars((string) ($row['subject_strand_id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-academic-year="<?= htmlspecialchars($row['academic_year'], ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-semester="<?= htmlspecialchars($row['semester'], ENT_QUOTES, 'UTF-8') ?>"
+                                                >Edit</button>
+                                                <form method="POST" action="archive_resource.php" data-confirm-title="Confirm Archive" data-confirm-label="Archive" data-confirm-variant="danger" data-confirm-message="Archive this teaching assignment? The super admin can restore or permanently delete it.">
+                                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                                    <input type="hidden" name="resource_type" value="assignment">
+                                                    <input type="hidden" name="resource_id" value="<?= (int) $row['id'] ?>">
+                                                    <input type="hidden" name="academic_year" value="<?= htmlspecialchars($active_ay, ENT_QUOTES, 'UTF-8') ?>">
+                                                    <input type="hidden" name="semester" value="<?= htmlspecialchars($active_sem, ENT_QUOTES, 'UTF-8') ?>">
+                                                    <input type="hidden" name="filter_section" value="<?= (int) $filter_section ?>">
+                                                    <button type="submit" class="assignment-action-btn assignment-action-archive">Archive</button>
+                                                </form>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -639,12 +755,18 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </main>
     </div>
 
+    <script src="../../assets/js/admin-form-confirmation.js"></script>
     <script>
         const sectionSelect = document.getElementById('targetSection');
         const strandSelect = document.getElementById('subjectStrand');
         const semesterSelect = document.getElementById('assignmentSemester');
+        const academicYearSelect = document.getElementById('assignmentAcademicYear');
         const subjectSelect = document.getElementById('targetSubject');
         const subjectFilterHint = document.getElementById('subjectFilterHint');
+        const assignmentForm = document.getElementById('assignmentForm');
+        const assignmentTitle = document.getElementById('assignmentFormTitle');
+        const assignmentSubmit = document.getElementById('assignmentSubmit');
+        const cancelEditButton = document.getElementById('cancelAssignmentEdit');
 
         function getSubjectTermsForAssignment(semester) {
             if (semester === '1st Term' || semester === '1st Sem') return ['1st', '1st Sem'];
@@ -700,14 +822,71 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     : `${visibleSubjectCount} applicable subject${visibleSubjectCount === 1 ? '' : 's'} available.`;
         }
 
+        function filterSectionsForAcademicYear() {
+            let selectedSectionIsAvailable = false;
+            Array.from(sectionSelect.options).forEach(option => {
+                if (!option.value) {
+                    option.hidden = false;
+                    option.disabled = false;
+                    return;
+                }
+
+                const matchesYear = option.dataset.academicYear === academicYearSelect.value;
+                option.hidden = !matchesYear;
+                option.disabled = !matchesYear;
+                if (matchesYear && option.value === sectionSelect.value) {
+                    selectedSectionIsAvailable = true;
+                }
+            });
+
+            if (!selectedSectionIsAvailable) {
+                sectionSelect.value = '';
+                strandSelect.value = '';
+            }
+            filterSubjectsForSection();
+        }
+
         sectionSelect.addEventListener('change', function () {
             const sectionOption = sectionSelect.options[sectionSelect.selectedIndex];
             strandSelect.value = sectionOption?.dataset.strandId || '';
             filterSubjectsForSection();
         });
+        academicYearSelect.addEventListener('change', filterSectionsForAcademicYear);
         strandSelect.addEventListener('change', filterSubjectsForSection);
         semesterSelect.addEventListener('change', filterSubjectsForSection);
+        filterSectionsForAcademicYear();
         filterSubjectsForSection();
+        cancelEditButton.addEventListener('click', resetAssignmentForm);
+
+        document.querySelectorAll('[data-edit-assignment]').forEach(button => {
+            button.addEventListener('click', () => {
+                document.getElementById('assignmentId').value = button.dataset.assignmentId;
+                academicYearSelect.value = button.dataset.academicYear;
+                filterSectionsForAcademicYear();
+                semesterSelect.value = button.dataset.semester;
+                document.getElementById('assignmentFaculty').value = button.dataset.facultyId;
+                sectionSelect.value = button.dataset.sectionId;
+
+                const sectionOption = sectionSelect.options[sectionSelect.selectedIndex];
+                strandSelect.value = button.dataset.subjectStrandId || sectionOption?.dataset.strandId || '';
+                filterSubjectsForSection();
+                subjectSelect.value = button.dataset.subjectId;
+
+                assignmentTitle.textContent = 'Edit Subject Assignment';
+                assignmentSubmit.textContent = 'Save Assignment Changes';
+                cancelEditButton.style.display = 'block';
+                assignmentForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        });
+
+        function resetAssignmentForm() {
+            assignmentForm.reset();
+            document.getElementById('assignmentId').value = '';
+            assignmentTitle.textContent = 'Assign Subject Load';
+            assignmentSubmit.textContent = 'Assign Teaching Load';
+            cancelEditButton.style.display = 'none';
+            filterSectionsForAcademicYear();
+        }
 
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');

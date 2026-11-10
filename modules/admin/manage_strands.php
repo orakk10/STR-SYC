@@ -186,9 +186,9 @@ $strands_list = $conn->query("
             }
         }
 
-        .table-container table {
+        .table-container .strands-table {
             width: 100%;
-            min-width: 100%;
+            min-width: 760px;
             border-collapse: collapse;
             table-layout: fixed;
         }
@@ -209,55 +209,101 @@ $strands_list = $conn->query("
             font-weight: 600;
         }
 
-        .col-id { width: 12%; }
-        .col-name { width: 23%; }
-        .col-desc { width: 45%; }
-        
-        .table-container th.col-actions { 
-            text-align: right !important;
-            padding-right: 16px;
-        }
-
-        .col-actions { 
-            width: 20%; 
-        }
+        .table-container th.col-actions { text-align: center !important; }
+        .table-container td.col-actions { display: table-cell !important; text-align: center !important; }
 
         .action-cell-wrapper {
             display: flex;
-            justify-content: flex-end;
+            justify-content: center;
+            align-items: center;
             gap: 8px;
-            width: max-content;
-            margin-left: auto;
+            width: 100%;
             box-sizing: border-box;
         }
 
-        .btn-edit {
-            padding: 6px 12px;
-            background: #eff6ff;
-            color: #2563eb;
-            border: 1px solid #bfdbfe;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 500;
-        }
-
-        .btn-edit:hover {
-            background: #dbeafe;
-        }
-
+        .action-cell-wrapper form { display: inline-flex; margin: 0; }
+        .btn-edit,
         .btn-delete {
-            padding: 6px 12px;
-            background: #fef2f2;
-            color: #dc2626;
-            border: 1px solid #fecaca;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            width: 68px;
+            flex: 0 0 68px;
+            padding: 6px 10px;
             border-radius: 6px;
+            font: inherit;
+            font-size: 0.78rem;
+            font-weight: 700;
+            line-height: 1.2;
             cursor: pointer;
-            font-weight: 500;
+            transition: background-color 0.2s, border-color 0.2s;
         }
 
-        .btn-delete:hover {
-            background: #fee2e2;
+        .btn-edit { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+        .btn-edit:hover { background: #dbeafe; }
+
+        .btn-delete { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+        .btn-delete:hover { background: #fee2e2; }
+
+        .table-header .btn-primary,
+        .modal-actions .btn-primary {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 34px;
+            padding: 7px 12px;
+            border: 1px solid #1d4ed8;
+            border-radius: 6px;
+            background: #2563eb;
+            color: #fff;
+            font: inherit;
+            font-size: 0.8rem;
+            font-weight: 700;
+            line-height: 1.2;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
         }
+
+        .table-header .btn-primary:hover,
+        .modal-actions .btn-primary:hover { background: #1d4ed8; }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .modal-actions button {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            min-width: 68px;
+            min-height: 34px;
+            padding: 6px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #f1f5f9;
+            color: #475569;
+            font: inherit;
+            font-size: 0.78rem;
+            font-weight: 700;
+            line-height: 1.2;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+
+        .modal-actions button:hover { background: #e2e8f0; }
+        .modal-actions .btn-primary {
+            min-width: 92px;
+            border-color: #1d4ed8;
+            background: #2563eb;
+            color: #fff;
+            font-size: 0.8rem;
+        }
+
+        .modal-actions .btn-primary:hover { background: #1d4ed8; }
 
         .desc-text {
             word-break: break-word;
@@ -312,15 +358,21 @@ $strands_list = $conn->query("
             <div class="table-container">
                 <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h2>Available Strands</h2>
-                    <button class="btn-primary" onclick="prepareNewStrand()">+ Add Strand</button>
+                    <button type="button" class="btn-primary" onclick="prepareNewStrand()">+ Add Strand</button>
                 </div>
-                <table>
+                <table class="strands-table">
+                    <colgroup>
+                        <col style="width: 12%;">
+                        <col style="width: 23%;">
+                        <col style="width: 45%;">
+                        <col style="width: 20%;">
+                    </colgroup>
                     <thead>
                         <tr>
                             <th class="col-id">ID</th>
                             <th class="col-name">Strand Name</th>
                             <th class="col-desc">Description</th>
-                            <th>Actions</th>
+                            <th class="col-actions">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -337,7 +389,7 @@ $strands_list = $conn->query("
                                 <td class="col-actions">
                                     <div class="action-cell-wrapper">
                                         <button class="btn-edit" onclick='openEditModal(<?php echo json_encode($row); ?>)'>Edit</button>
-                                        <form method="POST" action="archive_resource.php" onsubmit="return confirm('Archive this strand? The super admin can restore or permanently delete it.');">
+                                        <form method="POST" action="archive_resource.php" data-confirm-title="Confirm Archive" data-confirm-label="Archive" data-confirm-variant="danger" data-confirm-message="Archive this strand? The super admin can restore or permanently delete it.">
                                             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                                             <input type="hidden" name="resource_type" value="strand">
                                             <input type="hidden" name="resource_id" value="<?= (int) $row['id'] ?>">
@@ -373,13 +425,14 @@ $strands_list = $conn->query("
                     <textarea name="description" id="description" placeholder="Brief overview of the track" style="width:100%; border-radius:8px; border:1px solid #cbd5e1; padding:10px; min-height: 100px; font-family: inherit;"></textarea>
                 </div>
                 <div class="modal-actions">
-                    <button type="button" onclick="closeModal('strandModal')">Cancel</button>
+                    <button type="button" class="modal-cancel" onclick="closeModal('strandModal')">Cancel</button>
                     <button type="submit" class="btn-primary">Save Strand</button>
                 </div>
             </form>
         </div>
     </div>
 
+    <script src="../../assets/js/admin-form-confirmation.js"></script>
     <script>
         // Modal & Sidebar Controls
         function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
