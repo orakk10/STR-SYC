@@ -359,7 +359,13 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
         <div class="modal-content">
             <h3 id="modalTitle" style="margin-top:0; color: #1e293b;">Subject Details</h3>
             <hr style="border:0; border-top: 1px solid #f1f5f9; margin: 12px 0;">
-            <form id="subjectForm" method="POST">
+            <form
+                id="subjectForm"
+                method="POST"
+                data-confirm-title="Confirm Subject"
+                data-confirm-label="Add Subject"
+                data-confirm-message="Add this subject to the curriculum?"
+            >
                 <input type="hidden" name="subject_id" id="subject_id">
                 
                 <div class="form-group">
@@ -500,6 +506,9 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
             form.reset();
             form.action = "save_subject.php";
             document.getElementById('modalTitle').innerText = "Add New Subject";
+            form.dataset.confirmTitle = 'Confirm Subject';
+            form.dataset.confirmLabel = 'Add Subject';
+            form.dataset.confirmMessage = 'Add this subject to the curriculum?';
             
             const currentVer = "<?= $curriculum_version ?>";
             document.getElementById('form_curriculum_version').value = currentVer;
@@ -512,6 +521,9 @@ $first_strand = !empty($curriculum) ? array_key_first($curriculum) : "";
             const form = document.getElementById('subjectForm');
             form.action = "update_subject.php";
             document.getElementById('modalTitle').innerText = "Edit Subject";
+            form.dataset.confirmTitle = 'Confirm Subject Changes';
+            form.dataset.confirmLabel = 'Save Changes';
+            form.dataset.confirmMessage = 'Save changes to this subject?';
             
             document.getElementById('subject_id').value = data.id;
             document.getElementById('form_curriculum_version').value = data.curriculum_version || 'Strengthened';

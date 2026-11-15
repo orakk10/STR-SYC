@@ -413,7 +413,14 @@ $strands_list = $conn->query("
     <div id="strandModal" class="modal-overlay hidden">
         <div class="modal-content">
             <h3 id="modalTitle">New Strand Registration</h3>
-            <form id="strandForm" action="save_strand.php" method="POST">
+            <form
+                id="strandForm"
+                action="save_strand.php"
+                method="POST"
+                data-confirm-title="Confirm Strand"
+                data-confirm-label="Add Strand"
+                data-confirm-message="Add this strand?"
+            >
                 <input type="hidden" name="strand_id" id="strand_id">
                 
                 <div class="input-group">
@@ -454,8 +461,12 @@ $strands_list = $conn->query("
 
         // Logic to switch Modal to "ADD" mode
         function prepareNewStrand() {
-            document.getElementById('strandForm').reset();
-            document.getElementById('strandForm').action = "save_strand.php";
+            const form = document.getElementById('strandForm');
+            form.reset();
+            form.action = "save_strand.php";
+            form.dataset.confirmTitle = 'Confirm Strand';
+            form.dataset.confirmLabel = 'Add Strand';
+            form.dataset.confirmMessage = 'Add this strand?';
             document.getElementById('modalTitle').innerText = "New Strand Registration";
             document.getElementById('strand_id').value = "";
             openModal('strandModal');
@@ -463,7 +474,11 @@ $strands_list = $conn->query("
 
         // Logic to switch Modal to "EDIT" mode and fill data
         function openEditModal(data) {
-            document.getElementById('strandForm').action = "update_strand.php";
+            const form = document.getElementById('strandForm');
+            form.action = "update_strand.php";
+            form.dataset.confirmTitle = 'Confirm Strand Changes';
+            form.dataset.confirmLabel = 'Save Changes';
+            form.dataset.confirmMessage = 'Save changes to this strand?';
             document.getElementById('modalTitle').innerText = "Edit Strand: " + data.strand_name;
             
             document.getElementById('strand_id').value = data.id;

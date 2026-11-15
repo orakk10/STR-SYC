@@ -266,7 +266,14 @@ $sections_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <div id="sectionModal" class="modal-overlay hidden">
         <div class="modal-content">
             <h3 id="modalTitle" style="margin-top:0; color:#1e293b;">New Section Details</h3>
-            <form id="sectionForm" action="save_section.php" method="POST">
+            <form
+                id="sectionForm"
+                action="save_section.php"
+                method="POST"
+                data-confirm-title="Confirm Section"
+                data-confirm-label="Add Section"
+                data-confirm-message="Add this section?"
+            >
                 <input type="hidden" name="section_id" id="section_id">
                 
                 <div class="input-group">
@@ -344,8 +351,12 @@ $sections_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         function prepareNewSection() {
-            document.getElementById('sectionForm').reset();
-            document.getElementById('sectionForm').action = "save_section.php";
+            const form = document.getElementById('sectionForm');
+            form.reset();
+            form.action = "save_section.php";
+            form.dataset.confirmTitle = 'Confirm Section';
+            form.dataset.confirmLabel = 'Add Section';
+            form.dataset.confirmMessage = 'Add this section?';
             document.getElementById('modalTitle').innerText = "New Section Details";
             document.getElementById('section_id').value = "";
             document.getElementById('academic_year').value = "<?= $active_ay ?>";
@@ -354,7 +365,11 @@ $sections_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         function openEditModal(data) {
-            document.getElementById('sectionForm').action = "update_section.php";
+            const form = document.getElementById('sectionForm');
+            form.action = "update_section.php";
+            form.dataset.confirmTitle = 'Confirm Section Changes';
+            form.dataset.confirmLabel = 'Save Changes';
+            form.dataset.confirmMessage = 'Save changes to this section?';
             document.getElementById('modalTitle').innerText = "Edit Section: " + data.section_name;
             
             document.getElementById('section_id').value = data.id;

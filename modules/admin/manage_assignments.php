@@ -539,7 +539,13 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <?php if(($_GET['msg'] ?? '') === 'archived'): ?><div class="status-msg msg-success">✔ Assignment archived and sent to the super admin for review.</div><?php endif; ?>
                     <?php if(($_GET['msg'] ?? '') === 'archive_failed'): ?><div class="status-msg msg-warning">⚠ The assignment could not be archived. Please try again.</div><?php endif; ?>
 
-                    <form id="assignmentForm" method="POST">
+                    <form
+                        id="assignmentForm"
+                        method="POST"
+                        data-confirm-title="Confirm Teaching Assignment"
+                        data-confirm-label="Assign Subject"
+                        data-confirm-message="Assign this subject to the selected section and teacher?"
+                    >
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                         <input type="hidden" name="assignment_id" id="assignmentId" value="">
                         <div class="form-group">
@@ -874,6 +880,9 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                 assignmentTitle.textContent = 'Edit Subject Assignment';
                 assignmentSubmit.textContent = 'Save Assignment Changes';
+                assignmentForm.dataset.confirmTitle = 'Confirm Assignment Changes';
+                assignmentForm.dataset.confirmLabel = 'Save Changes';
+                assignmentForm.dataset.confirmMessage = 'Save changes to this teaching assignment?';
                 cancelEditButton.style.display = 'block';
                 assignmentForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
             });
@@ -884,6 +893,9 @@ $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             document.getElementById('assignmentId').value = '';
             assignmentTitle.textContent = 'Assign Subject Load';
             assignmentSubmit.textContent = 'Assign Teaching Load';
+            assignmentForm.dataset.confirmTitle = 'Confirm Teaching Assignment';
+            assignmentForm.dataset.confirmLabel = 'Assign Subject';
+            assignmentForm.dataset.confirmMessage = 'Assign this subject to the selected section and teacher?';
             cancelEditButton.style.display = 'none';
             filterSectionsForAcademicYear();
         }

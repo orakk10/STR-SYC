@@ -442,7 +442,13 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
     <div id="addUserModal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2>Create New Account</h2>
-            <form action="save_user.php" method="POST">
+            <form
+                action="save_user.php"
+                method="POST"
+                data-confirm-title="Confirm New User"
+                data-confirm-label="Create User"
+                data-confirm-message="Create this user account?"
+            >
                 <div class="profile-grid">
                     <div class="full-width"><label>Full Name</label><input type="text" name="full_name" required></div>
                     <div><label>Username / LRN</label><input type="text" name="username" required></div>
@@ -477,7 +483,13 @@ $sections_dropdown = $conn->query("SELECT id, section_name, grade_level FROM sec
     <div id="profileModal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 id="prof_name_title">Edit User</h2>
-            <form action="update_profile.php" method="POST">
+            <form
+                action="update_profile.php"
+                method="POST"
+                data-confirm-title="Confirm Profile Changes"
+                data-confirm-label="Save Changes"
+                data-confirm-message="Save changes to this user's profile?"
+            >
                 <input type="hidden" name="user_id" id="prof_user_id">
                 <div class="profile-grid">
                     <div class="full-width" id="editSectionGroup" style="background: #f1f5f9; padding: 10px; border-radius: 8px;">

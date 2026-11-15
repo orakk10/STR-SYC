@@ -17,7 +17,8 @@ $message = "";
 
 // 2. Handle Schedule Creation and Updates with Room & Section Conflict Checks
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_schedule'])) {
-    $schedule_id = filter_var($_POST['schedule_id'] ?? 0, FILTER_VALIDATE_INT);
+    $schedule_id_input = $_POST['schedule_id'] ?? '';
+    $schedule_id = $schedule_id_input === '' ? 0 : filter_var($schedule_id_input, FILTER_VALIDATE_INT);
     $section_id = filter_input(INPUT_POST, 'section_id', FILTER_VALIDATE_INT) ?: 0;
     $subject_id = filter_input(INPUT_POST, 'subject_id', FILTER_VALIDATE_INT) ?: 0;
     $day        = $_POST['day_of_week'] ?? '';
@@ -713,7 +714,13 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
                     <?php if($message == "save_failed"): ?><div class="status-msg msg-conflict">⚠ The schedule could not be saved. Please try again.</div><?php endif; ?>
                     <?php if(($_GET['msg'] ?? '') === 'archived'): ?><div class="status-msg msg-success">✔ Schedule archived and sent to the super admin for review.</div><?php endif; ?>
                     
-                    <form id="scheduleForm" method="POST">
+                    <form
+                        id="scheduleForm"
+                        method="POST"
+                        data-confirm-title="Confirm Schedule"
+                        data-confirm-label="Add Schedule"
+                        data-confirm-message="Add this schedule?"
+                    >
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                         <input type="hidden" name="schedule_id" id="scheduleId" value="">
                         <div class="form-group">
@@ -891,6 +898,9 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
 
                 scheduleTitle.textContent = 'Edit Schedule';
                 scheduleSubmit.textContent = 'Save Schedule Changes';
+                scheduleForm.dataset.confirmTitle = 'Confirm Schedule Changes';
+                scheduleForm.dataset.confirmLabel = 'Save Changes';
+                scheduleForm.dataset.confirmMessage = 'Save changes to this schedule?';
                 cancelScheduleEdit.style.display = 'block';
                 scheduleForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
             });
@@ -901,6 +911,9 @@ $schedules = $sched_stmt->fetchAll(PDO::FETCH_ASSOC);
             document.getElementById('scheduleId').value = '';
             scheduleTitle.textContent = 'Add New Entry';
             scheduleSubmit.textContent = 'Save Schedule';
+            scheduleForm.dataset.confirmTitle = 'Confirm Schedule';
+            scheduleForm.dataset.confirmLabel = 'Add Schedule';
+            scheduleForm.dataset.confirmMessage = 'Add this schedule?';
             cancelScheduleEdit.style.display = 'none';
             fetchSubjects('');
         }
