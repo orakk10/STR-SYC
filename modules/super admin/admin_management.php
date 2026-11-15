@@ -247,7 +247,13 @@ require __DIR__ . '/_super_admin_header.php';
 <div class="management-grid" style="display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.5fr); gap: 24px; align-items: start;">
     <section class="table-container panel" aria-labelledby="create-admin-heading">
         <h2 id="create-admin-heading">Create Admin Account</h2>
-        <form method="POST" action="admin_management.php">
+        <form
+            method="POST"
+            action="admin_management.php"
+            data-confirm-title="Confirm New Admin"
+            data-confirm-label="Create Admin"
+            data-confirm-message="Create this administrator account?"
+        >
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
             <div class="form-field">
                 <label for="full_name">Full name</label>
@@ -289,7 +295,13 @@ require __DIR__ . '/_super_admin_header.php';
                                         <h2 id="edit-admin-heading-<?= (int) $admin['id'] ?>">Edit Admin Account</h2>
                                         <button type="button" class="close-dialog-button" data-close-dialog aria-label="Close edit window">&times;</button>
                                     </div>
-                                    <form method="POST" action="admin_management.php">
+                                    <form
+                                        method="POST"
+                                        action="admin_management.php"
+                                        data-confirm-title="Confirm Admin Changes"
+                                        data-confirm-label="Save Changes"
+                                        data-confirm-message="Save changes to this administrator account?"
+                                    >
                                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                                         <input type="hidden" name="action" value="edit">
                                         <input type="hidden" name="admin_id" value="<?= (int) $admin['id'] ?>">
