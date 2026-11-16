@@ -1497,6 +1497,7 @@ table.attendance-table td.text-left {
 
         <div class="sf9-toolbar no-print">
 
+            <?php if (!$is_admin): ?>
             <div class="toolbar-title">
 
                 <button class="mobile-burger-btn"
@@ -1543,14 +1544,17 @@ table.attendance-table td.text-left {
                 </form>
 
             </div>
+            <?php endif; ?>
 
             <?php if ($db_student): ?>
             <div class="toolbar-actions">
 
+                <?php if (!$is_admin): ?>
                 <button class="btn-remarks"
                         onclick="openRemarksModal()">
                     Edit Adviser Remarks
                 </button>
+                <?php endif; ?>
 
                 <button class="btn-print"
                         onclick="window.print()">
